@@ -1,6 +1,10 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { X } from "lucide-react";
+import { useEffect, useId, useState } from "react";
+import { createPortal } from "react-dom";
+import { Button } from "@/components/ui/Button";
 
 type Props = {
   open: boolean;
@@ -10,61 +14,71 @@ type Props = {
 };
 
 export function Modal({ open, onClose, title, children }: Props) {
-  const ref = useRef<HTMLDialogElement>(null);
+  const [mounted, setMounted] = useState(false);
+  const titleId = useId();
 
   useEffect(() => {
-    const dialog = ref.current;
-    if (!dialog) return;
-    if (open && !dialog.open) dialog.showModal();
-    else if (!open && dialog.open) dialog.close();
-  }, [open]);
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
-    const dialog = ref.current;
-    if (!dialog) return;
-    const handleClose = () => onClose();
-    const handleClick = (e: MouseEvent) => {
-      if (e.target === dialog) onClose();
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
     };
-    dialog.addEventListener("close", handleClose);
-    dialog.addEventListener("click", handleClick);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKey);
     return () => {
-      dialog.removeEventListener("close", handleClose);
-      dialog.removeEventListener("click", handleClick);
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", onKey);
     };
-  }, [onClose]);
+  }, [open, onClose]);
 
-  return (
-    <dialog
-      ref={ref}
-      className="rounded-lg p-0 max-w-md w-[90vw] bg-background text-foreground shadow-xl border border-black/10 dark:border-white/10 backdrop:bg-black/40"
-    >
-      <div className="p-5 space-y-4">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-lg font-semibold">{title}</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="סגור"
-            className="p-1 rounded hover:bg-black/5 dark:hover:bg-white/10"
+  if (!mounted) return null;
+
+  return createPortal(
+    <AnimatePresence>
+      {open && (
+        <motion.div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-md"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.2, ease: "easeOut" }}
+          onClick={onClose}
+        >
+          <motion.div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={titleId}
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md rounded-xl bg-background text-foreground shadow-2xl border border-black/10 dark:border-white/10"
+            initial={{ opacity: 0, scale: 0.96, y: 8 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.97, y: 4 }}
+            transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
           >
-            <svg
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <path d="M18 6 6 18M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-        {children}
-      </div>
-    </dialog>
+            <div className="p-5 space-y-4">
+              <div className="flex items-center justify-between gap-3">
+                <h2 id={titleId} className="text-lg font-semibold">
+                  {title}
+                </h2>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={onClose}
+                  aria-label="סגור"
+                >
+                  <X size={18} />
+                </Button>
+              </div>
+              {children}
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>,
+    document.body
   );
 }

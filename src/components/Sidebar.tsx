@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 const items = [
   { label: "כללי", href: "/" },
   { label: "אזורים", href: "/zones" },
+  { label: "דירות", href: "/apartments" },
   { label: "דיירים", href: "/renters" },
 ];
 

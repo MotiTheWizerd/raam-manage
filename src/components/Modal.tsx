@@ -10,10 +10,17 @@ type Props = {
   open: boolean;
   onClose: () => void;
   title: string;
+  size?: "sm" | "md" | "lg";
   children: React.ReactNode;
 };
 
-export function Modal({ open, onClose, title, children }: Props) {
+const sizeClass = {
+  sm: "max-w-sm",
+  md: "max-w-md",
+  lg: "max-w-lg",
+};
+
+export function Modal({ open, onClose, title, size = "md", children }: Props) {
   const [mounted, setMounted] = useState(false);
   const titleId = useId();
 
@@ -53,7 +60,7 @@ export function Modal({ open, onClose, title, children }: Props) {
             aria-modal="true"
             aria-labelledby={titleId}
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-md rounded-xl bg-background text-foreground shadow-2xl border border-black/10 dark:border-white/10"
+            className={`w-full ${sizeClass[size]} rounded-xl bg-background text-foreground shadow-2xl border border-black/10 dark:border-white/10`}
             initial={{ opacity: 0, scale: 0.96, y: 8 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.97, y: 4 }}

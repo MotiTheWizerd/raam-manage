@@ -18,7 +18,15 @@
       "Bash(xargs -r kill)",
       "Bash(node -e \"const p = require\\('./package.json'\\); console.log\\({lucide: p.dependencies['lucide-react'], clsx: p.dependencies['clsx']}\\)\")",
       "Bash(curl -s http://localhost:3000/zones -o /dev/null -w \"HTTP %{http_code}\\\\n\")",
-      "Bash(git commit -m ' *)"
+      "Bash(git commit -m ' *)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" http://localhost:3000/apartments)",
+      "Bash(curl -s http://localhost:3000/apartments)",
+      "Bash(node db-peek.mjs)",
+      "Bash(kill -9 2374591)",
+      "Bash(node seed.mjs)",
+      "Bash(curl -s -o /dev/null -w \"/renters HTTP %{http_code}\\\\n\" http://localhost:3000/renters)",
+      "Bash(curl -s http://localhost:3000/renters)",
+      "Bash(curl -s -o /dev/null -w \"/renters/1 HTTP %{http_code}\\\\n\" http://localhost:3000/renters/1)"
     ]
   }
 }

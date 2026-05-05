@@ -64,6 +64,14 @@ CREATE TABLE IF NOT EXISTS phones (
 CREATE INDEX IF NOT EXISTS idx_residents_apartment ON residents(apartment_id);
 CREATE INDEX IF NOT EXISTS idx_residents_active    ON residents(apartment_id) WHERE move_out IS NULL;
 CREATE INDEX IF NOT EXISTS idx_phones_resident     ON phones(resident_id);
+
+CREATE TABLE IF NOT EXISTS user_preferences (
+  id         INTEGER PRIMARY KEY CHECK (id = 1),
+  data       TEXT NOT NULL DEFAULT '{}',
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+INSERT OR IGNORE INTO user_preferences (id, data) VALUES (1, '{}');
 `;
 
 function ensureColumn(

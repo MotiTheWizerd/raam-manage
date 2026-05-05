@@ -5,6 +5,46 @@ import { revalidatePath } from "next/cache";
 
 export type ResidentFormState = { error?: string; submittedAt?: number };
 
+export type ResidentSearchResult = {
+  id: number;
+  first_name: string;
+  last_name: string;
+  type: "owner" | "renter";
+  apartment_id: number;
+  apartment_number: string;
+  floor: number | null;
+  zone_name: string | null;
+};
+
+export async function searchResidents(
+  rawQuery: string
+): Promise<ResidentSearchResult[]> {
+  const q = rawQuery.trim();
+  if (!q) return [];
+  const like = `%${q}%`;
+  return db
+    .prepare(
+      `SELECT r.id, r.first_name, r.last_name, r.type,
+              a.id     AS apartment_id,
+              a.number AS apartment_number,
+              a.floor  AS floor,
+              z.name   AS zone_name
+         FROM residents r
+         JOIN apartments a ON a.id = r.apartment_id
+         LEFT JOIN zones z ON z.id = a.zone_id
+        WHERE r.move_out IS NULL
+          AND (
+            r.first_name LIKE ?
+            OR r.last_name LIKE ?
+            OR (r.first_name || ' ' || r.last_name) LIKE ?
+            OR a.number LIKE ?
+          )
+        ORDER BY r.first_name, r.last_name
+        LIMIT 20`
+    )
+    .all(like, like, like, like) as ResidentSearchResult[];
+}
+
 type PhoneInput = {
   number: unknown;
   label?: unknown;

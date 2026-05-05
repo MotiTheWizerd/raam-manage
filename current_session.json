@@ -1,0 +1,34 @@
+{
+  "project": "Raam-manage",
+  "last_session_at": "2026-05-05",
+  "session_summary": "First session. Scaffolded Next.js 16 + Tailwind v4 + better-sqlite3. Built RTL Hebrew shell (header with logo + theme toggle, sidebar, main). Added dashboard page (כללי) + renters route stub. Designed and implemented the SQLite schema: zones, apartments, residents (flat, type='owner'|'renter'). DB bootstrap at src/lib/db.ts auto-creates tables on first import; data/raam.db gitignored. Dashboard renders live counts (apartments / active residents / zones).",
+  "stack": {
+    "framework": "Next.js 16 (App Router, Turbopack)",
+    "language": "TypeScript",
+    "styling": "Tailwind v4 + class-based dark mode (@custom-variant)",
+    "fonts": "Heebo via next/font/google (Hebrew + Latin)",
+    "db": "SQLite via better-sqlite3 (WAL, foreign_keys ON)",
+    "orm": "none — raw SQL via prepared statements",
+    "runtime_target": "lobby PC, localhost only"
+  },
+  "schema": {
+    "tables": ["zones", "apartments", "residents"],
+    "key_decisions": "See memory/project_schema_decisions.md — one DB per building (no buildings table), floor is a column not a table, flat residents with type CHECK, zones as lookup, dates as ISO TEXT, CURRENT_TIMESTAMP for defaults"
+  },
+  "routes": {
+    "/": "Dashboard (כללי) — live counts from DB",
+    "/renters": "דיירים — placeholder until CRUD is built"
+  },
+  "current_focus": "Schema is in place. Next: build the renters/apartments/zones CRUD UI on the appropriate pages.",
+  "open_questions": [
+    "Lobby PC OS — Windows? Affects launch packaging.",
+    "Initial data — does Moti have an Excel to import, or do we enter from scratch?",
+    "Which page hosts what: zones admin (/zones?), apartments (/apartments?), or all under /renters?"
+  ],
+  "next_steps": [
+    "Build zones CRUD (probably /zones) — small, gets us comfortable with server actions",
+    "Build apartments CRUD with zone picker",
+    "Build renters page — list, search, add/edit/move-out form",
+    "Optional: Excel import"
+  ]
+}

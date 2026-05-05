@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx --yes create-next-app@latest . --typescript --tailwind --eslint --app --src-dir --use-npm --turbopack --import-alias \"@/*\" --skip-install)",
+      "Bash(git branch *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/)",
+      "Bash(curl -s http://localhost:3000/)",
+      "Bash(kill 2169057)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:3000/)",
+      "Bash(ps -p 2183884 -o pid,cmd)",
+      "Bash(node -e ' *)",
+      "Bash(node /tmp/raam-smoke.mjs)",
+      "Bash(node /home/motithewizerdlab/projects/Raam-manage/raam-smoke.mjs)",
+      "Bash(kill 2188672)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/zones)",
+      "Bash(node zone-test.mjs)",
+      "Bash(curl -s http://localhost:3000/zones)",
+      "Bash(xargs -r kill)"
+    ]
+  }
+}

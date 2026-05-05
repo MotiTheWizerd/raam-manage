@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import { AddZoneButton } from "./AddZoneButton";
+import { EditZoneButton } from "./EditZoneButton";
 
 export const dynamic = "force-dynamic";
 
@@ -20,8 +21,12 @@ export default function ZonesPage() {
       ) : (
         <ul className="border border-black/10 dark:border-white/10 rounded-lg divide-y divide-black/10 dark:divide-white/10">
           {zones.map((z) => (
-            <li key={z.id} className="px-4 py-3">
-              {z.name}
+            <li
+              key={z.id}
+              className="flex items-center justify-between px-4 py-3 hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors"
+            >
+              <span>{z.name}</span>
+              <EditZoneButton zone={z} />
             </li>
           ))}
         </ul>

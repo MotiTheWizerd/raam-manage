@@ -26,7 +26,10 @@
       "Bash(node seed.mjs)",
       "Bash(curl -s -o /dev/null -w \"/renters HTTP %{http_code}\\\\n\" http://localhost:3000/renters)",
       "Bash(curl -s http://localhost:3000/renters)",
-      "Bash(curl -s -o /dev/null -w \"/renters/1 HTTP %{http_code}\\\\n\" http://localhost:3000/renters/1)"
+      "Bash(curl -s -o /dev/null -w \"/renters/1 HTTP %{http_code}\\\\n\" http://localhost:3000/renters/1)",
+      "Bash(curl -s -o /dev/null -w \"/zones HTTP %{http_code}\\\\n\" http://localhost:3000/zones)",
+      "Bash(curl -s -o /dev/null -w \"/apartments HTTP %{http_code}\\\\n\" http://localhost:3000/apartments)",
+      "Bash(curl -s -o /dev/null -w \"/apartments/1 HTTP %{http_code}\\\\n\" http://localhost:3000/apartments/1)"
     ]
   }
 }

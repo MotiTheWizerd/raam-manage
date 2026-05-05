@@ -1,34 +1,90 @@
 {
   "project": "Raam-manage",
   "last_session_at": "2026-05-05",
-  "session_summary": "First session. Scaffolded Next.js 16 + Tailwind v4 + better-sqlite3. Built RTL Hebrew shell (header with logo + theme toggle, sidebar, main). Added dashboard page (כללי) + renters route stub. Designed and implemented the SQLite schema: zones, apartments, residents (flat, type='owner'|'renter'). DB bootstrap at src/lib/db.ts auto-creates tables on first import; data/raam.db gitignored. Dashboard renders live counts (apartments / active residents / zones).",
+  "session_summary": "Massive single-day build. Went from empty repo to a fully-functional Hebrew-RTL admin app with branded design system, custom dropdown, animated modal, three CRUD entities (zones, apartments, residents), apartment assets (parking + storage), residents with phones-as-subform, and the full View↔Edit toggle pattern across all detail pages.",
+
   "stack": {
     "framework": "Next.js 16 (App Router, Turbopack)",
     "language": "TypeScript",
-    "styling": "Tailwind v4 + class-based dark mode (@custom-variant)",
-    "fonts": "Heebo via next/font/google (Hebrew + Latin)",
+    "styling": "Tailwind v4 (class-based dark via @custom-variant)",
+    "fonts": "Heebo (next/font/google) for Hebrew + Latin",
     "db": "SQLite via better-sqlite3 (WAL, foreign_keys ON)",
-    "orm": "none — raw SQL via prepared statements",
-    "runtime_target": "lobby PC, localhost only"
+    "form_actions": "React 19 useActionState + Next server actions",
+    "animations": "framer-motion 12",
+    "icons": "lucide-react",
+    "class_helper": "tailwind-merge + clsx in src/lib/cn.ts",
+    "runtime_target": "lobby PC, localhost only — not a server deployment"
   },
+
   "schema": {
-    "tables": ["zones", "apartments", "residents"],
-    "key_decisions": "See memory/project_schema_decisions.md — one DB per building (no buildings table), floor is a column not a table, flat residents with type CHECK, zones as lookup, dates as ISO TEXT, CURRENT_TIMESTAMP for defaults"
+    "tables": [
+      "zones (id, name UNIQUE)",
+      "apartments (id, number UNIQUE, floor, zone_id FK, notes)",
+      "residents (id, apartment_id FK CASCADE, first_name, last_name, id_number, po_box, type owner|renter, move_in, move_out, notes)",
+      "phones (id, resident_id FK CASCADE, number, label, comment, is_primary)",
+      "apartment_assets (id, type parking|storage, floor, number, apartment_id FK SET NULL, notes; UNIQUE(type, floor, number))"
+    ],
+    "evolution_helper": "src/lib/db.ts has ensureColumn() — idempotent ALTER TABLE ADD COLUMN for adding columns to existing DBs without restart. Used once for phones.comment.",
+    "kept_unused_for_now": "phones.label (UI dropped, column kept), residents.move_in/move_out (columns kept, not in form yet)"
   },
+
+  "design_system": {
+    "primitives": [
+      "src/components/ui/Button.tsx — variants: primary (brand red gradient), secondary, ghost, outline, destructive (red outline). Sizes: sm/md/lg/icon/icon-sm. active:scale + focus ring",
+      "src/components/ui/Input.tsx — exports inputBase. Prevents Enter from submitting forms by default (submitOnEnter prop opts in).",
+      "src/components/ui/Textarea.tsx",
+      "src/components/ui/Field.tsx — label + child + required asterisk",
+      "src/components/ui/Dropdown.tsx — custom <button> + portal-style panel with framer-motion, brand-red highlight, keyboard nav, ESC capture-phase to outrank Modal"
+    ],
+    "shells": [
+      "src/components/Modal.tsx — portal to body, framer-motion AnimatePresence, backdrop blur, scale-in card, ESC/click-outside, size sm|md|lg",
+      "src/components/Header.tsx — logo + ThemeToggle",
+      "src/components/Sidebar.tsx — active route highlight",
+      "src/components/ThemeToggle.tsx — class-based dark/light, no-flash inline script in layout"
+    ]
+  },
+
+  "screen_pattern": "List page → click row → /entity/[id] → ViewMode by default → ערוך button → EditMode with reusable EntityForm → Save/Cancel → back to ViewMode. Implemented for residents, apartments. Zones uses inline modal-edit (single field, lighter pattern).",
+
   "routes": {
-    "/": "Dashboard (כללי) — live counts from DB",
-    "/renters": "דיירים — placeholder until CRUD is built"
+    "/": "Dashboard — live counts (apartments, active residents, zones)",
+    "/zones": "List + add modal + per-row pencil edit modal",
+    "/apartments": "List + add modal (lg, includes parking/storage subforms)",
+    "/apartments/[id]": "View/Edit toggle. View shows residents, parking, storage, notes",
+    "/renters": "List + add modal (lg)",
+    "/renters/[id]": "View/Edit toggle. View shows phones (primary marked with red star), info, notes"
   },
-  "current_focus": "Schema is in place. Next: build the renters/apartments/zones CRUD UI on the appropriate pages.",
-  "open_questions": [
-    "Lobby PC OS — Windows? Affects launch packaging.",
-    "Initial data — does Moti have an Excel to import, or do we enter from scratch?",
-    "Which page hosts what: zones admin (/zones?), apartments (/apartments?), or all under /renters?"
+
+  "decisions_logged_to_memory": [
+    "memory/project_overview.md — local-first lobby PC, single-building per install",
+    "memory/feedback_keep_simple.md — pragmatic simplicity, no over-engineering",
+    "memory/project_schema_decisions.md — flat residents, no buildings/floors tables, zones lookup",
+    "memory/project_business_context.md — outsourced security, app is free value-add, Moti's credit on the line",
+    "memory/project_screen_pattern.md (new this session) — the View/Edit toggle convention",
+    "memory/project_planned_features.md (new this session) — what's queued"
   ],
-  "next_steps": [
-    "Build zones CRUD (probably /zones) — small, gets us comfortable with server actions",
-    "Build apartments CRUD with zone picker",
-    "Build renters page — list, search, add/edit/move-out form",
-    "Optional: Excel import"
-  ]
+
+  "current_focus": "Session ended on a high note. All three CRUD trees are working end-to-end. Tomorrow starts a new session.",
+
+  "next_session_plan": [
+    "1. Live search on /renters — debounced input, server-side query, render filtered results without full page reload (URL state for sharability)",
+    "2. Keys table + form — lobby logs key handovers (resident, key #, given_at, returned_at?, notes)",
+    "3. Packages table + form — lobby logs incoming packages (resident, courier, received_at, picked_up_at, notes)",
+    "Once that ships: Excel import for residents (the original goal — bulk-load the existing list)"
+  ],
+
+  "open_questions_for_next_session": [
+    "Search scope — just residents or also search apartments + zones from one bar?",
+    "Keys/packages — do they belong on the resident detail page (history of their keys/packages), a top-level page, or both?",
+    "When residents move out, do we keep the row with move_out filled, or archive?"
+  ],
+
+  "current_test_data": {
+    "zones": "צפון B, דרום A",
+    "apartments": "1 (id 1)",
+    "residents": "1 with one phone",
+    "assets": "none yet"
+  },
+
+  "git_state": "All committed and pushed as of last commit. Latest commit: feat: apartments + residents CRUD with detail/edit toggle and phones (094f207). Apartment assets work IS NOT YET COMMITTED — uncommitted changes: AssetsFields, ApartmentForm/View/Detail updates, actions parse helpers, schema."
 }

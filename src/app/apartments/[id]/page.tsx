@@ -1,0 +1,102 @@
+import { ArrowRight } from "lucide-react";
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { db } from "@/lib/db";
+import { ApartmentDetail } from "./ApartmentDetail";
+
+export const dynamic = "force-dynamic";
+
+type Apartment = {
+  id: number;
+  number: string;
+  floor: number | null;
+  zone_id: number | null;
+  zone_name: string | null;
+  notes: string | null;
+};
+
+type ResidentRow = {
+  id: number;
+  first_name: string;
+  last_name: string;
+  type: "owner" | "renter";
+  primary_phone: string | null;
+};
+
+type Asset = {
+  id: number;
+  type: "parking" | "storage";
+  floor: number;
+  number: string;
+  notes: string | null;
+};
+
+type Zone = { id: number; name: string };
+
+export default async function ApartmentPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id: idStr } = await params;
+  const id = parseInt(idStr, 10);
+  if (Number.isNaN(id)) notFound();
+
+  const apartment = db
+    .prepare(
+      `SELECT a.id, a.number, a.floor, a.zone_id, a.notes,
+              z.name AS zone_name
+       FROM apartments a
+       LEFT JOIN zones z ON z.id = a.zone_id
+       WHERE a.id = ?`
+    )
+    .get(id) as Apartment | undefined;
+
+  if (!apartment) notFound();
+
+  const residents = db
+    .prepare(
+      `SELECT r.id, r.first_name, r.last_name, r.type,
+              (SELECT number FROM phones WHERE resident_id = r.id AND is_primary = 1 LIMIT 1) AS primary_phone
+       FROM residents r
+       WHERE r.apartment_id = ? AND r.move_out IS NULL
+       ORDER BY r.last_name, r.first_name`
+    )
+    .all(id) as ResidentRow[];
+
+  const assets = db
+    .prepare(
+      `SELECT id, type, floor, number, notes
+       FROM apartment_assets
+       WHERE apartment_id = ?
+       ORDER BY type, floor, number`
+    )
+    .all(id) as Asset[];
+
+  const parking = assets.filter((a) => a.type === "parking");
+  const storage = assets.filter((a) => a.type === "storage");
+
+  const zones = db
+    .prepare("SELECT id, name FROM zones ORDER BY name")
+    .all() as Zone[];
+
+  return (
+    <div className="space-y-4 max-w-3xl">
+      <Link
+        href="/apartments"
+        className="inline-flex items-center gap-1 text-sm opacity-70 hover:opacity-100 transition-opacity"
+      >
+        <ArrowRight size={14} />
+        חזרה לרשימת הדירות
+      </Link>
+
+      <ApartmentDetail
+        apartment={apartment}
+        residents={residents}
+        parking={parking}
+        storage={storage}
+        zones={zones}
+      />
+    </div>
+  );
+}

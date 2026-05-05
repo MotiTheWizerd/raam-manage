@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { db } from "@/lib/db";
 import { AddApartmentButton } from "./AddApartmentButton";
 
@@ -54,7 +55,14 @@ export default function ApartmentsPage() {
                   key={a.id}
                   className="hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors"
                 >
-                  <td className="px-4 py-2.5 font-medium">{a.number}</td>
+                  <td className="px-4 py-2.5 font-medium">
+                    <Link
+                      href={`/apartments/${a.id}`}
+                      className="hover:text-red-600 dark:hover:text-red-400 transition-colors"
+                    >
+                      {a.number}
+                    </Link>
+                  </td>
                   <td className="px-4 py-2.5 opacity-80">{a.floor ?? "—"}</td>
                   <td className="px-4 py-2.5 opacity-80">{a.zone_name ?? "—"}</td>
                   <td className="px-4 py-2.5 opacity-60 max-w-xs truncate">

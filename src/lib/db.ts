@@ -37,6 +37,20 @@ CREATE TABLE IF NOT EXISTS residents (
   updated_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS apartment_assets (
+  id           INTEGER PRIMARY KEY,
+  type         TEXT NOT NULL CHECK (type IN ('parking','storage')),
+  floor        INTEGER NOT NULL,
+  number       TEXT NOT NULL,
+  apartment_id INTEGER REFERENCES apartments(id) ON DELETE SET NULL,
+  notes        TEXT,
+  created_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(type, floor, number)
+);
+
+CREATE INDEX IF NOT EXISTS idx_assets_apartment ON apartment_assets(apartment_id);
+
 CREATE TABLE IF NOT EXISTS phones (
   id          INTEGER PRIMARY KEY,
   resident_id INTEGER NOT NULL REFERENCES residents(id) ON DELETE CASCADE,

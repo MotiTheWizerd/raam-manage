@@ -34,7 +34,7 @@ type Props = {
     prev: ResidentFormState,
     formData: FormData
   ) => Promise<ResidentFormState>;
-  onCancel: () => void;
+  onCancel?: () => void;
   onSuccess?: () => void;
   submitLabel?: string;
 };
@@ -145,9 +145,11 @@ export function ResidentForm({
       )}
 
       <div className="flex justify-end gap-2 pt-2">
-        <Button variant="ghost" size="sm" onClick={onCancel}>
-          ביטול
-        </Button>
+        {onCancel && (
+          <Button variant="ghost" size="sm" onClick={onCancel}>
+            ביטול
+          </Button>
+        )}
         <Button type="submit" size="sm" disabled={pending}>
           {pending ? "שומר..." : submitLabel}
         </Button>

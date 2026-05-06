@@ -101,7 +101,8 @@ export function AssetsFields({
                 onChange={(e) => update(a.id, { floor: e.target.value })}
                 placeholder="קומה"
                 type="number"
-                className="w-20"
+                dir="ltr"
+                className="w-20 text-end"
               />
               <Input
                 value={a.number}

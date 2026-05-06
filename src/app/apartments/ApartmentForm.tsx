@@ -28,7 +28,7 @@ type Props = {
     prev: ApartmentFormState,
     formData: FormData
   ) => Promise<ApartmentFormState>;
-  onCancel: () => void;
+  onCancel?: () => void;
   onSuccess?: () => void;
   submitLabel?: string;
 };
@@ -76,6 +76,8 @@ export function ApartmentForm({
             name="floor"
             type="number"
             placeholder="5"
+            dir="ltr"
+            className="text-end"
             defaultValue={initialValues?.floor ?? ""}
           />
         </Field>
@@ -112,9 +114,11 @@ export function ApartmentForm({
       )}
 
       <div className="flex justify-end gap-2 pt-2">
-        <Button variant="ghost" size="sm" onClick={onCancel}>
-          ביטול
-        </Button>
+        {onCancel && (
+          <Button variant="ghost" size="sm" onClick={onCancel}>
+            ביטול
+          </Button>
+        )}
         <Button type="submit" size="sm" disabled={pending}>
           {pending ? "שומר..." : submitLabel}
         </Button>

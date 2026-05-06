@@ -15,14 +15,6 @@ type Apartment = {
   notes: string | null;
 };
 
-type ResidentRow = {
-  id: number;
-  first_name: string;
-  last_name: string;
-  type: "owner" | "renter";
-  primary_phone: string | null;
-};
-
 type Asset = {
   id: number;
   type: "parking" | "storage";
@@ -54,16 +46,6 @@ export default async function ApartmentPage({
 
   if (!apartment) notFound();
 
-  const residents = db
-    .prepare(
-      `SELECT r.id, r.first_name, r.last_name, r.type,
-              (SELECT number FROM phones WHERE resident_id = r.id AND is_primary = 1 LIMIT 1) AS primary_phone
-       FROM residents r
-       WHERE r.apartment_id = ? AND r.move_out IS NULL
-       ORDER BY r.last_name, r.first_name`
-    )
-    .all(id) as ResidentRow[];
-
   const assets = db
     .prepare(
       `SELECT id, type, floor, number, notes
@@ -92,7 +74,6 @@ export default async function ApartmentPage({
 
       <ApartmentDetail
         apartment={apartment}
-        residents={residents}
         parking={parking}
         storage={storage}
         zones={zones}

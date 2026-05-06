@@ -1,7 +1,7 @@
 {
   "project": "Raam-manage",
-  "last_session_at": "2026-05-05",
-  "session_summary": "Massive single-day build. Went from empty repo to a fully-functional Hebrew-RTL admin app with branded design system, custom dropdown, animated modal, three CRUD entities (zones, apartments, residents), apartment assets (parking + storage), residents with phones-as-subform, and the full View↔Edit toggle pattern across all detail pages.",
+  "last_session_at": "2026-05-06",
+  "session_summary": "Session 2 — eight-hour build that took the app from 'three CRUD trees' to a full lobby-operations system. Added: header live search with debounced server query and persisted selected-resident chip; Zustand-backed user_preferences (sidebar collapse, selectedResident, activeLobbyist); sidebar collapse animation + brand-red active highlight; always-edit detail pages (dropped View/Edit toggle); LTR fix for floor inputs; apartment_keys subform with default/active/in-lobby flags; Sonner toasts everywhere via useFormToasts(state) + errorAt timestamps; full events page with tabs for keys, packages, vehicles; key handover history table with detailed log; packages flow (resident OR free-text recipient, type/direction enums, received_by from active lobbyist, mark-delivered atomic action); apartment vehicle registry + guest parking event log; lobbyist staff (users) management + active-lobbyist selector in header; settings page with system messages CRUD and fixed-position sticky cards on the left edge of every page (priority-ordered, color-coded, framer-motion animated, instant refresh via window-event broadcast). Plus polish: top-left toast position, mx-auto page centering, useCallback fixes for refresh-loop bugs.",
 
   "stack": {
     "framework": "Next.js 16 (App Router, Turbopack)",
@@ -13,46 +13,79 @@
     "animations": "framer-motion 12",
     "icons": "lucide-react",
     "class_helper": "tailwind-merge + clsx in src/lib/cn.ts",
+    "global_state": "zustand (vanilla store + Context provider, SSR-seeded from server)",
+    "toasts": "sonner (top-left, dir=rtl, richColors)",
     "runtime_target": "lobby PC, localhost only — not a server deployment"
   },
 
   "schema": {
     "tables": [
       "zones (id, name UNIQUE)",
-      "apartments (id, number UNIQUE, floor, zone_id FK, notes)",
-      "residents (id, apartment_id FK CASCADE, first_name, last_name, id_number, po_box, type owner|renter, move_in, move_out, notes)",
+      "apartments (id, number UNIQUE, floor, zone_id FK, notes, created_at, updated_at)",
+      "residents (id, apartment_id FK CASCADE, first_name, last_name, id_number, po_box, type owner|renter, move_in, move_out, notes, created_at, updated_at)",
       "phones (id, resident_id FK CASCADE, number, label, comment, is_primary)",
-      "apartment_assets (id, type parking|storage, floor, number, apartment_id FK SET NULL, notes; UNIQUE(type, floor, number))"
+      "apartment_assets (id, type parking|storage, floor, number, apartment_id FK SET NULL, notes; UNIQUE(type, floor, number))",
+      "apartment_keys (id, apartment_id FK CASCADE, nickname, is_default, is_active, is_in_lobby, created_at)",
+      "apartment_keys_history (id, apartment_key_id FK CASCADE, is_in_lobby, resident_id FK SET NULL, lobbyist_name, comment NULLABLE, created_at)",
+      "apartment_vehicles (id, apartment_id FK CASCADE, license_plate, color, model, notes, created_at)",
+      "guest_parking (id, resident_id FK CASCADE, car_plate, lobbyist_name, created_at)",
+      "packages (id, resident_id FK SET NULL, recipient_name NULLABLE, type package|envelope|laundry, direction in|out, delivered_by, received_by, is_delivered, comment, created_at, delivered_at)",
+      "users (id, lobbyist_name, is_active, created_at) — lobby staff for the active-lobbyist selector",
+      "user_preferences (id=1, data JSON blob, updated_at) — single-row prefs",
+      "system_messages (id, title, body, start_at, end_at, priority low|med|high, created_at)"
     ],
-    "evolution_helper": "src/lib/db.ts has ensureColumn() — idempotent ALTER TABLE ADD COLUMN for adding columns to existing DBs without restart. Used once for phones.comment.",
-    "kept_unused_for_now": "phones.label (UI dropped, column kept), residents.move_in/move_out (columns kept, not in form yet)"
+    "evolution_helper": "src/lib/db.ts ensureColumn() — used several times this session for is_default/is_active/is_in_lobby on apartment_keys, received_by on packages, lobbyist_name on guest_parking",
+    "datetime_local_storage": "system_messages.start_at and end_at store browser <input type=\"datetime-local\"> wall-clock format (YYYY-MM-DDTHH:MM); active query uses strftime('%Y-%m-%dT%H:%M', 'now', 'localtime') so comparisons stay in local time",
+    "rebuild_pattern_used_once": "apartment_keys_history.comment relaxed from NOT NULL to NULL via CREATE-new + INSERT SELECT + DROP + RENAME inside a transaction with foreign_keys OFF — preserved 2 existing rows"
   },
 
   "design_system": {
     "primitives": [
-      "src/components/ui/Button.tsx — variants: primary (brand red gradient), secondary, ghost, outline, destructive (red outline). Sizes: sm/md/lg/icon/icon-sm. active:scale + focus ring",
-      "src/components/ui/Input.tsx — exports inputBase. Prevents Enter from submitting forms by default (submitOnEnter prop opts in).",
+      "src/components/ui/Button.tsx — variants primary/secondary/ghost/outline/destructive; sizes sm/md/lg/icon/icon-sm",
+      "src/components/ui/Input.tsx — exports inputBase; prevents Enter from submitting unless submitOnEnter prop",
       "src/components/ui/Textarea.tsx",
       "src/components/ui/Field.tsx — label + child + required asterisk",
-      "src/components/ui/Dropdown.tsx — custom <button> + portal-style panel with framer-motion, brand-red highlight, keyboard nav, ESC capture-phase to outrank Modal"
+      "src/components/ui/Dropdown.tsx — custom button + portal panel, framer-motion, brand-red highlight, keyboard nav",
+      "src/components/ui/Tabs.tsx (new this session) — sliding red underline via framer-motion layoutId"
     ],
     "shells": [
-      "src/components/Modal.tsx — portal to body, framer-motion AnimatePresence, backdrop blur, scale-in card, ESC/click-outside, size sm|md|lg",
-      "src/components/Header.tsx — logo + ThemeToggle",
-      "src/components/Sidebar.tsx — active route highlight",
+      "src/components/Modal.tsx — portal, AnimatePresence, backdrop blur, scale-in, ESC/click-outside, sm|md|lg",
+      "src/components/Header.tsx — logo + SearchBar + ActiveLobbyistSelector + ThemeToggle",
+      "src/components/Sidebar.tsx — animated width 224↔64 via framer-motion, icons-only collapsed mode, brand-red active item gradient",
+      "src/components/SidebarToggle.tsx — chevron at top",
+      "src/components/SearchBar.tsx — debounced live search, results dropdown, keyboard nav, race-safe via reqId ref",
+      "src/components/SelectedResidentChip.tsx — replaces SearchBar input when a resident is in store; X clears",
+      "src/components/ActiveLobbyistSelector.tsx — Dropdown bound to prefs store, pre-fills lobbyist_name in event modals",
+      "src/components/StickyMessages.tsx — fixed-position cards on the left edge, max 3, priority-ordered + color-coded",
+      "src/components/PreferencesProvider.tsx — Zustand store with debounced auto-save to user_preferences",
       "src/components/ThemeToggle.tsx — class-based dark/light, no-flash inline script in layout"
     ]
   },
 
-  "screen_pattern": "List page → click row → /entity/[id] → ViewMode by default → ערוך button → EditMode with reusable EntityForm → Save/Cancel → back to ViewMode. Implemented for residents, apartments. Zones uses inline modal-edit (single field, lighter pattern).",
+  "preferences_shape": {
+    "sidebar": "{ collapsed: boolean }",
+    "selectedResident": "SelectedResident | null — search-bar selection, persisted, drives /events context",
+    "activeLobbyist": "{ id, lobbyist_name } | null — current shift lobbyist; defaults the lobbyist_name field in keys/packages/guest-parking forms"
+  },
+
+  "screen_pattern_now": "Dropped the View/Edit toggle entirely — detail pages render the form directly (always edit). Form's onCancel is now optional; rendered only by the modal context. After save, revalidatePath rerenders server-side and form DOM state stays. See memory/project_screen_pattern.md.",
+
+  "events_page_architecture": "/events is a single page that reads selectedResident from the Zustand store. Three tabs: ניהול מפתחות, ניהול חבילות, ניהול רכבים. With a resident selected → action surfaces (add modal, mark-delivered, log key event); without → global recent-history feeds with apartment number prefix on each row. Keys tab pre-fills lobbyist_name from activeLobbyist; same for packages received_by and guest parking lobbyist.",
+
+  "global_state_pattern": "PreferencesProvider creates a Zustand vanilla store + Context once on mount, seeded from server-fetched prefs in layout.tsx. A subscribe callback in the provider debounce-saves any change at 300ms via savePreferences server action. Selectors split per slice (useSidebarCollapsed, useSelectedResident, useActiveLobbyist) so components only re-render on their slice.",
+
+  "form_pipeline": "Every CRUD form uses useActionState + a *FormState type with { error, errorAt, submittedAt } shape. Server returns fail() helpers that set errorAt = Date.now() on every error so consecutive identical errors still re-toast. useFormToasts(state) hook fires sonner toasts (success on submittedAt, error on errorAt). Modals close via Promise.resolve().then(() => setOpen(false)) to satisfy the React 19 set-state-in-effect rule.",
 
   "routes": {
     "/": "Dashboard — live counts (apartments, active residents, zones)",
     "/zones": "List + add modal + per-row pencil edit modal",
-    "/apartments": "List + add modal (lg, includes parking/storage subforms)",
-    "/apartments/[id]": "View/Edit toggle. View shows residents, parking, storage, notes",
+    "/apartments": "List + add modal (lg, parking/storage/keys/vehicles subforms)",
+    "/apartments/[id]": "Always-edit form (parking, storage, keys with flags, vehicles registry)",
     "/renters": "List + add modal (lg)",
-    "/renters/[id]": "View/Edit toggle. View shows phones (primary marked with red star), info, notes"
+    "/renters/[id]": "Always-edit form (phones)",
+    "/events": "Tabs (keys, packages, vehicles+guest parking); reads selectedResident from prefs store",
+    "/users": "Lobby staff CRUD (id, lobbyist_name, is_active)",
+    "/settings": "Tabs primitive; first tab system messages (CRUD + sticky display)"
   },
 
   "decisions_logged_to_memory": [
@@ -60,31 +93,38 @@
     "memory/feedback_keep_simple.md — pragmatic simplicity, no over-engineering",
     "memory/project_schema_decisions.md — flat residents, no buildings/floors tables, zones lookup",
     "memory/project_business_context.md — outsourced security, app is free value-add, Moti's credit on the line",
-    "memory/project_screen_pattern.md (new this session) — the View/Edit toggle convention",
-    "memory/project_planned_features.md (new this session) — what's queued"
+    "memory/project_screen_pattern.md — UPDATED this session: always-edit, no view layer, onCancel optional",
+    "memory/project_planned_features.md — UPDATED this session: most queue done; data import is next"
   ],
 
-  "current_focus": "Session ended on a high note. All three CRUD trees are working end-to-end. Tomorrow starts a new session.",
+  "current_focus": "Session 2 ended with a complete lobby-operations system. Tomorrow we import real data — bulk-load the existing residents spreadsheet that was the original goal.",
 
   "next_session_plan": [
-    "1. Live search on /renters — debounced input, server-side query, render filtered results without full page reload (URL state for sharability)",
-    "2. Keys table + form — lobby logs key handovers (resident, key #, given_at, returned_at?, notes)",
-    "3. Packages table + form — lobby logs incoming packages (resident, courier, received_at, picked_up_at, notes)",
-    "Once that ships: Excel import for residents (the original goal — bulk-load the existing list)"
+    "1. Excel import for residents — the original goal. Parse the spreadsheet Moti has, map to schema, validate (apartment matching, type field, phones), insert in a transaction. Likely an upload UI on /settings or /renters with a preview-then-confirm step.",
+    "2. After import — cleanup of any quirks revealed by real data (Hebrew normalization, edge cases in phone formats, Israeli ID checksums?).",
+    "3. Stretch: persist 'recent recipients' for the package modal (free-text recipient_name autocomplete from history).",
+    "4. Stretch: per-key full history view (currently only the last event is shown next to each key; the table has all the data, just need a UI surface)."
   ],
 
   "open_questions_for_next_session": [
-    "Search scope — just residents or also search apartments + zones from one bar?",
-    "Keys/packages — do they belong on the resident detail page (history of their keys/packages), a top-level page, or both?",
-    "When residents move out, do we keep the row with move_out filled, or archive?"
+    "Excel import path — upload through the UI vs CLI script run once? UI is more reusable but CLI is faster to ship.",
+    "What columns does Moti's spreadsheet actually have? Need to see one to build the mapper.",
+    "Conflict policy on import — skip duplicates by id_number? Update existing? Abort on first conflict?"
   ],
 
   "current_test_data": {
-    "zones": "צפון B, דרום A",
-    "apartments": "1 (id 1)",
-    "residents": "1 with one phone",
-    "assets": "none yet"
+    "zones": "צפון B, דרום A, etc.",
+    "apartments": "a few including 2025B, 303A",
+    "residents": "small set with phones",
+    "apartment_keys": "tested with default/active/in-lobby flags + history events",
+    "packages": "tested both resident-linked and free-text recipient paths, mark-delivered works",
+    "vehicles": "registry tested",
+    "guest_parking": "tested with lobbyist + timestamp display",
+    "users": "lobby staff seeded for the active-lobbyist selector",
+    "system_messages": "tested with active/scheduled/expired states; sticky cards rendered"
   },
 
-  "git_state": "All committed and pushed as of last commit. Latest commit: feat: apartments + residents CRUD with detail/edit toggle and phones (094f207). Apartment assets work IS NOT YET COMMITTED — uncommitted changes: AssetsFields, ApartmentForm/View/Detail updates, actions parse helpers, schema."
+  "git_state": "All committed and pushed. Latest commit: 8239769 — feat: settings page with system messages + sticky display. Branch main is clean and up to date with origin.",
+
+  "context_meter_note": "Anthropic shipped a context-usage progress bar mid-session. Both of us watched it. Wrapped well below the soft limit so tomorrow starts fresh."
 }

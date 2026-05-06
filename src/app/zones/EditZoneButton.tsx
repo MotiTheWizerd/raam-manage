@@ -6,6 +6,7 @@ import { Modal } from "@/components/Modal";
 import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
+import { useFormToasts } from "@/lib/hooks/useFormToasts";
 import { updateZone, type ZoneFormState } from "./actions";
 
 const initialState: ZoneFormState = {};
@@ -19,8 +20,11 @@ export function EditZoneButton({
   const [state, action, pending] = useActionState(updateZone, initialState);
   const formRef = useRef<HTMLFormElement>(null);
 
+  useFormToasts(state);
+
   useEffect(() => {
-    if (state.submittedAt) setOpen(false);
+    if (!state.submittedAt) return;
+    Promise.resolve().then(() => setOpen(false));
   }, [state.submittedAt]);
 
   return (

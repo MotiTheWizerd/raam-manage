@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Heebo } from "next/font/google";
+import { Toaster } from "sonner";
 import { Header } from "@/components/Header";
 import { PreferencesProvider } from "@/components/PreferencesProvider";
 import { Sidebar } from "@/components/Sidebar";
@@ -43,6 +44,13 @@ export default async function RootLayout({
             <main className="flex-1 overflow-auto p-6">{children}</main>
           </div>
         </PreferencesProvider>
+        <Toaster
+          position="top-center"
+          dir="rtl"
+          richColors
+          closeButton
+          theme="system"
+        />
       </body>
     </html>
   );

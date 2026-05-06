@@ -23,6 +23,14 @@ type Asset = {
   notes: string | null;
 };
 
+type KeyRow = {
+  id: number;
+  nickname: string;
+  is_default: number;
+  is_active: number;
+  is_in_lobby: number;
+};
+
 type Zone = { id: number; name: string };
 
 export default async function ApartmentPage({
@@ -58,6 +66,15 @@ export default async function ApartmentPage({
   const parking = assets.filter((a) => a.type === "parking");
   const storage = assets.filter((a) => a.type === "storage");
 
+  const keys = db
+    .prepare(
+      `SELECT id, nickname, is_default, is_active, is_in_lobby
+       FROM apartment_keys
+       WHERE apartment_id = ?
+       ORDER BY is_default DESC, id`
+    )
+    .all(id) as KeyRow[];
+
   const zones = db
     .prepare("SELECT id, name FROM zones ORDER BY name")
     .all() as Zone[];
@@ -76,6 +93,7 @@ export default async function ApartmentPage({
         apartment={apartment}
         parking={parking}
         storage={storage}
+        keys={keys}
         zones={zones}
       />
     </div>

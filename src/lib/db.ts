@@ -65,6 +65,18 @@ CREATE INDEX IF NOT EXISTS idx_residents_apartment ON residents(apartment_id);
 CREATE INDEX IF NOT EXISTS idx_residents_active    ON residents(apartment_id) WHERE move_out IS NULL;
 CREATE INDEX IF NOT EXISTS idx_phones_resident     ON phones(resident_id);
 
+CREATE TABLE IF NOT EXISTS apartment_keys (
+  id           INTEGER PRIMARY KEY,
+  apartment_id INTEGER NOT NULL REFERENCES apartments(id) ON DELETE CASCADE,
+  nickname     TEXT NOT NULL,
+  is_default   INTEGER NOT NULL DEFAULT 0,
+  is_active    INTEGER NOT NULL DEFAULT 1,
+  is_in_lobby  INTEGER NOT NULL DEFAULT 1,
+  created_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_apartment_keys_apartment ON apartment_keys(apartment_id);
+
 CREATE TABLE IF NOT EXISTS user_preferences (
   id         INTEGER PRIMARY KEY CHECK (id = 1),
   data       TEXT NOT NULL DEFAULT '{}',
@@ -97,6 +109,9 @@ function open(): Database.Database {
 
   // Idempotent column adds for schema evolution on existing DBs
   ensureColumn(db, "phones", "comment", "TEXT");
+  ensureColumn(db, "apartment_keys", "is_default", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(db, "apartment_keys", "is_active", "INTEGER NOT NULL DEFAULT 1");
+  ensureColumn(db, "apartment_keys", "is_in_lobby", "INTEGER NOT NULL DEFAULT 1");
 
   return db;
 }

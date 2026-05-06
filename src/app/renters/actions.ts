@@ -3,7 +3,15 @@
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 
-export type ResidentFormState = { error?: string; submittedAt?: number };
+export type ResidentFormState = {
+  error?: string;
+  errorAt?: number;
+  submittedAt?: number;
+};
+
+function fail(error: string): ResidentFormState {
+  return { error, errorAt: Date.now() };
+}
 
 export type ResidentSearchResult = {
   id: number;
@@ -138,7 +146,7 @@ export async function createResident(
   formData: FormData
 ): Promise<ResidentFormState> {
   const parsed = parseFields(formData);
-  if ("error" in parsed) return parsed;
+  if ("error" in parsed) return fail(parsed.error);
 
   try {
     const insertResident = db.prepare(
@@ -168,7 +176,7 @@ export async function createResident(
   } catch (e) {
     const code = (e as { code?: string }).code;
     if (code === "SQLITE_CONSTRAINT_FOREIGNKEY") {
-      return { error: "דירה לא חוקית" };
+      return fail("דירה לא חוקית");
     }
     throw e;
   }
@@ -184,10 +192,10 @@ export async function updateResident(
 ): Promise<ResidentFormState> {
   const idRaw = String(formData.get("id") ?? "").trim();
   const id = parseInt(idRaw, 10);
-  if (Number.isNaN(id)) return { error: "מזהה לא חוקי" };
+  if (Number.isNaN(id)) return fail("מזהה לא חוקי");
 
   const parsed = parseFields(formData);
-  if ("error" in parsed) return parsed;
+  if ("error" in parsed) return fail(parsed.error);
 
   try {
     const updateResident = db.prepare(
@@ -227,11 +235,11 @@ export async function updateResident(
     tx();
   } catch (e) {
     if ((e as Error).message === "RESIDENT_NOT_FOUND") {
-      return { error: "הדייר לא נמצא" };
+      return fail("הדייר לא נמצא");
     }
     const code = (e as { code?: string }).code;
     if (code === "SQLITE_CONSTRAINT_FOREIGNKEY") {
-      return { error: "דירה לא חוקית" };
+      return fail("דירה לא חוקית");
     }
     throw e;
   }

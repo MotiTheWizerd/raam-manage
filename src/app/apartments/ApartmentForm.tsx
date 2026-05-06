@@ -6,7 +6,9 @@ import { Dropdown } from "@/components/ui/Dropdown";
 import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
+import { useFormToasts } from "@/lib/hooks/useFormToasts";
 import { AssetsFields, type AssetInit } from "./AssetsFields";
+import { KeysFields, type KeyInit } from "./KeysFields";
 import type { ApartmentFormState } from "./actions";
 
 export type Zone = { id: number; name: string };
@@ -23,6 +25,7 @@ type Props = {
   initialValues?: ApartmentFormValues;
   initialParking?: AssetInit[];
   initialStorage?: AssetInit[];
+  initialKeys?: KeyInit[];
   hiddenIdValue?: number;
   action: (
     prev: ApartmentFormState,
@@ -40,6 +43,7 @@ export function ApartmentForm({
   initialValues,
   initialParking,
   initialStorage,
+  initialKeys,
   hiddenIdValue,
   action,
   onCancel,
@@ -47,6 +51,8 @@ export function ApartmentForm({
   submitLabel = "שמור",
 }: Props) {
   const [state, formAction, pending] = useActionState(action, initialState);
+
+  useFormToasts(state);
 
   useEffect(() => {
     if (state.submittedAt) onSuccess?.();
@@ -98,6 +104,7 @@ export function ApartmentForm({
 
       <AssetsFields kind="parking" initial={initialParking} />
       <AssetsFields kind="storage" initial={initialStorage} />
+      <KeysFields initial={initialKeys} />
 
       <Field label="הערות" htmlFor="apt-notes">
         <Textarea

@@ -3,7 +3,15 @@
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 
-export type ApartmentFormState = { error?: string; submittedAt?: number };
+export type ApartmentFormState = {
+  error?: string;
+  errorAt?: number;
+  submittedAt?: number;
+};
+
+function fail(error: string): ApartmentFormState {
+  return { error, errorAt: Date.now() };
+}
 
 type AssetInput = {
   floor: unknown;
@@ -17,6 +25,20 @@ type CleanedAsset = {
   notes: string | null;
 };
 
+type KeyInput = {
+  nickname: unknown;
+  is_default?: unknown;
+  is_active?: unknown;
+  is_in_lobby?: unknown;
+};
+
+type CleanedKey = {
+  nickname: string;
+  is_default: 0 | 1;
+  is_active: 0 | 1;
+  is_in_lobby: 0 | 1;
+};
+
 type ParsedFields = {
   number: string;
   floor: number | null;
@@ -24,6 +46,7 @@ type ParsedFields = {
   notes: string | null;
   parking: CleanedAsset[];
   storage: CleanedAsset[];
+  keys: CleanedKey[];
 };
 
 function parseAssets(formData: FormData, key: string): CleanedAsset[] {
@@ -42,6 +65,40 @@ function parseAssets(formData: FormData, key: string): CleanedAsset[] {
         typeof a.notes === "string" && a.notes.trim() ? a.notes.trim() : null,
     }))
     .filter((a) => !Number.isNaN(a.floor) && a.number !== "");
+}
+
+function parseKeys(formData: FormData): CleanedKey[] | { error: string } {
+  let raw: KeyInput[] = [];
+  try {
+    const parsed = JSON.parse(String(formData.get("keys") ?? "[]"));
+    if (Array.isArray(parsed)) raw = parsed;
+  } catch {
+    raw = [];
+  }
+  const keys: CleanedKey[] = raw.map((k) => ({
+    nickname: typeof k.nickname === "string" ? k.nickname.trim() : "",
+    is_default: (k.is_default === true || k.is_default === 1 ? 1 : 0) as 0 | 1,
+    is_active: (k.is_active === false || k.is_active === 0 ? 0 : 1) as 0 | 1,
+    is_in_lobby: (k.is_in_lobby === false || k.is_in_lobby === 0
+      ? 0
+      : 1) as 0 | 1,
+  }));
+
+  if (keys.some((k) => k.nickname === "")) {
+    return { error: "חובה להוסיף כינוי למפתח" };
+  }
+
+  if (keys.length > 0 && !keys.some((k) => k.is_default)) {
+    keys[0].is_default = 1;
+  }
+  let foundDefault = false;
+  for (const k of keys) {
+    if (k.is_default) {
+      if (foundDefault) k.is_default = 0;
+      else foundDefault = true;
+    }
+  }
+  return keys;
 }
 
 function parseFields(formData: FormData): ParsedFields | { error: string } {
@@ -68,8 +125,10 @@ function parseFields(formData: FormData): ParsedFields | { error: string } {
 
   const parking = parseAssets(formData, "parking");
   const storage = parseAssets(formData, "storage");
+  const keys = parseKeys(formData);
+  if ("error" in keys) return { error: keys.error };
 
-  return { number, floor, zone_id, notes, parking, storage };
+  return { number, floor, zone_id, notes, parking, storage, keys };
 }
 
 function insertAssets(
@@ -83,6 +142,22 @@ function insertAssets(
   );
   for (const a of assets) {
     stmt.run(type, a.floor, a.number, apartmentId, a.notes);
+  }
+}
+
+function insertKeys(apartmentId: number, keys: CleanedKey[]) {
+  const stmt = db.prepare(
+    `INSERT INTO apartment_keys (apartment_id, nickname, is_default, is_active, is_in_lobby)
+     VALUES (?, ?, ?, ?, ?)`
+  );
+  for (const k of keys) {
+    stmt.run(
+      apartmentId,
+      k.nickname,
+      k.is_default,
+      k.is_active,
+      k.is_in_lobby
+    );
   }
 }
 
@@ -100,7 +175,7 @@ export async function createApartment(
   formData: FormData
 ): Promise<ApartmentFormState> {
   const parsed = parseFields(formData);
-  if ("error" in parsed) return parsed;
+  if ("error" in parsed) return fail(parsed.error);
 
   try {
     const insertApt = db.prepare(
@@ -117,17 +192,18 @@ export async function createApartment(
       ) as { id: number };
       insertAssets(id, "parking", parsed.parking);
       insertAssets(id, "storage", parsed.storage);
+      insertKeys(id, parsed.keys);
     });
     tx();
   } catch (e) {
     const code = (e as { code?: string }).code;
     const assetErr = assetConflictMessage(e);
-    if (assetErr) return { error: assetErr };
+    if (assetErr) return fail(assetErr);
     if (code === "SQLITE_CONSTRAINT_UNIQUE") {
-      return { error: "דירה עם מספר זה כבר קיימת" };
+      return fail("דירה עם מספר זה כבר קיימת");
     }
     if (code === "SQLITE_CONSTRAINT_FOREIGNKEY") {
-      return { error: "אזור לא חוקי" };
+      return fail("אזור לא חוקי");
     }
     throw e;
   }
@@ -143,10 +219,10 @@ export async function updateApartment(
 ): Promise<ApartmentFormState> {
   const idRaw = String(formData.get("id") ?? "").trim();
   const id = parseInt(idRaw, 10);
-  if (Number.isNaN(id)) return { error: "מזהה לא חוקי" };
+  if (Number.isNaN(id)) return fail("מזהה לא חוקי");
 
   const parsed = parseFields(formData);
-  if ("error" in parsed) return parsed;
+  if ("error" in parsed) return fail(parsed.error);
 
   try {
     const updateApt = db.prepare(
@@ -157,6 +233,9 @@ export async function updateApartment(
     );
     const deleteAssets = db.prepare(
       `DELETE FROM apartment_assets WHERE apartment_id = ? AND type = ?`
+    );
+    const deleteKeys = db.prepare(
+      `DELETE FROM apartment_keys WHERE apartment_id = ?`
     );
 
     const tx = db.transaction(() => {
@@ -172,22 +251,24 @@ export async function updateApartment(
       }
       deleteAssets.run(id, "parking");
       deleteAssets.run(id, "storage");
+      deleteKeys.run(id);
       insertAssets(id, "parking", parsed.parking);
       insertAssets(id, "storage", parsed.storage);
+      insertKeys(id, parsed.keys);
     });
     tx();
   } catch (e) {
     if ((e as Error).message === "APARTMENT_NOT_FOUND") {
-      return { error: "הדירה לא נמצאה" };
+      return fail("הדירה לא נמצאה");
     }
     const code = (e as { code?: string }).code;
     const assetErr = assetConflictMessage(e);
-    if (assetErr) return { error: assetErr };
+    if (assetErr) return fail(assetErr);
     if (code === "SQLITE_CONSTRAINT_UNIQUE") {
-      return { error: "דירה עם מספר זה כבר קיימת" };
+      return fail("דירה עם מספר זה כבר קיימת");
     }
     if (code === "SQLITE_CONSTRAINT_FOREIGNKEY") {
-      return { error: "אזור לא חוקי" };
+      return fail("אזור לא חוקי");
     }
     throw e;
   }

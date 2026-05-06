@@ -6,6 +6,7 @@ import { Dropdown } from "@/components/ui/Dropdown";
 import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
+import { useFormToasts } from "@/lib/hooks/useFormToasts";
 import { PhoneFields, type PhoneInit } from "./PhoneFields";
 import type { ResidentFormState } from "./actions";
 
@@ -52,6 +53,8 @@ export function ResidentForm({
   submitLabel = "שמור",
 }: Props) {
   const [state, formAction, pending] = useActionState(action, initialState);
+
+  useFormToasts(state);
 
   useEffect(() => {
     if (state.submittedAt) onSuccess?.();

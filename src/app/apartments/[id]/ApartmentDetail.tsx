@@ -3,6 +3,7 @@
 import { updateApartment } from "../actions";
 import { ApartmentForm, type Zone } from "../ApartmentForm";
 import type { AssetInit } from "../AssetsFields";
+import type { KeyInit } from "../KeysFields";
 
 type Apartment = {
   id: number;
@@ -21,22 +22,40 @@ type Asset = {
   notes: string | null;
 };
 
+type KeyRow = {
+  id: number;
+  nickname: string;
+  is_default: number;
+  is_active: number;
+  is_in_lobby: number;
+};
+
 export function ApartmentDetail({
   apartment,
   parking,
   storage,
+  keys,
   zones,
 }: {
   apartment: Apartment;
   parking: Asset[];
   storage: Asset[];
+  keys: KeyRow[];
   zones: Zone[];
 }) {
-  const toInit = (assets: Asset[]): AssetInit[] =>
+  const toAssetInit = (assets: Asset[]): AssetInit[] =>
     assets.map((a) => ({
       floor: a.floor,
       number: a.number,
       notes: a.notes,
+    }));
+
+  const toKeyInit = (rows: KeyRow[]): KeyInit[] =>
+    rows.map((k) => ({
+      nickname: k.nickname,
+      is_default: k.is_default === 1,
+      is_active: k.is_active === 1,
+      is_in_lobby: k.is_in_lobby === 1,
     }));
 
   return (
@@ -53,8 +72,9 @@ export function ApartmentDetail({
             apartment.zone_id !== null ? String(apartment.zone_id) : "",
           notes: apartment.notes ?? "",
         }}
-        initialParking={toInit(parking)}
-        initialStorage={toInit(storage)}
+        initialParking={toAssetInit(parking)}
+        initialStorage={toAssetInit(storage)}
+        initialKeys={toKeyInit(keys)}
         hiddenIdValue={apartment.id}
         action={updateApartment}
         submitLabel="שמור שינויים"

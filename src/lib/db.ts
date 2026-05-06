@@ -90,6 +90,30 @@ CREATE TABLE IF NOT EXISTS apartment_keys_history (
 CREATE INDEX IF NOT EXISTS idx_apartment_keys_history_key
   ON apartment_keys_history(apartment_key_id);
 
+CREATE TABLE IF NOT EXISTS apartment_vehicles (
+  id            INTEGER PRIMARY KEY,
+  apartment_id  INTEGER NOT NULL REFERENCES apartments(id) ON DELETE CASCADE,
+  license_plate TEXT NOT NULL,
+  color         TEXT,
+  model         TEXT,
+  notes         TEXT,
+  created_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_apartment_vehicles_apartment
+  ON apartment_vehicles(apartment_id);
+
+CREATE TABLE IF NOT EXISTS guest_parking (
+  id            INTEGER PRIMARY KEY,
+  resident_id   INTEGER NOT NULL REFERENCES residents(id) ON DELETE CASCADE,
+  car_plate     TEXT NOT NULL,
+  lobbyist_name TEXT NOT NULL DEFAULT '',
+  created_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_guest_parking_resident
+  ON guest_parking(resident_id);
+
 CREATE TABLE IF NOT EXISTS users (
   id            INTEGER PRIMARY KEY,
   lobbyist_name TEXT NOT NULL,
@@ -152,6 +176,7 @@ function open(): Database.Database {
   ensureColumn(db, "apartment_keys", "is_active", "INTEGER NOT NULL DEFAULT 1");
   ensureColumn(db, "apartment_keys", "is_in_lobby", "INTEGER NOT NULL DEFAULT 1");
   ensureColumn(db, "packages", "received_by", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "guest_parking", "lobbyist_name", "TEXT NOT NULL DEFAULT ''");
 
   return db;
 }

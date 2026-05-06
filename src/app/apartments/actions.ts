@@ -39,6 +39,20 @@ type CleanedKey = {
   is_in_lobby: 0 | 1;
 };
 
+type VehicleInput = {
+  license_plate: unknown;
+  color?: unknown;
+  model?: unknown;
+  notes?: unknown;
+};
+
+type CleanedVehicle = {
+  license_plate: string;
+  color: string | null;
+  model: string | null;
+  notes: string | null;
+};
+
 type ParsedFields = {
   number: string;
   floor: number | null;
@@ -47,6 +61,7 @@ type ParsedFields = {
   parking: CleanedAsset[];
   storage: CleanedAsset[];
   keys: CleanedKey[];
+  vehicles: CleanedVehicle[];
 };
 
 function parseAssets(formData: FormData, key: string): CleanedAsset[] {
@@ -127,8 +142,10 @@ function parseFields(formData: FormData): ParsedFields | { error: string } {
   const storage = parseAssets(formData, "storage");
   const keys = parseKeys(formData);
   if ("error" in keys) return { error: keys.error };
+  const vehicles = parseVehicles(formData);
+  if ("error" in vehicles) return { error: vehicles.error };
 
-  return { number, floor, zone_id, notes, parking, storage, keys };
+  return { number, floor, zone_id, notes, parking, storage, keys, vehicles };
 }
 
 function insertAssets(
@@ -158,6 +175,43 @@ function insertKeys(apartmentId: number, keys: CleanedKey[]) {
       k.is_active,
       k.is_in_lobby
     );
+  }
+}
+
+function parseVehicles(
+  formData: FormData
+): CleanedVehicle[] | { error: string } {
+  let raw: VehicleInput[] = [];
+  try {
+    const parsed = JSON.parse(String(formData.get("vehicles") ?? "[]"));
+    if (Array.isArray(parsed)) raw = parsed;
+  } catch {
+    raw = [];
+  }
+  const vehicles: CleanedVehicle[] = raw.map((v) => ({
+    license_plate:
+      typeof v.license_plate === "string" ? v.license_plate.trim() : "",
+    color:
+      typeof v.color === "string" && v.color.trim() ? v.color.trim() : null,
+    model:
+      typeof v.model === "string" && v.model.trim() ? v.model.trim() : null,
+    notes:
+      typeof v.notes === "string" && v.notes.trim() ? v.notes.trim() : null,
+  }));
+
+  if (vehicles.some((v) => v.license_plate === "")) {
+    return { error: "חובה להזין מספר רישוי לרכב" };
+  }
+  return vehicles;
+}
+
+function insertVehicles(apartmentId: number, vehicles: CleanedVehicle[]) {
+  const stmt = db.prepare(
+    `INSERT INTO apartment_vehicles (apartment_id, license_plate, color, model, notes)
+     VALUES (?, ?, ?, ?, ?)`
+  );
+  for (const v of vehicles) {
+    stmt.run(apartmentId, v.license_plate, v.color, v.model, v.notes);
   }
 }
 
@@ -193,6 +247,7 @@ export async function createApartment(
       insertAssets(id, "parking", parsed.parking);
       insertAssets(id, "storage", parsed.storage);
       insertKeys(id, parsed.keys);
+      insertVehicles(id, parsed.vehicles);
     });
     tx();
   } catch (e) {
@@ -237,6 +292,9 @@ export async function updateApartment(
     const deleteKeys = db.prepare(
       `DELETE FROM apartment_keys WHERE apartment_id = ?`
     );
+    const deleteVehicles = db.prepare(
+      `DELETE FROM apartment_vehicles WHERE apartment_id = ?`
+    );
 
     const tx = db.transaction(() => {
       const result = updateApt.run(
@@ -252,9 +310,11 @@ export async function updateApartment(
       deleteAssets.run(id, "parking");
       deleteAssets.run(id, "storage");
       deleteKeys.run(id);
+      deleteVehicles.run(id);
       insertAssets(id, "parking", parsed.parking);
       insertAssets(id, "storage", parsed.storage);
       insertKeys(id, parsed.keys);
+      insertVehicles(id, parsed.vehicles);
     });
     tx();
   } catch (e) {

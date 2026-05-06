@@ -4,6 +4,7 @@ import { updateApartment } from "../actions";
 import { ApartmentForm, type Zone } from "../ApartmentForm";
 import type { AssetInit } from "../AssetsFields";
 import type { KeyInit } from "../KeysFields";
+import type { VehicleInit } from "../VehiclesFields";
 
 type Apartment = {
   id: number;
@@ -30,17 +31,27 @@ type KeyRow = {
   is_in_lobby: number;
 };
 
+type VehicleRow = {
+  id: number;
+  license_plate: string;
+  color: string | null;
+  model: string | null;
+  notes: string | null;
+};
+
 export function ApartmentDetail({
   apartment,
   parking,
   storage,
   keys,
+  vehicles,
   zones,
 }: {
   apartment: Apartment;
   parking: Asset[];
   storage: Asset[];
   keys: KeyRow[];
+  vehicles: VehicleRow[];
   zones: Zone[];
 }) {
   const toAssetInit = (assets: Asset[]): AssetInit[] =>
@@ -56,6 +67,14 @@ export function ApartmentDetail({
       is_default: k.is_default === 1,
       is_active: k.is_active === 1,
       is_in_lobby: k.is_in_lobby === 1,
+    }));
+
+  const toVehicleInit = (rows: VehicleRow[]): VehicleInit[] =>
+    rows.map((v) => ({
+      license_plate: v.license_plate,
+      color: v.color,
+      model: v.model,
+      notes: v.notes,
     }));
 
   return (
@@ -75,6 +94,7 @@ export function ApartmentDetail({
         initialParking={toAssetInit(parking)}
         initialStorage={toAssetInit(storage)}
         initialKeys={toKeyInit(keys)}
+        initialVehicles={toVehicleInit(vehicles)}
         hiddenIdValue={apartment.id}
         action={updateApartment}
         submitLabel="שמור שינויים"

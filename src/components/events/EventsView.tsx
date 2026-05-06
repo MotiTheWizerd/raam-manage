@@ -18,7 +18,7 @@ export function EventsView() {
   const [tab, setTab] = useState<string>("keys");
 
   return (
-    <div className="space-y-6 max-w-5xl">
+    <div className="space-y-6 max-w-5xl mx-auto">
       <header className="space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight">אירועים</h1>
         {resident ? (
@@ -68,7 +68,12 @@ export function EventsView() {
             apartmentId={resident?.apartment_id ?? null}
           />
         )}
-        {tab === "vehicles" && <VehiclesTab />}
+        {tab === "vehicles" && (
+          <VehiclesTab
+            apartmentId={resident?.apartment_id ?? null}
+            residentId={resident?.id ?? null}
+          />
+        )}
       </section>
     </div>
   );

@@ -45,7 +45,7 @@ export default async function RootLayout({
           </div>
         </PreferencesProvider>
         <Toaster
-          position="top-center"
+          position="top-left"
           dir="rtl"
           richColors
           closeButton

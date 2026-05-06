@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/Textarea";
 import { useFormToasts } from "@/lib/hooks/useFormToasts";
 import { AssetsFields, type AssetInit } from "./AssetsFields";
 import { KeysFields, type KeyInit } from "./KeysFields";
+import { VehiclesFields, type VehicleInit } from "./VehiclesFields";
 import type { ApartmentFormState } from "./actions";
 
 export type Zone = { id: number; name: string };
@@ -26,6 +27,7 @@ type Props = {
   initialParking?: AssetInit[];
   initialStorage?: AssetInit[];
   initialKeys?: KeyInit[];
+  initialVehicles?: VehicleInit[];
   hiddenIdValue?: number;
   action: (
     prev: ApartmentFormState,
@@ -44,6 +46,7 @@ export function ApartmentForm({
   initialParking,
   initialStorage,
   initialKeys,
+  initialVehicles,
   hiddenIdValue,
   action,
   onCancel,
@@ -105,6 +108,7 @@ export function ApartmentForm({
       <AssetsFields kind="parking" initial={initialParking} />
       <AssetsFields kind="storage" initial={initialStorage} />
       <KeysFields initial={initialKeys} />
+      <VehiclesFields initial={initialVehicles} />
 
       <Field label="הערות" htmlFor="apt-notes">
         <Textarea

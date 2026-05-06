@@ -10,7 +10,7 @@ export default function ZonesPage() {
   const zones = db.prepare("SELECT * FROM zones ORDER BY name").all() as Zone[];
 
   return (
-    <div className="space-y-6 max-w-2xl">
+    <div className="space-y-6 max-w-2xl mx-auto">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold tracking-tight">אזורים</h1>
         <AddZoneButton />

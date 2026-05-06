@@ -10,7 +10,7 @@ export default function Dashboard() {
   const zones = db.prepare("SELECT COUNT(*) as n FROM zones").get() as { n: number };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-5xl mx-auto">
       <h1 className="text-2xl font-semibold tracking-tight">כללי</h1>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-w-2xl">
         <Stat label="דירות" value={apartments.n} />

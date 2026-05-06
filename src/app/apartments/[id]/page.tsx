@@ -31,6 +31,14 @@ type KeyRow = {
   is_in_lobby: number;
 };
 
+type VehicleRow = {
+  id: number;
+  license_plate: string;
+  color: string | null;
+  model: string | null;
+  notes: string | null;
+};
+
 type Zone = { id: number; name: string };
 
 export default async function ApartmentPage({
@@ -75,12 +83,21 @@ export default async function ApartmentPage({
     )
     .all(id) as KeyRow[];
 
+  const vehicles = db
+    .prepare(
+      `SELECT id, license_plate, color, model, notes
+       FROM apartment_vehicles
+       WHERE apartment_id = ?
+       ORDER BY id`
+    )
+    .all(id) as VehicleRow[];
+
   const zones = db
     .prepare("SELECT id, name FROM zones ORDER BY name")
     .all() as Zone[];
 
   return (
-    <div className="space-y-4 max-w-3xl">
+    <div className="space-y-4 max-w-3xl mx-auto">
       <Link
         href="/apartments"
         className="inline-flex items-center gap-1 text-sm opacity-70 hover:opacity-100 transition-opacity"
@@ -94,6 +111,7 @@ export default async function ApartmentPage({
         parking={parking}
         storage={storage}
         keys={keys}
+        vehicles={vehicles}
         zones={zones}
       />
     </div>

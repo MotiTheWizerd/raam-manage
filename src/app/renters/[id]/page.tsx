@@ -76,7 +76,7 @@ export default async function ResidentPage({
     .all() as ApartmentRow[];
 
   return (
-    <div className="space-y-4 max-w-3xl">
+    <div className="space-y-4 max-w-3xl mx-auto">
       <Link
         href="/renters"
         className="inline-flex items-center gap-1 text-sm opacity-70 hover:opacity-100 transition-opacity"

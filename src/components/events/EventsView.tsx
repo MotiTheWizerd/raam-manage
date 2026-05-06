@@ -62,7 +62,12 @@ export function EventsView() {
         {tab === "keys" && (
           <KeysTab apartmentId={resident?.apartment_id ?? null} />
         )}
-        {tab === "packages" && <PackagesTab />}
+        {tab === "packages" && (
+          <PackagesTab
+            residentId={resident?.id ?? null}
+            apartmentId={resident?.apartment_id ?? null}
+          />
+        )}
         {tab === "vehicles" && <VehiclesTab />}
       </section>
     </div>

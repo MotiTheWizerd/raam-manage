@@ -97,6 +97,25 @@ CREATE TABLE IF NOT EXISTS users (
   created_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS packages (
+  id              INTEGER PRIMARY KEY,
+  resident_id     INTEGER REFERENCES residents(id) ON DELETE SET NULL,
+  recipient_name  TEXT,
+  type            TEXT NOT NULL DEFAULT 'package'
+                    CHECK (type IN ('package', 'envelope', 'laundry')),
+  direction       TEXT NOT NULL DEFAULT 'in'
+                    CHECK (direction IN ('in', 'out')),
+  delivered_by    TEXT NOT NULL DEFAULT 'שליח',
+  received_by     TEXT NOT NULL DEFAULT '',
+  is_delivered    INTEGER NOT NULL DEFAULT 0,
+  comment         TEXT,
+  created_at      TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  delivered_at    TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_packages_resident ON packages(resident_id);
+CREATE INDEX IF NOT EXISTS idx_packages_pending  ON packages(resident_id) WHERE is_delivered = 0;
+
 CREATE TABLE IF NOT EXISTS user_preferences (
   id         INTEGER PRIMARY KEY CHECK (id = 1),
   data       TEXT NOT NULL DEFAULT '{}',
@@ -132,6 +151,7 @@ function open(): Database.Database {
   ensureColumn(db, "apartment_keys", "is_default", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "apartment_keys", "is_active", "INTEGER NOT NULL DEFAULT 1");
   ensureColumn(db, "apartment_keys", "is_in_lobby", "INTEGER NOT NULL DEFAULT 1");
+  ensureColumn(db, "packages", "received_by", "TEXT NOT NULL DEFAULT ''");
 
   return db;
 }

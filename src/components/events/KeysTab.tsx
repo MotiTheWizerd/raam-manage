@@ -1,7 +1,7 @@
 "use client";
 
 import { Home, Star } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   getApartmentKeysForEvents,
   getApartmentResidents,
@@ -25,6 +25,9 @@ export function KeysTab({ apartmentId }: Props) {
   const [residents, setResidents] = useState<ApartmentResidentOption[]>([]);
   const [refreshTick, setRefreshTick] = useState(0);
   const [activeKey, setActiveKey] = useState<EventsKeyRow | null>(null);
+
+  const refresh = useCallback(() => setRefreshTick((t) => t + 1), []);
+  const handleCloseModal = useCallback(() => setActiveKey(null), []);
 
   useEffect(() => {
     let active = true;
@@ -70,8 +73,8 @@ export function KeysTab({ apartmentId }: Props) {
       {activeKey && apartmentId !== null && (
         <LogKeyEventModal
           open={true}
-          onClose={() => setActiveKey(null)}
-          onSuccess={() => setRefreshTick((t) => t + 1)}
+          onClose={handleCloseModal}
+          onSuccess={refresh}
           keyId={activeKey.id}
           keyNickname={activeKey.nickname}
           currentIsInLobby={activeKey.is_in_lobby === 1}

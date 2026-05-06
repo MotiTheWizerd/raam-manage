@@ -98,15 +98,17 @@ export function LogKeyEventModal({
             />
           </Field>
 
-          <Field label="הערה" htmlFor="event-comment" required>
+          <Field label="הערה" htmlFor="event-comment">
             <Textarea
               id="event-comment"
               name="comment"
-              required
               rows={2}
               placeholder="גנן לקח את המפתח / הוחזר ע״י השליח / וכו׳"
             />
           </Field>
+          <p className="text-xs opacity-60 -mt-2">
+            יש להוסיף דייר או הערה
+          </p>
 
           {state.error && (
             <p className="text-sm text-red-600 dark:text-red-400">

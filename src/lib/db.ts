@@ -83,7 +83,7 @@ CREATE TABLE IF NOT EXISTS apartment_keys_history (
   is_in_lobby      INTEGER NOT NULL,
   resident_id      INTEGER REFERENCES residents(id) ON DELETE SET NULL,
   lobbyist_name    TEXT NOT NULL,
-  comment          TEXT NOT NULL,
+  comment          TEXT,
   created_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 

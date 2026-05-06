@@ -4,12 +4,15 @@ import { Home, Star } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
   getApartmentKeysForEvents,
+  getApartmentKeysRecentHistory,
   getApartmentResidents,
   type ApartmentResidentOption,
   type EventsKeyRow,
+  type KeyHistoryRow,
 } from "@/app/events/actions";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
+import { KeysHistoryList } from "./KeysHistoryList";
 import { LogKeyEventModal } from "./LogKeyEventModal";
 
 type Props = {
@@ -31,6 +34,7 @@ function formatTimestamp(iso: string | null) {
 
 export function KeysTab({ apartmentId }: Props) {
   const [keys, setKeys] = useState<EventsKeyRow[] | null>(null);
+  const [history, setHistory] = useState<KeyHistoryRow[]>([]);
   const [residents, setResidents] = useState<ApartmentResidentOption[]>([]);
   const [refreshTick, setRefreshTick] = useState(0);
   const [activeKey, setActiveKey] = useState<EventsKeyRow | null>(null);
@@ -40,10 +44,12 @@ export function KeysTab({ apartmentId }: Props) {
     Promise.all([
       getApartmentKeysForEvents(apartmentId),
       getApartmentResidents(apartmentId),
-    ]).then(([keyRows, residentRows]) => {
+      getApartmentKeysRecentHistory(apartmentId, 10),
+    ]).then(([keyRows, residentRows, historyRows]) => {
       if (!active) return;
       setKeys(keyRows);
       setResidents(residentRows);
+      setHistory(historyRows);
     });
     return () => {
       active = false;
@@ -65,7 +71,7 @@ export function KeysTab({ apartmentId }: Props) {
   }
 
   return (
-    <>
+    <div className="space-y-6">
       <div className="rounded-lg border border-black/10 dark:border-white/10 overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-black/[0.02] dark:bg-white/[0.03] text-xs uppercase tracking-wide">
@@ -147,6 +153,8 @@ export function KeysTab({ apartmentId }: Props) {
         </table>
       </div>
 
+      <KeysHistoryList rows={history} />
+
       {activeKey && (
         <LogKeyEventModal
           open={true}
@@ -158,6 +166,6 @@ export function KeysTab({ apartmentId }: Props) {
           residents={residents}
         />
       )}
-    </>
+    </div>
   );
 }

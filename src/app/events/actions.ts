@@ -52,6 +52,46 @@ export async function getApartmentKeysForEvents(
     .all(apartmentId) as EventsKeyRow[];
 }
 
+export type KeyHistoryRow = {
+  id: number;
+  created_at: string;
+  key_id: number;
+  key_nickname: string;
+  is_in_lobby: number;
+  lobbyist_name: string;
+  resident_id: number | null;
+  resident_name: string | null;
+  comment: string | null;
+};
+
+export async function getApartmentKeysRecentHistory(
+  apartmentId: number,
+  limit: number = 10
+): Promise<KeyHistoryRow[]> {
+  return db
+    .prepare(
+      `SELECT
+         h.id,
+         h.created_at,
+         k.id        AS key_id,
+         k.nickname  AS key_nickname,
+         h.is_in_lobby,
+         h.lobbyist_name,
+         h.resident_id,
+         CASE WHEN r.id IS NULL THEN NULL
+              ELSE r.first_name || ' ' || r.last_name
+         END         AS resident_name,
+         h.comment
+       FROM apartment_keys_history h
+       JOIN apartment_keys k ON k.id = h.apartment_key_id
+       LEFT JOIN residents r ON r.id = h.resident_id
+       WHERE k.apartment_id = ?
+       ORDER BY h.id DESC
+       LIMIT ?`
+    )
+    .all(apartmentId, limit) as KeyHistoryRow[];
+}
+
 export type ApartmentResidentOption = {
   id: number;
   full_name: string;
@@ -92,8 +132,12 @@ export async function logKeyEvent(
   const lobbyistName = String(formData.get("lobbyist_name") ?? "").trim();
   if (!lobbyistName) return fail("שם הסדרן נדרש");
 
-  const comment = String(formData.get("comment") ?? "").trim();
-  if (!comment) return fail("הערה נדרשת");
+  const commentRaw = String(formData.get("comment") ?? "").trim();
+  const comment = commentRaw || null;
+
+  if (residentId === null && comment === null) {
+    return fail("יש להוסיף דייר או הערה");
+  }
 
   try {
     const insertHistory = db.prepare(

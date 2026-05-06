@@ -6,6 +6,7 @@ import { cn } from "@/lib/cn";
 
 type Props = {
   rows: KeyHistoryRow[];
+  showApartment?: boolean;
 };
 
 function formatTimestamp(iso: string) {
@@ -20,7 +21,7 @@ function formatTimestamp(iso: string) {
   });
 }
 
-export function KeysHistoryList({ rows }: Props) {
+export function KeysHistoryList({ rows, showApartment = false }: Props) {
   return (
     <section className="space-y-3">
       <h2 className="text-sm font-medium opacity-80">אירועים אחרונים</h2>
@@ -52,6 +53,11 @@ export function KeysHistoryList({ rows }: Props) {
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm">
+                    {showApartment && (
+                      <span className="text-xs font-medium opacity-70">
+                        דירה {r.apartment_number} ·
+                      </span>
+                    )}
                     <span className="font-medium">{r.key_nickname}</span>
                     <span
                       className={cn(

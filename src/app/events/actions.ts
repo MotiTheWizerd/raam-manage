@@ -57,6 +57,8 @@ export type KeyHistoryRow = {
   created_at: string;
   key_id: number;
   key_nickname: string;
+  apartment_id: number;
+  apartment_number: string;
   is_in_lobby: number;
   lobbyist_name: string;
   resident_id: number | null;
@@ -64,32 +66,47 @@ export type KeyHistoryRow = {
   comment: string | null;
 };
 
-export async function getApartmentKeysRecentHistory(
-  apartmentId: number,
+export async function getRecentKeysHistory(
+  apartmentId: number | null,
   limit: number = 10
 ): Promise<KeyHistoryRow[]> {
+  const baseSelect = `SELECT
+       h.id,
+       h.created_at,
+       k.id        AS key_id,
+       k.nickname  AS key_nickname,
+       a.id        AS apartment_id,
+       a.number    AS apartment_number,
+       h.is_in_lobby,
+       h.lobbyist_name,
+       h.resident_id,
+       CASE WHEN r.id IS NULL THEN NULL
+            ELSE r.first_name || ' ' || r.last_name
+       END         AS resident_name,
+       h.comment
+     FROM apartment_keys_history h
+     JOIN apartment_keys k ON k.id = h.apartment_key_id
+     JOIN apartments a ON a.id = k.apartment_id
+     LEFT JOIN residents r ON r.id = h.resident_id`;
+
+  if (apartmentId !== null) {
+    return db
+      .prepare(
+        `${baseSelect}
+         WHERE k.apartment_id = ?
+         ORDER BY h.id DESC
+         LIMIT ?`
+      )
+      .all(apartmentId, limit) as KeyHistoryRow[];
+  }
+
   return db
     .prepare(
-      `SELECT
-         h.id,
-         h.created_at,
-         k.id        AS key_id,
-         k.nickname  AS key_nickname,
-         h.is_in_lobby,
-         h.lobbyist_name,
-         h.resident_id,
-         CASE WHEN r.id IS NULL THEN NULL
-              ELSE r.first_name || ' ' || r.last_name
-         END         AS resident_name,
-         h.comment
-       FROM apartment_keys_history h
-       JOIN apartment_keys k ON k.id = h.apartment_key_id
-       LEFT JOIN residents r ON r.id = h.resident_id
-       WHERE k.apartment_id = ?
+      `${baseSelect}
        ORDER BY h.id DESC
        LIMIT ?`
     )
-    .all(apartmentId, limit) as KeyHistoryRow[];
+    .all(limit) as KeyHistoryRow[];
 }
 
 export type ApartmentResidentOption = {

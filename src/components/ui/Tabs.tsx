@@ -7,6 +7,7 @@ import { cn } from "@/lib/cn";
 export type TabItem = {
   value: string;
   label: string;
+  badge?: number;
 };
 
 type Props = {
@@ -42,7 +43,14 @@ export function Tabs({ tabs, value, onChange, className }: Props) {
                 : "text-foreground/60 hover:text-foreground"
             )}
           >
-            {tab.label}
+            <span className="inline-flex items-center gap-1.5">
+              {tab.label}
+              {tab.badge !== undefined && tab.badge > 0 && (
+                <span className="inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full text-[10px] font-semibold bg-red-500 text-white">
+                  {tab.badge}
+                </span>
+              )}
+            </span>
             {active && (
               <motion.span
                 layoutId={layoutId}

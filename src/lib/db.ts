@@ -154,6 +154,23 @@ CREATE TABLE IF NOT EXISTS packages (
 CREATE INDEX IF NOT EXISTS idx_packages_resident ON packages(resident_id);
 CREATE INDEX IF NOT EXISTS idx_packages_pending  ON packages(resident_id) WHERE is_delivered = 0;
 
+CREATE TABLE IF NOT EXISTS suggestions (
+  id                INTEGER PRIMARY KEY,
+  title             TEXT NOT NULL,
+  body              TEXT NOT NULL,
+  category          TEXT NOT NULL DEFAULT 'idea'
+                      CHECK (category IN ('bug', 'improvement', 'idea')),
+  status            TEXT NOT NULL DEFAULT 'open'
+                      CHECK (status IN ('open', 'in_progress', 'done', 'wont_fix')),
+  submitted_by      TEXT NOT NULL DEFAULT '',
+  resolution_notes  TEXT,
+  created_at        TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at        TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  resolved_at       TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_suggestions_status ON suggestions(status);
+
 CREATE TABLE IF NOT EXISTS user_preferences (
   id         INTEGER PRIMARY KEY CHECK (id = 1),
   data       TEXT NOT NULL DEFAULT '{}',

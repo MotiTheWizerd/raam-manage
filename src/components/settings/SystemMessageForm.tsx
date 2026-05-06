@@ -15,6 +15,24 @@ import { notifySystemMessagesChanged } from "@/lib/system-messages-events";
 
 const initialState: SystemMessageFormState = {};
 
+function pad(n: number) {
+  return String(n).padStart(2, "0");
+}
+
+function toLocalInputValue(d: Date): string {
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function defaultStart(): string {
+  return toLocalInputValue(new Date());
+}
+
+function defaultEnd(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + 7);
+  return toLocalInputValue(d);
+}
+
 type Props = {
   action: (
     prev: SystemMessageFormState,
@@ -93,7 +111,7 @@ export function SystemMessageForm({
             type="datetime-local"
             required
             dir="ltr"
-            defaultValue={initialValues?.start_at ?? ""}
+            defaultValue={initialValues?.start_at ?? defaultStart()}
           />
         </Field>
         <Field label="סיום" htmlFor="msg-end" required>
@@ -103,7 +121,7 @@ export function SystemMessageForm({
             type="datetime-local"
             required
             dir="ltr"
-            defaultValue={initialValues?.end_at ?? ""}
+            defaultValue={initialValues?.end_at ?? defaultEnd()}
           />
         </Field>
       </div>

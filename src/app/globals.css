@@ -5,11 +5,13 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  color-scheme: light;
 }
 
 .dark {
   --background: #0a0a0a;
   --foreground: #ededed;
+  color-scheme: dark;
 }
 
 @theme inline {
@@ -22,4 +24,9 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-heebo), system-ui, sans-serif;
+}
+
+.dark input::-webkit-calendar-picker-indicator {
+  filter: invert(1) brightness(1.4);
+  cursor: pointer;
 }

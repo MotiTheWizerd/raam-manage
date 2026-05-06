@@ -1,7 +1,6 @@
 "use server";
 
 import { db } from "@/lib/db";
-import { revalidatePath } from "next/cache";
 
 export type SystemMessageFormState = {
   error?: string;
@@ -109,8 +108,6 @@ export async function createSystemMessage(
     parsed.priority
   );
 
-  revalidatePath("/settings");
-  revalidatePath("/", "layout");
   return { submittedAt: Date.now() };
 }
 
@@ -142,8 +139,6 @@ export async function updateSystemMessage(
 
   if (result.changes === 0) return fail("ההודעה לא נמצאה");
 
-  revalidatePath("/settings");
-  revalidatePath("/", "layout");
   return { submittedAt: Date.now() };
 }
 
@@ -161,7 +156,5 @@ export async function deleteSystemMessage(
 
   if (result.changes === 0) return fail("ההודעה לא נמצאה");
 
-  revalidatePath("/settings");
-  revalidatePath("/", "layout");
   return { submittedAt: Date.now() };
 }

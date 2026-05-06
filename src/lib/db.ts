@@ -77,6 +77,19 @@ CREATE TABLE IF NOT EXISTS apartment_keys (
 
 CREATE INDEX IF NOT EXISTS idx_apartment_keys_apartment ON apartment_keys(apartment_id);
 
+CREATE TABLE IF NOT EXISTS apartment_keys_history (
+  id               INTEGER PRIMARY KEY,
+  apartment_key_id INTEGER NOT NULL REFERENCES apartment_keys(id) ON DELETE CASCADE,
+  is_in_lobby      INTEGER NOT NULL,
+  resident_id      INTEGER REFERENCES residents(id) ON DELETE SET NULL,
+  lobbyist_name    TEXT NOT NULL,
+  comment          TEXT NOT NULL,
+  created_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_apartment_keys_history_key
+  ON apartment_keys_history(apartment_key_id);
+
 CREATE TABLE IF NOT EXISTS user_preferences (
   id         INTEGER PRIMARY KEY CHECK (id = 1),
   data       TEXT NOT NULL DEFAULT '{}',

@@ -64,7 +64,7 @@ export function EventsView() {
       <Tabs tabs={TABS} value={tab} onChange={setTab} />
 
       <section>
-        {tab === "keys" && <KeysTab />}
+        {tab === "keys" && <KeysTab apartmentId={resident.apartment_id} />}
         {tab === "packages" && <PackagesTab />}
         {tab === "vehicles" && <VehiclesTab />}
       </section>

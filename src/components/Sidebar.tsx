@@ -10,10 +10,10 @@ import { SidebarToggle } from "@/components/SidebarToggle";
 
 const items = [
   { label: "כללי", href: "/", icon: Home },
+  { label: "אירועים", href: "/events", icon: ClipboardList },
   { label: "אזורים", href: "/zones", icon: Map },
   { label: "דירות", href: "/apartments", icon: Building2 },
   { label: "דיירים", href: "/renters", icon: Users },
-  { label: "אירועים", href: "/events", icon: ClipboardList },
 ];
 
 const EASE = [0.16, 1, 0.3, 1] as const;

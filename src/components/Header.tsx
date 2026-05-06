@@ -1,4 +1,5 @@
 import Image from "next/image";
+import { ActiveLobbyistSelector } from "./ActiveLobbyistSelector";
 import { SearchBar } from "./SearchBar";
 import { ThemeToggle } from "./ThemeToggle";
 
@@ -13,7 +14,10 @@ export function Header() {
         priority
         className="h-9 w-auto shrink-0"
       />
-      <SearchBar className="flex-1 max-w-sm" />
+      <div className="flex-1 flex items-center justify-center gap-3 min-w-0">
+        <SearchBar className="flex-1 max-w-sm" />
+        <ActiveLobbyistSelector />
+      </div>
       <ThemeToggle />
     </header>
   );

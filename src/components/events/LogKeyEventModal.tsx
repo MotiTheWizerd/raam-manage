@@ -7,6 +7,7 @@ import {
   type LogKeyEventState,
 } from "@/app/events/actions";
 import { Modal } from "@/components/Modal";
+import { useActiveLobbyist } from "@/components/PreferencesProvider";
 import { Button } from "@/components/ui/Button";
 import { Dropdown } from "@/components/ui/Dropdown";
 import { Field } from "@/components/ui/Field";
@@ -36,6 +37,7 @@ export function LogKeyEventModal({
   residents,
 }: Props) {
   const [state, action, pending] = useActionState(logKeyEvent, initialState);
+  const activeLobbyist = useActiveLobbyist();
 
   useFormToasts(state, "האירוע נשמר");
 
@@ -68,6 +70,7 @@ export function LogKeyEventModal({
               required
               autoFocus
               placeholder="השם שלך"
+              defaultValue={activeLobbyist?.lobbyist_name ?? ""}
             />
           </Field>
 

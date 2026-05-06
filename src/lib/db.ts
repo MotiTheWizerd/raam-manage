@@ -90,6 +90,13 @@ CREATE TABLE IF NOT EXISTS apartment_keys_history (
 CREATE INDEX IF NOT EXISTS idx_apartment_keys_history_key
   ON apartment_keys_history(apartment_key_id);
 
+CREATE TABLE IF NOT EXISTS users (
+  id            INTEGER PRIMARY KEY,
+  lobbyist_name TEXT NOT NULL,
+  is_active     INTEGER NOT NULL DEFAULT 1,
+  created_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS user_preferences (
   id         INTEGER PRIMARY KEY CHECK (id = 1),
   data       TEXT NOT NULL DEFAULT '{}',

@@ -60,3 +60,7 @@ export const useSetSelectedResident = () =>
   usePreferencesStore((s) => s.setSelectedResident);
 export const useClearSelectedResident = () =>
   usePreferencesStore((s) => s.clearSelectedResident);
+export const useActiveLobbyist = () =>
+  usePreferencesStore((s) => s.activeLobbyist);
+export const useSetActiveLobbyist = () =>
+  usePreferencesStore((s) => s.setActiveLobbyist);

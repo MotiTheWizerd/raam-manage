@@ -12,16 +12,23 @@ export type SelectedResident = {
   zone_name: string | null;
 };
 
+export type ActiveLobbyist = {
+  id: number;
+  lobbyist_name: string;
+};
+
 export type Preferences = {
   sidebar: {
     collapsed: boolean;
   };
   selectedResident: SelectedResident | null;
+  activeLobbyist: ActiveLobbyist | null;
 };
 
 const DEFAULTS: Preferences = {
   sidebar: { collapsed: false },
   selectedResident: null,
+  activeLobbyist: null,
 };
 
 function merge(stored: Partial<Preferences>): Preferences {
@@ -33,6 +40,7 @@ function merge(stored: Partial<Preferences>): Preferences {
           : DEFAULTS.sidebar.collapsed,
     },
     selectedResident: stored.selectedResident ?? DEFAULTS.selectedResident,
+    activeLobbyist: stored.activeLobbyist ?? DEFAULTS.activeLobbyist,
   };
 }
 

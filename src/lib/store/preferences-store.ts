@@ -1,13 +1,18 @@
 "use client";
 
 import { createStore } from "zustand/vanilla";
-import type { Preferences, SelectedResident } from "@/lib/preferences";
+import type {
+  ActiveLobbyist,
+  Preferences,
+  SelectedResident,
+} from "@/lib/preferences";
 
 export type PreferencesActions = {
   setSidebarCollapsed: (v: boolean) => void;
   toggleSidebar: () => void;
   setSelectedResident: (r: SelectedResident | null) => void;
   clearSelectedResident: () => void;
+  setActiveLobbyist: (l: ActiveLobbyist | null) => void;
 };
 
 export type PreferencesState = Preferences & PreferencesActions;
@@ -23,6 +28,7 @@ export function createPreferencesStore(initial: Preferences) {
       set((s) => ({ sidebar: { ...s.sidebar, collapsed: !s.sidebar.collapsed } })),
     setSelectedResident: (r) => set({ selectedResident: r }),
     clearSelectedResident: () => set({ selectedResident: null }),
+    setActiveLobbyist: (l) => set({ activeLobbyist: l }),
   }));
 }
 
@@ -30,5 +36,6 @@ export function extractPreferences(state: PreferencesState): Preferences {
   return {
     sidebar: state.sidebar,
     selectedResident: state.selectedResident,
+    activeLobbyist: state.activeLobbyist,
   };
 }

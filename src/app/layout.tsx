@@ -4,6 +4,7 @@ import { Toaster } from "sonner";
 import { Header } from "@/components/Header";
 import { PreferencesProvider } from "@/components/PreferencesProvider";
 import { Sidebar } from "@/components/Sidebar";
+import { StickyMessages } from "@/components/StickyMessages";
 import { getPreferences } from "@/lib/preferences";
 import "./globals.css";
 
@@ -44,6 +45,7 @@ export default async function RootLayout({
             <main className="flex-1 overflow-auto p-6">{children}</main>
           </div>
         </PreferencesProvider>
+        <StickyMessages />
         <Toaster
           position="top-left"
           dir="rtl"

@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Building2, ClipboardList, Home, Map, UserCog, Users } from "lucide-react";
+import { Building2, ClipboardList, Home, Map, Settings, UserCog, Users } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/cn";
@@ -15,6 +15,7 @@ const items = [
   { label: "דירות", href: "/apartments", icon: Building2 },
   { label: "דיירים", href: "/renters", icon: Users },
   { label: "סדרנים", href: "/users", icon: UserCog },
+  { label: "הגדרות", href: "/settings", icon: Settings },
 ];
 
 const EASE = [0.16, 1, 0.3, 1] as const;

@@ -114,6 +114,20 @@ CREATE TABLE IF NOT EXISTS guest_parking (
 CREATE INDEX IF NOT EXISTS idx_guest_parking_resident
   ON guest_parking(resident_id);
 
+CREATE TABLE IF NOT EXISTS system_messages (
+  id         INTEGER PRIMARY KEY,
+  title      TEXT NOT NULL,
+  body       TEXT NOT NULL,
+  start_at   TEXT NOT NULL,
+  end_at     TEXT NOT NULL,
+  priority   TEXT NOT NULL DEFAULT 'med'
+               CHECK (priority IN ('low', 'med', 'high')),
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_system_messages_window
+  ON system_messages(start_at, end_at);
+
 CREATE TABLE IF NOT EXISTS users (
   id            INTEGER PRIMARY KEY,
   lobbyist_name TEXT NOT NULL,

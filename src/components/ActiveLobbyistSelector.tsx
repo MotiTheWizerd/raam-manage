@@ -20,7 +20,7 @@ type Props = {
 export function ActiveLobbyistSelector({ className }: Props) {
   const activeLobbyist = useActiveLobbyist();
   const setActiveLobbyist = useSetActiveLobbyist();
-  const [lobbyists, setLobbyists] = useState<LobbyistOption[]>([]);
+  const [lobbyists, setLobbyists] = useState<LobbyistOption[] | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -33,7 +33,10 @@ export function ActiveLobbyistSelector({ className }: Props) {
   }, []);
 
   // If the active lobbyist was deactivated/renamed, reflect the change.
+  // Skip while the list is still loading — empty list during fetch
+  // would otherwise clear the persisted selection on every mount.
   useEffect(() => {
+    if (lobbyists === null) return;
     if (!activeLobbyist) return;
     const match = lobbyists.find((l) => l.id === activeLobbyist.id);
     if (!match) {
@@ -50,7 +53,7 @@ export function ActiveLobbyistSelector({ className }: Props) {
 
   const options = [
     { value: "", label: "— ללא סדרן —" },
-    ...lobbyists.map((l) => ({
+    ...(lobbyists ?? []).map((l) => ({
       value: String(l.id),
       label: l.lobbyist_name,
     })),
@@ -71,7 +74,7 @@ export function ActiveLobbyistSelector({ className }: Props) {
             return;
           }
           const id = parseInt(v, 10);
-          const match = lobbyists.find((l) => l.id === id);
+          const match = lobbyists?.find((l) => l.id === id);
           if (match) {
             setActiveLobbyist({
               id: match.id,

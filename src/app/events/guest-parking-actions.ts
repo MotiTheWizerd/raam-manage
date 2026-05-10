@@ -16,6 +16,7 @@ function fail(error: string): GuestParkingFormState {
 export type GuestParkingRow = {
   id: number;
   car_plate: string;
+  guest_name: string;
   lobbyist_name: string;
   resident_id: number | null;
   resident_full_name: string | null;
@@ -28,6 +29,7 @@ const ROW_SELECT = `
   SELECT
     g.id,
     g.car_plate,
+    g.guest_name,
     g.lobbyist_name,
     g.resident_id,
     CASE WHEN r.id IS NULL THEN NULL
@@ -41,16 +43,27 @@ const ROW_SELECT = `
   LEFT JOIN apartments a ON a.id = r.apartment_id
 `;
 
-export async function getResidentGuestParking(
-  residentId: number
+export async function getRecentGuestParking(
+  residentId: number | null,
+  limit: number = 10
 ): Promise<GuestParkingRow[]> {
+  if (residentId !== null) {
+    return db
+      .prepare(
+        `${ROW_SELECT}
+         WHERE g.resident_id = ?
+         ORDER BY g.id DESC
+         LIMIT ?`
+      )
+      .all(residentId, limit) as GuestParkingRow[];
+  }
   return db
     .prepare(
       `${ROW_SELECT}
-       WHERE g.resident_id = ?
-       ORDER BY g.id DESC`
+       ORDER BY g.id DESC
+       LIMIT ?`
     )
-    .all(residentId) as GuestParkingRow[];
+    .all(limit) as GuestParkingRow[];
 }
 
 export async function createGuestParking(
@@ -64,14 +77,17 @@ export async function createGuestParking(
   const carPlate = String(formData.get("car_plate") ?? "").trim();
   if (!carPlate) return fail("חובה להזין מספר רישוי");
 
+  const guestName = String(formData.get("guest_name") ?? "").trim();
+  if (!guestName) return fail("שם האורח נדרש");
+
   const lobbyistName = String(formData.get("lobbyist_name") ?? "").trim();
   if (!lobbyistName) return fail("שם הסדרן נדרש");
 
   try {
     db.prepare(
-      `INSERT INTO guest_parking (resident_id, car_plate, lobbyist_name)
-       VALUES (?, ?, ?)`
-    ).run(residentId, carPlate, lobbyistName);
+      `INSERT INTO guest_parking (resident_id, car_plate, guest_name, lobbyist_name)
+       VALUES (?, ?, ?, ?)`
+    ).run(residentId, carPlate, guestName, lobbyistName);
   } catch (e) {
     if ((e as { code?: string }).code === "SQLITE_CONSTRAINT_FOREIGNKEY") {
       return fail("דייר לא חוקי");

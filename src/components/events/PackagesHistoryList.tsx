@@ -6,7 +6,6 @@ import { cn } from "@/lib/cn";
 
 type Props = {
   rows: PackageRow[];
-  showApartment?: boolean;
 };
 
 const TYPE_LABEL: Record<PackageRow["type"], string> = {
@@ -37,7 +36,7 @@ function recipientLabel(r: PackageRow) {
   return r.resident_full_name ?? r.recipient_name ?? "—";
 }
 
-export function PackagesHistoryList({ rows, showApartment = false }: Props) {
+export function PackagesHistoryList({ rows }: Props) {
   return (
     <section className="space-y-3">
       <h2 className="text-sm font-medium opacity-80">חבילות אחרונות</h2>
@@ -71,8 +70,8 @@ export function PackagesHistoryList({ rows, showApartment = false }: Props) {
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm">
-                    {showApartment && r.apartment_number && (
-                      <span className="text-xs font-medium opacity-70">
+                    {r.apartment_number && (
+                      <span className="font-medium">
                         דירה {r.apartment_number} ·
                       </span>
                     )}

@@ -58,11 +58,15 @@ export function KeysTab({ apartmentId }: Props) {
 
   return (
     <div className="space-y-6">
-      {apartmentId !== null && (
+      {apartmentId !== null ? (
         <KeysSection
           keys={keys}
           onLogEvent={setActiveKey}
         />
+      ) : (
+        <div className="rounded-lg border border-dashed border-black/10 dark:border-white/10 p-4 text-center text-sm opacity-60">
+          יש לבחור דייר בכדי להוסיף אירוע
+        </div>
       )}
 
       <KeysHistoryList

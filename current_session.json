@@ -1,7 +1,9 @@
 {
   "project": "Raam-manage",
-  "last_session_at": "2026-05-06",
-  "session_summary": "Session 2 — eight-hour build that took the app from 'three CRUD trees' to a full lobby-operations system. Added: header live search with debounced server query and persisted selected-resident chip; Zustand-backed user_preferences (sidebar collapse, selectedResident, activeLobbyist); sidebar collapse animation + brand-red active highlight; always-edit detail pages (dropped View/Edit toggle); LTR fix for floor inputs; apartment_keys subform with default/active/in-lobby flags; Sonner toasts everywhere via useFormToasts(state) + errorAt timestamps; full events page with tabs for keys, packages, vehicles; key handover history table with detailed log; packages flow (resident OR free-text recipient, type/direction enums, received_by from active lobbyist, mark-delivered atomic action); apartment vehicle registry + guest parking event log; lobbyist staff (users) management + active-lobbyist selector in header; settings page with system messages CRUD and fixed-position sticky cards on the left edge of every page (priority-ordered, color-coded, framer-motion animated, instant refresh via window-event broadcast). Plus polish: top-left toast position, mx-auto page centering, useCallback fixes for refresh-loop bugs.",
+  "last_session_at": "2026-05-10",
+  "previous_handoff_at": "2026-05-06",
+
+  "session_summary": "Session starting 2026-05-10. Three commits landed between the Session 2 handoff and this one — all of them were on the planned queue and one bonus.\n\n  1) feat (29cf7c1): one-shot residents importer + 122-apartment seed run. scripts/import-residents.ts parses the building's Hebrew-columned spreadsheet (multi-floor parking, embedded phone+name free text) into the schema in a single transaction. Backs up data/raam.db before --reset. Final seed: 122 apartments / 119 residents (60 owners, 59 renters) / 257 phones with name labels / 249 parking spots / 123 storage units / 4 zones. 3 apartment shells left empty for marked-unoccupied rows. Also gitignored personal semantix tooling.\n\n  2) fix (8bfc029): system messages — modal hang, dark-mode calendar icon, default dates. Removed revalidatePath calls from system_messages create/update/delete actions; under Next 16 + Turbopack the cache step was trapping the action response so useActionState's submittedAt never propagated and the modal froze. Client-side broadcast already handles UI refresh. Also added color-scheme + filter-invert on datetime-local picker for dark mode, and defaults start_at=now / end_at=now+7d on new messages.\n\n  3) feat (5ab68a5): הצעות ייעול tab — staff suggestions inbox in settings. New settings tab where lobby staff submit bugs/improvements/ideas. Each item has category (bug/improvement/idea), status (open/in_progress/done/wont_fix), submitter (auto-fills from active lobbyist), and resolution notes. Cards expand inline to edit; closed items dim, won't-fix gets strikethrough. Tab label shows red badge with live open count. Tabs primitive extended with optional badge prop. Cross-tab refresh via suggestions:changed broadcast. SuggestionForm uses guard ref on submittedAt so the success effect runs at most once per save (two listeners — the tab and the badge in SettingsView — caused a re-render cascade re-firing the effect with a new onSuccess identity).",
 
   "stack": {
     "framework": "Next.js 16 (App Router, Turbopack)",
@@ -15,7 +17,8 @@
     "class_helper": "tailwind-merge + clsx in src/lib/cn.ts",
     "global_state": "zustand (vanilla store + Context provider, SSR-seeded from server)",
     "toasts": "sonner (top-left, dir=rtl, richColors)",
-    "runtime_target": "lobby PC, localhost only — not a server deployment"
+    "runtime_target": "lobby PC, localhost only — not a server deployment",
+    "import_tooling": "xlsx package + npx tsx for one-shot scripts under scripts/"
   },
 
   "schema": {
@@ -32,9 +35,10 @@
       "packages (id, resident_id FK SET NULL, recipient_name NULLABLE, type package|envelope|laundry, direction in|out, delivered_by, received_by, is_delivered, comment, created_at, delivered_at)",
       "users (id, lobbyist_name, is_active, created_at) — lobby staff for the active-lobbyist selector",
       "user_preferences (id=1, data JSON blob, updated_at) — single-row prefs",
-      "system_messages (id, title, body, start_at, end_at, priority low|med|high, created_at)"
+      "system_messages (id, title, body, start_at, end_at, priority low|med|high, created_at)",
+      "suggestions (id, category bug|improvement|idea, status open|in_progress|done|wont_fix, title, body, submitter_name, resolution_note, created_at, updated_at)"
     ],
-    "evolution_helper": "src/lib/db.ts ensureColumn() — used several times this session for is_default/is_active/is_in_lobby on apartment_keys, received_by on packages, lobbyist_name on guest_parking",
+    "evolution_helper": "src/lib/db.ts ensureColumn() — used several times for is_default/is_active/is_in_lobby on apartment_keys, received_by on packages, lobbyist_name on guest_parking",
     "datetime_local_storage": "system_messages.start_at and end_at store browser <input type=\"datetime-local\"> wall-clock format (YYYY-MM-DDTHH:MM); active query uses strftime('%Y-%m-%dT%H:%M', 'now', 'localtime') so comparisons stay in local time",
     "rebuild_pattern_used_once": "apartment_keys_history.comment relaxed from NOT NULL to NULL via CREATE-new + INSERT SELECT + DROP + RENAME inside a transaction with foreign_keys OFF — preserved 2 existing rows"
   },
@@ -46,7 +50,7 @@
       "src/components/ui/Textarea.tsx",
       "src/components/ui/Field.tsx — label + child + required asterisk",
       "src/components/ui/Dropdown.tsx — custom button + portal panel, framer-motion, brand-red highlight, keyboard nav",
-      "src/components/ui/Tabs.tsx (new this session) — sliding red underline via framer-motion layoutId"
+      "src/components/ui/Tabs.tsx — sliding red underline via framer-motion layoutId; supports optional badge prop per tab"
     ],
     "shells": [
       "src/components/Modal.tsx — portal, AnimatePresence, backdrop blur, scale-in, ESC/click-outside, sm|md|lg",
@@ -74,7 +78,9 @@
 
   "global_state_pattern": "PreferencesProvider creates a Zustand vanilla store + Context once on mount, seeded from server-fetched prefs in layout.tsx. A subscribe callback in the provider debounce-saves any change at 300ms via savePreferences server action. Selectors split per slice (useSidebarCollapsed, useSelectedResident, useActiveLobbyist) so components only re-render on their slice.",
 
-  "form_pipeline": "Every CRUD form uses useActionState + a *FormState type with { error, errorAt, submittedAt } shape. Server returns fail() helpers that set errorAt = Date.now() on every error so consecutive identical errors still re-toast. useFormToasts(state) hook fires sonner toasts (success on submittedAt, error on errorAt). Modals close via Promise.resolve().then(() => setOpen(false)) to satisfy the React 19 set-state-in-effect rule.",
+  "form_pipeline": "Every CRUD form uses useActionState + a *FormState type with { error, errorAt, submittedAt } shape. Server returns fail() helpers that set errorAt = Date.now() on every error so consecutive identical errors still re-toast. useFormToasts(state) hook fires sonner toasts (success on submittedAt, error on errorAt). Modals close via Promise.resolve().then(() => setOpen(false)) to satisfy the React 19 set-state-in-effect rule. NOTE: when multiple components subscribe to the same form state (badge + tab), wrap the success-effect trigger in a guard ref so it fires once per submittedAt (see SuggestionForm).",
+
+  "next_16_quirk_logged": "revalidatePath() inside a server action under Next 16 + Turbopack can trap the action response, leaving useActionState's submittedAt unpropagated and any modal that closes on success frozen. If you have a client-side broadcast handling refresh, prefer dropping revalidatePath there.",
 
   "routes": {
     "/": "Dashboard — live counts (apartments, active residents, zones)",
@@ -85,7 +91,11 @@
     "/renters/[id]": "Always-edit form (phones)",
     "/events": "Tabs (keys, packages, vehicles+guest parking); reads selectedResident from prefs store",
     "/users": "Lobby staff CRUD (id, lobbyist_name, is_active)",
-    "/settings": "Tabs primitive; first tab system messages (CRUD + sticky display)"
+    "/settings": "Tabs primitive — tab 1: system messages (CRUD + sticky display), tab 2: הצעות ייעול staff suggestions inbox with red open-count badge"
+  },
+
+  "scripts_directory": {
+    "import-residents.ts": "One-shot Hebrew spreadsheet → schema importer. Usage: npx tsx scripts/import-residents.ts <xlsx-path> [--reset]. Sheet name 'דיירים ' (trailing space in file). Backs up data/raam.db before --reset. Skips rows marked לא מאוכלסת. Has helpers for stripWaPrefix (leading 'ו'), sameOwners (surname-tolerant compare), splitName (single-name fallback to '-' for NOT NULL last_name)."
   },
 
   "decisions_logged_to_memory": [
@@ -93,38 +103,43 @@
     "memory/feedback_keep_simple.md — pragmatic simplicity, no over-engineering",
     "memory/project_schema_decisions.md — flat residents, no buildings/floors tables, zones lookup",
     "memory/project_business_context.md — outsourced security, app is free value-add, Moti's credit on the line",
-    "memory/project_screen_pattern.md — UPDATED this session: always-edit, no view layer, onCancel optional",
-    "memory/project_planned_features.md — UPDATED this session: most queue done; data import is next"
+    "memory/project_screen_pattern.md — always-edit, no view layer, onCancel optional",
+    "memory/project_planned_features.md — most queue done"
   ],
 
-  "current_focus": "Session 2 ended with a complete lobby-operations system. Tomorrow we import real data — bulk-load the existing residents spreadsheet that was the original goal.",
+  "current_focus": "Fresh session opening 2026-05-10. The lobby-operations system is feature-complete for v1: residents seeded with real data, system messages live, suggestions inbox live, all events flows working. Awaiting Moti's direction for today's work.",
 
-  "next_session_plan": [
-    "1. Excel import for residents — the original goal. Parse the spreadsheet Moti has, map to schema, validate (apartment matching, type field, phones), insert in a transaction. Likely an upload UI on /settings or /renters with a preview-then-confirm step.",
-    "2. After import — cleanup of any quirks revealed by real data (Hebrew normalization, edge cases in phone formats, Israeli ID checksums?).",
-    "3. Stretch: persist 'recent recipients' for the package modal (free-text recipient_name autocomplete from history).",
-    "4. Stretch: per-key full history view (currently only the last event is shown next to each key; the table has all the data, just need a UI surface)."
+  "candidate_directions_carried_over": [
+    "Per-key full history view (currently only the last event is shown next to each key; the table has all the data, just need a UI surface).",
+    "Persist 'recent recipients' for the package modal (free-text recipient_name autocomplete from history).",
+    "Real-data cleanup if the seeded 119 residents revealed Hebrew normalization / phone format / Israeli ID checksum quirks worth handling.",
+    "Whatever new request Moti opens the session with (likely takes priority)."
   ],
 
   "open_questions_for_next_session": [
-    "Excel import path — upload through the UI vs CLI script run once? UI is more reusable but CLI is faster to ship.",
-    "What columns does Moti's spreadsheet actually have? Need to see one to build the mapper.",
-    "Conflict policy on import — skip duplicates by id_number? Update existing? Abort on first conflict?"
+    "What did using the imported real data over the past few days surface? Any bugs to fix or rough edges to polish before stretching?",
+    "Are the staff already submitting הצעות ייעול? If so, the inbox itself may be driving today's queue."
   ],
 
   "current_test_data": {
-    "zones": "צפון B, דרום A, etc.",
-    "apartments": "a few including 2025B, 303A",
-    "residents": "small set with phones",
-    "apartment_keys": "tested with default/active/in-lobby flags + history events",
-    "packages": "tested both resident-linked and free-text recipient paths, mark-delivered works",
-    "vehicles": "registry tested",
-    "guest_parking": "tested with lobbyist + timestamp display",
+    "source": "Real data — imported via scripts/import-residents.ts on 2026-05-06.",
+    "apartments": "122",
+    "residents": "119 (60 owners, 59 renters)",
+    "phones": "257 with name labels",
+    "parking": "249 spots",
+    "storage": "123 units",
+    "zones": "4",
     "users": "lobby staff seeded for the active-lobbyist selector",
-    "system_messages": "tested with active/scheduled/expired states; sticky cards rendered"
+    "system_messages": "tested with active/scheduled/expired states; sticky cards rendered",
+    "suggestions": "ready to receive entries"
   },
 
-  "git_state": "All committed and pushed. Latest commit: 8239769 — feat: settings page with system messages + sticky display. Branch main is clean and up to date with origin.",
+  "git_state": "All committed and pushed. Latest commit: 5ab68a5 — feat: הצעות ייעול tab — staff suggestions inbox in settings. Branch main is clean and up to date with origin.",
 
-  "context_meter_note": "Anthropic shipped a context-usage progress bar mid-session. Both of us watched it. Wrapped well below the soft limit so tomorrow starts fresh."
+  "session_history": [
+    "Session 1 (pre-2026-05-06): three CRUD trees, design primitives, dark mode, Hebrew RTL.",
+    "Session 2 (2026-05-06): full lobby-operations system — search, prefs store, sidebar collapse, always-edit pattern, keys flags, packages flow, vehicles/guest-parking, lobby staff + active selector, system messages with sticky display.",
+    "Session 3 (2026-05-06 evening): residents importer + 122-apartment seed run, system_messages bugfix trio, הצעות ייעול staff suggestions inbox.",
+    "Session 4 (2026-05-10): starting now."
+  ]
 }

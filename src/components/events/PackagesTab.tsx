@@ -104,10 +104,7 @@ export function PackagesTab({ residentId, apartmentId }: Props) {
         </>
       )}
 
-      <PackagesHistoryList
-        rows={history}
-        showApartment={residentId === null}
-      />
+      <PackagesHistoryList rows={history} />
     </div>
   );
 }

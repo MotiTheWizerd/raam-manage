@@ -107,6 +107,7 @@ CREATE TABLE IF NOT EXISTS guest_parking (
   id            INTEGER PRIMARY KEY,
   resident_id   INTEGER NOT NULL REFERENCES residents(id) ON DELETE CASCADE,
   car_plate     TEXT NOT NULL,
+  guest_name    TEXT NOT NULL DEFAULT '',
   lobbyist_name TEXT NOT NULL DEFAULT '',
   created_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -208,6 +209,7 @@ function open(): Database.Database {
   ensureColumn(db, "apartment_keys", "is_in_lobby", "INTEGER NOT NULL DEFAULT 1");
   ensureColumn(db, "packages", "received_by", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "guest_parking", "lobbyist_name", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "guest_parking", "guest_name", "TEXT NOT NULL DEFAULT ''");
 
   return db;
 }

@@ -1,9 +1,9 @@
 {
   "project": "Raam-manage",
-  "last_session_at": "2026-05-10",
+  "last_session_at": "2026-05-11",
   "previous_handoff_at": "2026-05-10",
 
-  "session_summary": "Session 4 starting 2026-05-10. Four commits landed across session 3 (residents importer, system-messages bugfix trio, suggestions inbox, events polish). Working tree is clean, branch up to date with origin/main.\n\n  1) feat (29cf7c1): one-shot residents importer + 122-apartment seed run. scripts/import-residents.ts parses the building's Hebrew-columned spreadsheet (multi-floor parking, embedded phone+name free text) into the schema in a single transaction. Backs up data/raam.db before --reset. Final seed: 122 apartments / 119 residents (60 owners, 59 renters) / 257 phones with name labels / 249 parking spots / 123 storage units / 4 zones. 3 apartment shells left empty for marked-unoccupied rows. Also gitignored personal semantix tooling.\n\n  2) fix (8bfc029): system messages — modal hang, dark-mode calendar icon, default dates. Removed revalidatePath calls from system_messages create/update/delete actions; under Next 16 + Turbopack the cache step was trapping the action response so useActionState's submittedAt never propagated and the modal froze. Client-side broadcast already handles UI refresh. Also added color-scheme + filter-invert on datetime-local picker for dark mode, and defaults start_at=now / end_at=now+7d on new messages.\n\n  3) feat (5ab68a5): הצעות ייעול tab — staff suggestions inbox in settings. New settings tab where lobby staff submit bugs/improvements/ideas. Each item has category (bug/improvement/idea), status (open/in_progress/done/wont_fix), submitter (auto-fills from active lobbyist), and resolution notes. Cards expand inline to edit; closed items dim, won't-fix gets strikethrough. Tab label shows red badge with live open count. Tabs primitive extended with optional badge prop. Cross-tab refresh via suggestions:changed broadcast. SuggestionForm uses guard ref on submittedAt so the success effect runs at most once per save (two listeners — the tab and the badge in SettingsView — caused a re-render cascade re-firing the effect with a new onSuccess identity).\n\n  4) feat (39f41a5): events polish — guest names, global history, list search, brand text. Required guest_name field added to guest_parking schema/form/list. Guest-parking history is now always visible; without a selected resident it shows the global feed with apartment prefix, with a resident it shows their feed. Packages + guest-parking history rows lead with apartment number alongside the resident name. /renters and /apartments got client-side search-as-you-type filters (name + apartment number for renters; number + zone for apartments) — extracted into ApartmentsList and RentersList client components. Keys tab now shows a hint card when no resident is selected ('יש לבחור דייר בכדי להוסיף אירוע'). Header: logo set unoptimized (internal app, no WebP gain) and 'רעם בטחון' brand text added next to it for both light and dark. Removed Next scaffold SVGs from /public.",
+  "session_summary": "Session 4 wrapped 2026-05-11. Two commits landed: the delete-events feature with a reusable confirm dialog, and a small search-input auto-focus polish.\n\n  1) feat (381df7a): delete events — keys, packages, guest parking + reusable ConfirmDialog. New src/components/ui/ConfirmDialog.tsx wraps Modal with cancel/confirm buttons, defaults to destructive variant, supports pending state and a pendingLabel for the in-flight button text. New src/components/events/DeleteEventButton.tsx is a generic icon-only trash button bound to a server action prop — passes the row id via a hidden form + formRef.requestSubmit() on confirm, then closes the dialog and calls onDeleted in a Promise.resolve().then() defer (matches the React 19 set-state-in-effect rule used elsewhere). Wired into KeysHistoryList / PackagesHistoryList / GuestParkingHistoryList; each receives onDeleted plumbed up to the tab's existing refresh callback. Three new server actions: deleteKeyEvent (in a transaction — also reconciles apartment_keys.is_in_lobby to whatever the new latest event says, so deleting a stale or wrong key event doesn't leave the key's flag wrong), deletePackage, deleteGuestParking. All revalidate /events.\n\n  2) feat (4a578cc): search — auto-focus input after clearing selected resident chip. SearchBar tracks the prior selection in a ref; on the transition from 'had resident' to null, it focuses the input on the next render so the lobbyist can immediately start typing again.",
 
   "stack": {
     "framework": "Next.js 16 (App Router, Turbopack)",
@@ -107,19 +107,20 @@
     "memory/project_planned_features.md — most queue done"
   ],
 
-  "current_focus": "Session 4 fresh start 2026-05-10. Awaiting Moti's direction. v1 lobby-operations is feature-complete with real data seeded; events polish (guest names, list search, global history feeds) just landed in 39f41a5.",
+  "current_focus": "Session 4 wrapped 2026-05-11. Working tree clean, branch up to date with origin/main. Lobby-operations is now feature-complete v1 plus full delete capability across all event types.",
 
   "candidate_directions_carried_over": [
     "Per-key full history view (currently only the last event is shown next to each key; the table has all the data, just need a UI surface).",
     "Persist 'recent recipients' for the package modal (free-text recipient_name autocomplete from history).",
     "Real-data cleanup if the seeded 119 residents revealed Hebrew normalization / phone format / Israeli ID checksum quirks worth handling.",
-    "Inbox-driven items if staff already submitted הצעות ייעול since 39f41a5 went live.",
+    "Reuse opportunities for the new ConfirmDialog primitive — other destructive actions in the app (delete zone/apartment/resident/user/system-message) currently have no confirmation; could wire them up if the lobby staff request it.",
+    "Inbox-driven items if staff submitted הצעות ייעול worth picking up.",
     "Whatever new request Moti opens the session with (likely takes priority)."
   ],
 
   "open_questions_for_next_session": [
-    "What did using the imported real data + recent polish surface? Any bugs to fix or rough edges to address before stretching?",
-    "Are there any open suggestions worth pulling into today's queue?"
+    "Any rough edges from real lobby use over the past day to address?",
+    "Are there open הצעות ייעול worth pulling into the queue?"
   ],
 
   "current_test_data": {
@@ -135,12 +136,16 @@
     "suggestions": "ready to receive entries"
   },
 
-  "git_state": "All committed and pushed. Latest commit: 5ab68a5 — feat: הצעות ייעול tab — staff suggestions inbox in settings. Branch main is clean and up to date with origin.",
+  "git_state": "All committed and pushed. Latest commit: 4a578cc — feat: search — auto-focus input after clearing selected resident chip. Branch main is clean and up to date with origin.",
+
+  "design_system_additions": {
+    "ConfirmDialog": "src/components/ui/ConfirmDialog.tsx — reusable confirm dialog built on Modal. Props: open, onClose, onConfirm, title, description?, confirmLabel?, cancelLabel?, pendingLabel?, variant? (destructive|primary, defaults destructive), pending?. Used by DeleteEventButton; reusable for any future destructive confirm."
+  },
 
   "session_history": [
     "Session 1 (pre-2026-05-06): three CRUD trees, design primitives, dark mode, Hebrew RTL.",
     "Session 2 (2026-05-06): full lobby-operations system — search, prefs store, sidebar collapse, always-edit pattern, keys flags, packages flow, vehicles/guest-parking, lobby staff + active selector, system messages with sticky display.",
-    "Session 3 (2026-05-06 evening): residents importer + 122-apartment seed run, system_messages bugfix trio, הצעות ייעול staff suggestions inbox.",
-    "Session 4 (2026-05-10): starting now."
+    "Session 3 (2026-05-06 evening + 2026-05-10): residents importer + 122-apartment seed run, system_messages bugfix trio, הצעות ייעול staff suggestions inbox, events polish (guest names, list search, global history, brand text).",
+    "Session 4 (2026-05-11): delete events across all three event types with reusable ConfirmDialog primitive; deleteKeyEvent reconciles apartment_keys.is_in_lobby to new latest event so deletion never leaves a stale flag. Plus search auto-focus on chip clear."
   ]
 }

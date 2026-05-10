@@ -195,3 +195,52 @@ export async function logKeyEvent(
   revalidatePath("/events");
   return { submittedAt: Date.now() };
 }
+
+export async function deleteKeyEvent(
+  _prev: LogKeyEventState,
+  formData: FormData
+): Promise<LogKeyEventState> {
+  const idRaw = String(formData.get("id") ?? "").trim();
+  const id = parseInt(idRaw, 10);
+  if (Number.isNaN(id)) return fail("מזהה לא חוקי");
+
+  try {
+    const tx = db.transaction(() => {
+      const row = db
+        .prepare(
+          "SELECT apartment_key_id FROM apartment_keys_history WHERE id = ?"
+        )
+        .get(id) as { apartment_key_id: number } | undefined;
+
+      if (!row) throw new Error("EVENT_NOT_FOUND");
+      const keyId = row.apartment_key_id;
+
+      db.prepare("DELETE FROM apartment_keys_history WHERE id = ?").run(id);
+
+      // Reconcile the key's is_in_lobby to whatever the new latest event says.
+      // If no events remain for this key, leave the flag as-is.
+      const latest = db
+        .prepare(
+          `SELECT is_in_lobby FROM apartment_keys_history
+           WHERE apartment_key_id = ?
+           ORDER BY id DESC LIMIT 1`
+        )
+        .get(keyId) as { is_in_lobby: number } | undefined;
+
+      if (latest) {
+        db.prepare(
+          "UPDATE apartment_keys SET is_in_lobby = ? WHERE id = ?"
+        ).run(latest.is_in_lobby, keyId);
+      }
+    });
+    tx();
+  } catch (e) {
+    if ((e as Error).message === "EVENT_NOT_FOUND") {
+      return fail("האירוע לא נמצא");
+    }
+    throw e;
+  }
+
+  revalidatePath("/events");
+  return { submittedAt: Date.now() };
+}

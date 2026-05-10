@@ -98,3 +98,18 @@ export async function createGuestParking(
   revalidatePath("/events");
   return { submittedAt: Date.now() };
 }
+
+export async function deleteGuestParking(
+  _prev: GuestParkingFormState,
+  formData: FormData
+): Promise<GuestParkingFormState> {
+  const idRaw = String(formData.get("id") ?? "").trim();
+  const id = parseInt(idRaw, 10);
+  if (Number.isNaN(id)) return fail("מזהה לא חוקי");
+
+  const result = db.prepare("DELETE FROM guest_parking WHERE id = ?").run(id);
+  if (result.changes === 0) return fail("הרישום לא נמצא");
+
+  revalidatePath("/events");
+  return { submittedAt: Date.now() };
+}

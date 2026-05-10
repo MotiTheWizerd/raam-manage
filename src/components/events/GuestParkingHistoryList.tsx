@@ -1,11 +1,16 @@
 "use client";
 
 import { Car } from "lucide-react";
-import type { GuestParkingRow } from "@/app/events/guest-parking-actions";
+import {
+  deleteGuestParking,
+  type GuestParkingRow,
+} from "@/app/events/guest-parking-actions";
+import { DeleteEventButton } from "./DeleteEventButton";
 
 type Props = {
   rows: GuestParkingRow[];
   showApartment?: boolean;
+  onDeleted: () => void;
 };
 
 function formatTimestamp(iso: string) {
@@ -20,7 +25,11 @@ function formatTimestamp(iso: string) {
   });
 }
 
-export function GuestParkingHistoryList({ rows, showApartment = false }: Props) {
+export function GuestParkingHistoryList({
+  rows,
+  showApartment = false,
+  onDeleted,
+}: Props) {
   return (
     <section className="space-y-3">
       <h2 className="text-sm font-medium opacity-80">חניית אורחים אחרונה</h2>
@@ -76,6 +85,17 @@ export function GuestParkingHistoryList({ rows, showApartment = false }: Props) 
                     <span>· סדרן: {r.lobbyist_name}</span>
                   )}
                 </div>
+              </div>
+              <div className="shrink-0 self-center">
+                <DeleteEventButton
+                  id={r.id}
+                  action={deleteGuestParking}
+                  successMessage="הרישום נמחק"
+                  confirmTitle="מחיקת חניית אורח"
+                  confirmDescription="האם למחוק את חניית האורח? פעולה זו אינה ניתנת לביטול."
+                  ariaLabel="מחק חניית אורח"
+                  onDeleted={onDeleted}
+                />
               </div>
             </li>
           ))}

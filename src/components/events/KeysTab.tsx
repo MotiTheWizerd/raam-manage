@@ -72,6 +72,7 @@ export function KeysTab({ apartmentId }: Props) {
       <KeysHistoryList
         rows={history}
         showApartment={apartmentId === null}
+        onDeleted={refresh}
       />
 
       {activeKey && apartmentId !== null && (

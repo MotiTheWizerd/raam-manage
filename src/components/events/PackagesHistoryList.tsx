@@ -1,11 +1,16 @@
 "use client";
 
 import { ArrowLeft, ArrowRight, Mail, Package, Shirt } from "lucide-react";
-import type { PackageRow } from "@/app/events/packages-actions";
+import {
+  deletePackage,
+  type PackageRow,
+} from "@/app/events/packages-actions";
 import { cn } from "@/lib/cn";
+import { DeleteEventButton } from "./DeleteEventButton";
 
 type Props = {
   rows: PackageRow[];
+  onDeleted: () => void;
 };
 
 const TYPE_LABEL: Record<PackageRow["type"], string> = {
@@ -36,7 +41,7 @@ function recipientLabel(r: PackageRow) {
   return r.resident_full_name ?? r.recipient_name ?? "—";
 }
 
-export function PackagesHistoryList({ rows }: Props) {
+export function PackagesHistoryList({ rows, onDeleted }: Props) {
   return (
     <section className="space-y-3">
       <h2 className="text-sm font-medium opacity-80">חבילות אחרונות</h2>
@@ -108,6 +113,17 @@ export function PackagesHistoryList({ rows }: Props) {
                   {r.comment && (
                     <div className="mt-1 text-sm">{r.comment}</div>
                   )}
+                </div>
+                <div className="shrink-0 self-center">
+                  <DeleteEventButton
+                    id={r.id}
+                    action={deletePackage}
+                    successMessage="החבילה נמחקה"
+                    confirmTitle="מחיקת חבילה"
+                    confirmDescription="האם למחוק את רישום החבילה? פעולה זו אינה ניתנת לביטול."
+                    ariaLabel="מחק חבילה"
+                    onDeleted={onDeleted}
+                  />
                 </div>
               </li>
             );

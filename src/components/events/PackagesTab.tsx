@@ -104,7 +104,7 @@ export function PackagesTab({ residentId, apartmentId }: Props) {
         </>
       )}
 
-      <PackagesHistoryList rows={history} />
+      <PackagesHistoryList rows={history} onDeleted={refresh} />
     </div>
   );
 }

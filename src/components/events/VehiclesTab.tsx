@@ -107,6 +107,7 @@ export function VehiclesTab({ apartmentId, residentId }: Props) {
       <GuestParkingHistoryList
         rows={guestRows}
         showApartment={residentId === null}
+        onDeleted={refresh}
       />
     </div>
   );

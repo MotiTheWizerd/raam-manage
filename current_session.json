@@ -1,9 +1,9 @@
 {
   "project": "Raam-manage",
   "last_session_at": "2026-05-10",
-  "previous_handoff_at": "2026-05-06",
+  "previous_handoff_at": "2026-05-10",
 
-  "session_summary": "Session starting 2026-05-10. Three commits landed between the Session 2 handoff and this one — all of them were on the planned queue and one bonus.\n\n  1) feat (29cf7c1): one-shot residents importer + 122-apartment seed run. scripts/import-residents.ts parses the building's Hebrew-columned spreadsheet (multi-floor parking, embedded phone+name free text) into the schema in a single transaction. Backs up data/raam.db before --reset. Final seed: 122 apartments / 119 residents (60 owners, 59 renters) / 257 phones with name labels / 249 parking spots / 123 storage units / 4 zones. 3 apartment shells left empty for marked-unoccupied rows. Also gitignored personal semantix tooling.\n\n  2) fix (8bfc029): system messages — modal hang, dark-mode calendar icon, default dates. Removed revalidatePath calls from system_messages create/update/delete actions; under Next 16 + Turbopack the cache step was trapping the action response so useActionState's submittedAt never propagated and the modal froze. Client-side broadcast already handles UI refresh. Also added color-scheme + filter-invert on datetime-local picker for dark mode, and defaults start_at=now / end_at=now+7d on new messages.\n\n  3) feat (5ab68a5): הצעות ייעול tab — staff suggestions inbox in settings. New settings tab where lobby staff submit bugs/improvements/ideas. Each item has category (bug/improvement/idea), status (open/in_progress/done/wont_fix), submitter (auto-fills from active lobbyist), and resolution notes. Cards expand inline to edit; closed items dim, won't-fix gets strikethrough. Tab label shows red badge with live open count. Tabs primitive extended with optional badge prop. Cross-tab refresh via suggestions:changed broadcast. SuggestionForm uses guard ref on submittedAt so the success effect runs at most once per save (two listeners — the tab and the badge in SettingsView — caused a re-render cascade re-firing the effect with a new onSuccess identity).",
+  "session_summary": "Session 4 starting 2026-05-10. Four commits landed across session 3 (residents importer, system-messages bugfix trio, suggestions inbox, events polish). Working tree is clean, branch up to date with origin/main.\n\n  1) feat (29cf7c1): one-shot residents importer + 122-apartment seed run. scripts/import-residents.ts parses the building's Hebrew-columned spreadsheet (multi-floor parking, embedded phone+name free text) into the schema in a single transaction. Backs up data/raam.db before --reset. Final seed: 122 apartments / 119 residents (60 owners, 59 renters) / 257 phones with name labels / 249 parking spots / 123 storage units / 4 zones. 3 apartment shells left empty for marked-unoccupied rows. Also gitignored personal semantix tooling.\n\n  2) fix (8bfc029): system messages — modal hang, dark-mode calendar icon, default dates. Removed revalidatePath calls from system_messages create/update/delete actions; under Next 16 + Turbopack the cache step was trapping the action response so useActionState's submittedAt never propagated and the modal froze. Client-side broadcast already handles UI refresh. Also added color-scheme + filter-invert on datetime-local picker for dark mode, and defaults start_at=now / end_at=now+7d on new messages.\n\n  3) feat (5ab68a5): הצעות ייעול tab — staff suggestions inbox in settings. New settings tab where lobby staff submit bugs/improvements/ideas. Each item has category (bug/improvement/idea), status (open/in_progress/done/wont_fix), submitter (auto-fills from active lobbyist), and resolution notes. Cards expand inline to edit; closed items dim, won't-fix gets strikethrough. Tab label shows red badge with live open count. Tabs primitive extended with optional badge prop. Cross-tab refresh via suggestions:changed broadcast. SuggestionForm uses guard ref on submittedAt so the success effect runs at most once per save (two listeners — the tab and the badge in SettingsView — caused a re-render cascade re-firing the effect with a new onSuccess identity).\n\n  4) feat (39f41a5): events polish — guest names, global history, list search, brand text. Required guest_name field added to guest_parking schema/form/list. Guest-parking history is now always visible; without a selected resident it shows the global feed with apartment prefix, with a resident it shows their feed. Packages + guest-parking history rows lead with apartment number alongside the resident name. /renters and /apartments got client-side search-as-you-type filters (name + apartment number for renters; number + zone for apartments) — extracted into ApartmentsList and RentersList client components. Keys tab now shows a hint card when no resident is selected ('יש לבחור דייר בכדי להוסיף אירוע'). Header: logo set unoptimized (internal app, no WebP gain) and 'רעם בטחון' brand text added next to it for both light and dark. Removed Next scaffold SVGs from /public.",
 
   "stack": {
     "framework": "Next.js 16 (App Router, Turbopack)",
@@ -107,18 +107,19 @@
     "memory/project_planned_features.md — most queue done"
   ],
 
-  "current_focus": "Fresh session opening 2026-05-10. The lobby-operations system is feature-complete for v1: residents seeded with real data, system messages live, suggestions inbox live, all events flows working. Awaiting Moti's direction for today's work.",
+  "current_focus": "Session 4 fresh start 2026-05-10. Awaiting Moti's direction. v1 lobby-operations is feature-complete with real data seeded; events polish (guest names, list search, global history feeds) just landed in 39f41a5.",
 
   "candidate_directions_carried_over": [
     "Per-key full history view (currently only the last event is shown next to each key; the table has all the data, just need a UI surface).",
     "Persist 'recent recipients' for the package modal (free-text recipient_name autocomplete from history).",
     "Real-data cleanup if the seeded 119 residents revealed Hebrew normalization / phone format / Israeli ID checksum quirks worth handling.",
+    "Inbox-driven items if staff already submitted הצעות ייעול since 39f41a5 went live.",
     "Whatever new request Moti opens the session with (likely takes priority)."
   ],
 
   "open_questions_for_next_session": [
-    "What did using the imported real data over the past few days surface? Any bugs to fix or rough edges to polish before stretching?",
-    "Are the staff already submitting הצעות ייעול? If so, the inbox itself may be driving today's queue."
+    "What did using the imported real data + recent polish surface? Any bugs to fix or rough edges to address before stretching?",
+    "Are there any open suggestions worth pulling into today's queue?"
   ],
 
   "current_test_data": {

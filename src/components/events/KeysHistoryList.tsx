@@ -1,12 +1,14 @@
 "use client";
 
 import { ArrowLeft, ArrowRight } from "lucide-react";
-import type { KeyHistoryRow } from "@/app/events/actions";
+import { deleteKeyEvent, type KeyHistoryRow } from "@/app/events/actions";
 import { cn } from "@/lib/cn";
+import { DeleteEventButton } from "./DeleteEventButton";
 
 type Props = {
   rows: KeyHistoryRow[];
   showApartment?: boolean;
+  onDeleted: () => void;
 };
 
 function formatTimestamp(iso: string) {
@@ -21,7 +23,11 @@ function formatTimestamp(iso: string) {
   });
 }
 
-export function KeysHistoryList({ rows, showApartment = false }: Props) {
+export function KeysHistoryList({
+  rows,
+  showApartment = false,
+  onDeleted,
+}: Props) {
   return (
     <section className="space-y-3">
       <h2 className="text-sm font-medium opacity-80">אירועים אחרונים</h2>
@@ -80,6 +86,17 @@ export function KeysHistoryList({ rows, showApartment = false }: Props) {
                   {r.comment && (
                     <div className="mt-1 text-sm">{r.comment}</div>
                   )}
+                </div>
+                <div className="shrink-0 self-center">
+                  <DeleteEventButton
+                    id={r.id}
+                    action={deleteKeyEvent}
+                    successMessage="האירוע נמחק"
+                    confirmTitle="מחיקת אירוע מפתח"
+                    confirmDescription="האם למחוק את אירוע המפתח? פעולה זו אינה ניתנת לביטול."
+                    ariaLabel="מחק אירוע"
+                    onDeleted={onDeleted}
+                  />
                 </div>
               </li>
             );

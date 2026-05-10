@@ -173,3 +173,18 @@ export async function markPackageDelivered(
   revalidatePath("/events");
   return { submittedAt: Date.now() };
 }
+
+export async function deletePackage(
+  _prev: PackageFormState,
+  formData: FormData
+): Promise<PackageFormState> {
+  const idRaw = String(formData.get("id") ?? "").trim();
+  const id = parseInt(idRaw, 10);
+  if (Number.isNaN(id)) return fail("מזהה לא חוקי");
+
+  const result = db.prepare("DELETE FROM packages WHERE id = ?").run(id);
+  if (result.changes === 0) return fail("החבילה לא נמצאה");
+
+  revalidatePath("/events");
+  return { submittedAt: Date.now() };
+}

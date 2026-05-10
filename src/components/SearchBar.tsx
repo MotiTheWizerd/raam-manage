@@ -44,6 +44,15 @@ export function SearchBar({ className }: Props) {
   const trimmed = debounced.trim();
   const hasQuery = trimmed.length > 0;
 
+  // After clearing the selected resident chip, refocus the input
+  const hadResidentRef = useRef(false);
+  useEffect(() => {
+    if (hadResidentRef.current && !selectedResident) {
+      inputRef.current?.focus();
+    }
+    hadResidentRef.current = !!selectedResident;
+  }, [selectedResident]);
+
   // Fire search when debounced query changes
   useEffect(() => {
     if (!hasQuery) return;

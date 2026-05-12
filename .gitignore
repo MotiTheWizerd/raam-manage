@@ -46,6 +46,9 @@ next-env.d.ts
 *.db-shm
 *.db-wal
 
+# pm2 runtime logs
+/logs/
+
 # semantix cognition tooling (personal, not part of the project)
 /.semantix/
 /semantix-connector

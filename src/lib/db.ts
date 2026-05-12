@@ -190,8 +190,12 @@ function ensureColumn(
   const cols = db
     .prepare(`SELECT name FROM pragma_table_info(?)`)
     .all(table) as { name: string }[];
-  if (!cols.some((c) => c.name === column)) {
+  if (cols.some((c) => c.name === column)) return;
+  try {
     db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (!/duplicate column name/i.test(msg)) throw err;
   }
 }
 
@@ -219,4 +223,13 @@ declare global {
   var __raamDb: Database.Database | undefined;
 }
 
-export const db: Database.Database = globalThis.__raamDb ?? (globalThis.__raamDb = open());
+function getDb(): Database.Database {
+  return globalThis.__raamDb ?? (globalThis.__raamDb = open());
+}
+
+export const db: Database.Database = new Proxy({} as Database.Database, {
+  get(_target, prop, receiver) {
+    const value = Reflect.get(getDb(), prop, receiver);
+    return typeof value === "function" ? value.bind(getDb()) : value;
+  },
+}) as Database.Database;

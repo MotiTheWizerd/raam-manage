@@ -53,6 +53,20 @@ export async function searchResidents(
     .all(like, like, like, like) as ResidentSearchResult[];
 }
 
+export async function getResidentPrimaryPhone(
+  residentId: number
+): Promise<string | null> {
+  const row = db
+    .prepare(
+      `SELECT number FROM phones
+        WHERE resident_id = ?
+        ORDER BY is_primary DESC, id ASC
+        LIMIT 1`
+    )
+    .get(residentId) as { number: string } | undefined;
+  return row?.number ?? null;
+}
+
 type PhoneInput = {
   number: unknown;
   label?: unknown;

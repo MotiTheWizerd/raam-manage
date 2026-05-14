@@ -2,16 +2,24 @@
 
 /* eslint-disable @next/next/no-img-element */
 
-import { LogOut, QrCode, Send } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Check, CheckCheck, Clock, LogOut, QrCode, Send, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
-import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/Modal";
 import { Textarea } from "@/components/ui/Textarea";
-import { useSelectedResident } from "@/components/PreferencesProvider";
+import {
+  useSelectedResident,
+  useSetSelectedResident,
+} from "@/components/PreferencesProvider";
 import { getResidentPrimaryPhone } from "@/app/renters/actions";
+import {
+  getWhatsAppConversations,
+  getWhatsAppMessages,
+  type WhatsAppConversation,
+  type WhatsAppMessageRow,
+} from "@/app/test/whatsapp/actions";
 import { cn } from "@/lib/cn";
 
 type WhatsAppStatus = {
@@ -38,13 +46,28 @@ export function WhatsAppTestPage() {
   });
   const [phone, setPhone] = useState("");
   const [message, setMessage] = useState("");
+  const [messages, setMessages] = useState<WhatsAppMessageRow[]>([]);
+  const [conversations, setConversations] = useState<WhatsAppConversation[]>([]);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [loginOpen, setLoginOpen] = useState(false);
   const wasConnectedRef = useRef(false);
   const selectedResident = useSelectedResident();
+  const setSelectedResident = useSetSelectedResident();
   const selectedResidentId = selectedResident?.id ?? null;
 
+  // Refs so the polling tick always reads the latest values without
+  // re-creating the interval on every keystroke.
+  const phoneRef = useRef(phone);
+  const residentIdRef = useRef<number | null>(selectedResidentId);
+  useEffect(() => {
+    phoneRef.current = phone;
+  }, [phone]);
+  useEffect(() => {
+    residentIdRef.current = selectedResidentId;
+  }, [selectedResidentId]);
+
   const connected = status.state === "connected";
+  const hasConversation = Boolean(selectedResidentId) || phone.trim().length > 0;
 
   const statusTone = useMemo(() => {
     if (status.state === "connected")
@@ -54,20 +77,31 @@ export function WhatsAppTestPage() {
     return "bg-zinc-100 text-zinc-700 dark:bg-zinc-900 dark:text-zinc-200";
   }, [status.state]);
 
+  // Single polling loop: status + active-conversation messages every 2s.
   useEffect(() => {
     let active = true;
 
-    async function refresh() {
+    async function tick() {
       try {
-        const next = await fetchStatus();
-        if (active) setStatus(next);
+        const [nextStatus, nextMessages, nextConversations] = await Promise.all([
+          fetchStatus(),
+          getWhatsAppMessages({
+            residentId: residentIdRef.current,
+            phone: phoneRef.current,
+          }),
+          getWhatsAppConversations(),
+        ]);
+        if (!active) return;
+        setStatus(nextStatus);
+        setMessages(nextMessages);
+        setConversations(nextConversations);
       } catch {
-        /* silent — polled call */
+        /* silent — polled */
       }
     }
 
-    void refresh();
-    const interval = window.setInterval(() => void refresh(), 2000);
+    void tick();
+    const interval = window.setInterval(() => void tick(), 2000);
 
     return () => {
       active = false;
@@ -96,6 +130,26 @@ export function WhatsAppTestPage() {
     };
   }, [selectedResidentId]);
 
+  // Force-refresh messages immediately when the conversation key changes
+  // (otherwise the user waits up to 2s before the chat reflects the switch).
+  useEffect(() => {
+    let active = true;
+    const trimmed = phone.trim();
+    if (!selectedResidentId && !trimmed) {
+      setMessages([]);
+      return;
+    }
+    void getWhatsAppMessages({
+      residentId: selectedResidentId,
+      phone: trimmed,
+    }).then((rows) => {
+      if (active) setMessages(rows);
+    });
+    return () => {
+      active = false;
+    };
+  }, [selectedResidentId, phone]);
+
   async function openLogin() {
     setLoginOpen(true);
     if (status.state === "connecting" || status.state === "qr") return;
@@ -114,8 +168,19 @@ export function WhatsAppTestPage() {
     });
   }
 
+  const refetchMessages = useCallback(async () => {
+    const trimmed = phoneRef.current.trim();
+    if (!residentIdRef.current && !trimmed) return;
+    const rows = await getWhatsAppMessages({
+      residentId: residentIdRef.current,
+      phone: trimmed,
+    });
+    setMessages(rows);
+  }, []);
+
   async function sendMessage(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!message.trim()) return;
 
     await runAction("send", async () => {
       const response = await fetch("/api/test/whatsapp/send", {
@@ -131,7 +196,7 @@ export function WhatsAppTestPage() {
       if (!response.ok) throw new Error(body.error ?? "שליחת ההודעה נכשלה");
       if (body.status) setStatus(body.status);
       setMessage("");
-      toast.success("ההודעה נשלחה");
+      await refetchMessages();
     });
   }
 
@@ -147,10 +212,10 @@ export function WhatsAppTestPage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    <div className="mx-auto flex h-[calc(100dvh-9rem)] max-w-5xl flex-col gap-4">
       <header className="flex flex-col gap-3 rounded-md border border-black/10 p-4 dark:border-white/10 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">בדיקת WhatsApp</h1>
+          <h1 className="text-xl font-semibold tracking-tight">WhatsApp</h1>
           <div
             className={cn(
               "inline-flex h-7 items-center rounded-md px-2.5 text-xs font-medium",
@@ -189,47 +254,31 @@ export function WhatsAppTestPage() {
         </div>
       )}
 
-      <form
-        onSubmit={sendMessage}
-        className="space-y-4 rounded-md border border-black/10 p-4 dark:border-white/10"
-      >
-        <h2 className="text-base font-semibold">שליחת הודעה</h2>
-
-        <Field
-          label="טלפון"
-          htmlFor="whatsapp-phone"
-          hint="אפשר להזין 9725... או מספר ישראלי שמתחיל ב-05."
-          required
-        >
-          <Input
-            id="whatsapp-phone"
-            value={phone}
-            onChange={(event) => setPhone(event.target.value)}
-            placeholder="972501234567"
-            inputMode="tel"
-            required
-          />
-        </Field>
-
-        <Field label="הודעה" htmlFor="whatsapp-message" required>
-          <Textarea
-            id="whatsapp-message"
-            value={message}
-            onChange={(event) => setMessage(event.target.value)}
-            placeholder="שלום, זו הודעת בדיקה"
-            required
-          />
-        </Field>
-
-        <Button
-          type="submit"
-          disabled={busyAction !== null || !connected}
-          className="w-full sm:w-auto"
-        >
-          <Send size={16} aria-hidden="true" />
-          שליחה
-        </Button>
-      </form>
+      <div className="flex min-h-0 flex-1 overflow-hidden rounded-md border border-black/10 dark:border-white/10">
+        <ConversationSidebar
+          conversations={conversations}
+          activePhone={phone}
+          onPick={(conv) => {
+            setPhone(conv.phone);
+            if (conv.resident) setSelectedResident(conv.resident);
+          }}
+        />
+        <ChatPanel
+          residentName={
+            selectedResident
+              ? `${selectedResident.first_name} ${selectedResident.last_name}`.trim()
+              : null
+          }
+          phone={phone}
+          onPhoneChange={setPhone}
+          messages={messages}
+          message={message}
+          onMessageChange={setMessage}
+          onSubmit={sendMessage}
+          canSend={connected && hasConversation}
+          sending={busyAction === "send"}
+        />
+      </div>
 
       <Modal
         open={loginOpen}
@@ -270,6 +319,240 @@ export function WhatsAppTestPage() {
       </Modal>
     </div>
   );
+}
+
+type ConversationSidebarProps = {
+  conversations: WhatsAppConversation[];
+  activePhone: string;
+  onPick: (conv: WhatsAppConversation) => void;
+};
+
+function ConversationSidebar({
+  conversations,
+  activePhone,
+  onPick,
+}: ConversationSidebarProps) {
+  const trimmedActive = activePhone.trim();
+  return (
+    <div className="flex w-64 shrink-0 flex-col overflow-y-auto border-e border-black/10 bg-zinc-50/40 dark:border-white/10 dark:bg-zinc-950/30">
+      {conversations.length === 0 ? (
+        <div className="grid h-full place-items-center p-4 text-center text-xs text-foreground/50">
+          אין שיחות עדיין
+        </div>
+      ) : (
+        conversations.map((conv) => {
+          const isActive = conv.phone === trimmedActive;
+          const title = conv.resident
+            ? `${conv.resident.first_name} ${conv.resident.last_name}`.trim()
+            : conv.phone;
+          const subtitle = conv.resident
+            ? `דירה ${conv.resident.apartment_number}`
+            : null;
+          const preview = formatPreview(conv);
+          return (
+            <button
+              type="button"
+              key={conv.phone}
+              onClick={() => onPick(conv)}
+              className={cn(
+                "flex flex-col gap-0.5 border-b border-black/5 px-3 py-2.5 text-start transition-colors hover:bg-black/5 dark:border-white/5 dark:hover:bg-white/5",
+                isActive && "bg-emerald-50 dark:bg-emerald-950/30"
+              )}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="truncate text-sm font-medium">{title}</span>
+                <span className="shrink-0 text-[10px] text-foreground/55">
+                  {formatTime(conv.last_at)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="truncate text-xs text-foreground/60">
+                  {preview}
+                </span>
+                {subtitle && (
+                  <span className="shrink-0 text-[10px] text-foreground/45">
+                    {subtitle}
+                  </span>
+                )}
+              </div>
+            </button>
+          );
+        })
+      )}
+    </div>
+  );
+}
+
+function formatPreview(conv: WhatsAppConversation): string {
+  const body = conv.last_body.replace(/\s+/g, " ").trim();
+  const prefix = conv.last_direction === "out" ? "אתה: " : "";
+  return `${prefix}${body}`;
+}
+
+type ChatPanelProps = {
+  residentName: string | null;
+  phone: string;
+  onPhoneChange: (value: string) => void;
+  messages: WhatsAppMessageRow[];
+  message: string;
+  onMessageChange: (value: string) => void;
+  onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
+  canSend: boolean;
+  sending: boolean;
+};
+
+function ChatPanel({
+  residentName,
+  phone,
+  onPhoneChange,
+  messages,
+  message,
+  onMessageChange,
+  onSubmit,
+  canSend,
+  sending,
+}: ChatPanelProps) {
+  const bottomRef = useRef<HTMLDivElement | null>(null);
+  const lastCountRef = useRef(0);
+
+  useEffect(() => {
+    if (messages.length !== lastCountRef.current) {
+      lastCountRef.current = messages.length;
+      bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    }
+  }, [messages]);
+
+  const hasConversation = residentName || phone.trim();
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div className="flex flex-col gap-2 border-b border-black/10 bg-zinc-50/60 p-3 dark:border-white/10 dark:bg-zinc-950/40 sm:flex-row sm:items-center">
+        <div className="flex flex-1 flex-col">
+          <span className="text-sm font-semibold">
+            {residentName ?? "שיחה חופשית"}
+          </span>
+          <span className="text-xs text-foreground/60">
+            {phone.trim() ? phone : "ללא מספר"}
+          </span>
+        </div>
+        <Input
+          value={phone}
+          onChange={(event) => onPhoneChange(event.target.value)}
+          placeholder="972501234567"
+          inputMode="tel"
+          className="sm:w-48"
+          aria-label="מספר טלפון"
+        />
+      </div>
+
+      <div className="flex-1 overflow-y-auto bg-zinc-50/40 p-3 dark:bg-zinc-950/20">
+        {!hasConversation ? (
+          <EmptyState text="בחר דייר בסרגל החיפוש או הזן מספר טלפון כדי להתחיל" />
+        ) : messages.length === 0 ? (
+          <EmptyState text="אין הודעות עדיין" />
+        ) : (
+          <div className="flex flex-col gap-2">
+            {messages.map((msg) => (
+              <MessageBubble key={msg.id} msg={msg} />
+            ))}
+            <div ref={bottomRef} />
+          </div>
+        )}
+      </div>
+
+      <form
+        onSubmit={onSubmit}
+        className="border-t border-black/10 p-3 dark:border-white/10"
+      >
+        <div className="flex items-end gap-1 rounded-md border border-zinc-300 bg-transparent pe-1 transition-colors focus-within:border-foreground/30 focus-within:ring-2 focus-within:ring-foreground/20 dark:border-zinc-700">
+          <Textarea
+            value={message}
+            onChange={(event) => onMessageChange(event.target.value)}
+            placeholder="כתוב הודעה..."
+            rows={2}
+            className="flex-1 border-0 bg-transparent focus:ring-0 focus:outline-none"
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                event.currentTarget.form?.requestSubmit();
+              }
+            }}
+          />
+          <Button
+            type="submit"
+            disabled={!canSend || sending || !message.trim()}
+            variant="ghost"
+            size="icon-sm"
+            className="mb-1 text-red-600 dark:text-red-500"
+            aria-label="שליחה"
+          >
+            <Send size={16} aria-hidden="true" className="-scale-x-100" />
+          </Button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function MessageBubble({ msg }: { msg: WhatsAppMessageRow }) {
+  const isOut = msg.direction === "out";
+  const isFailed = msg.status === "failed";
+
+  return (
+    <div className={cn("flex", isOut ? "justify-end" : "justify-start")}>
+      <div
+        className={cn(
+          "max-w-[75%] rounded-2xl px-3 py-2 text-sm shadow-sm",
+          isOut
+            ? "bg-emerald-100 text-zinc-900 dark:bg-emerald-900/40 dark:text-zinc-100"
+            : "bg-white text-zinc-900 ring-1 ring-black/5 dark:bg-zinc-800 dark:text-zinc-100 dark:ring-white/5",
+          isFailed && "ring-1 ring-red-400 dark:ring-red-500/60"
+        )}
+      >
+        <div className="whitespace-pre-wrap break-words">{msg.body}</div>
+        <div className="mt-1 flex items-center justify-end gap-1 text-[10px] text-foreground/55">
+          <span>{formatTime(msg.created_at)}</span>
+          {isOut && <StatusIcon status={msg.status} />}
+        </div>
+        {isFailed && msg.error && (
+          <div className="mt-1 text-[10px] text-red-600 dark:text-red-400">
+            {msg.error}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function StatusIcon({ status }: { status: WhatsAppMessageRow["status"] }) {
+  if (status === "pending")
+    return <Clock size={12} aria-label="ממתין" className="opacity-70" />;
+  if (status === "sent")
+    return <Check size={12} aria-label="נשלח" />;
+  if (status === "delivered")
+    return <CheckCheck size={12} aria-label="נמסר" />;
+  if (status === "read")
+    return <CheckCheck size={12} aria-label="נקרא" className="text-sky-500" />;
+  if (status === "failed")
+    return <X size={12} aria-label="נכשל" className="text-red-500" />;
+  return null;
+}
+
+function EmptyState({ text }: { text: string }) {
+  return (
+    <div className="grid h-full place-items-center text-sm text-foreground/50">
+      {text}
+    </div>
+  );
+}
+
+function formatTime(iso: string): string {
+  // SQLite CURRENT_TIMESTAMP returns "YYYY-MM-DD HH:MM:SS" in UTC.
+  // Treat as UTC, render in local time.
+  const utc = iso.includes("T") ? iso : iso.replace(" ", "T") + "Z";
+  const d = new Date(utc);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" });
 }
 
 async function fetchStatus(): Promise<WhatsAppStatus> {

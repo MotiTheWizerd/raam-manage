@@ -1,40 +1,9 @@
 {
   "project": "Raam-manage",
   "last_session_at": "2026-05-14",
-  "previous_handoff_at": "2026-05-11",
+  "previous_handoff_at": "2026-05-14",
 
-  "session_summary": "Session 4 wrapped clean on 2026-05-11 (delete events + ConfirmDialog primitive + search auto-focus on chip clear, all committed and pushed). Between that and today (2026-05-14), an uncommitted WhatsApp/Baileys spike was added to the working tree on 2026-05-12 — see working_tree_pending. Session 5 opens with that spike sitting in working changes awaiting a direction call from Moti.",
-
-  "working_tree_pending": {
-    "summary": "Uncommitted WhatsApp Web spike using Baileys, isolated to a /test route + /api/test/* surface. Not wired into any production page yet. Decision needed: integrate (e.g. notify resident on package arrival), polish first, or discard.",
-    "added_dependencies": {
-      "baileys": "^6.7.19",
-      "qrcode": "^1.5.4"
-    },
-    "modified_files": [
-      ".gitignore — excludes /.baileys-auth/ (the persisted Baileys session folder, kept out of git)",
-      "next.config.ts — serverExternalPackages: ['baileys'] so Turbopack/webpack don't try to bundle it",
-      "package.json — adds baileys + qrcode deps and a new 'dev:webpack' script (next dev --webpack) for testing under webpack when Turbopack misbehaves with baileys",
-      "package-lock.json — dep tree updates"
-    ],
-    "new_files": [
-      "src/types/test-whatsapp-modules.d.ts — wildcard declare module 'baileys' / 'qrcode' to satisfy TS (no upstream types)",
-      "src/lib/whatsapp-test.ts — WhatsAppTestRuntime class (singleton on globalThis.__raamWhatsAppTest so the socket survives HMR/route invalidations); methods: connect(), sendText(phone, text), logout(), getStatus(); state machine idle→connecting→qr→connected→closed; QR is rendered to a data URL via qrcode.toDataURL; auth persisted under .baileys-auth/test-whatsapp via useMultiFileAuthState; reconnect-on-close unless loggedOut; normalizePhone() handles 0XXXXXXXXX → 972XXXXXXXXX",
-      "src/app/api/test/whatsapp/connect/route.ts — POST: calls runtime.connect()",
-      "src/app/api/test/whatsapp/status/route.ts — GET: returns runtime.getStatus() (polled every 2s from the client)",
-      "src/app/api/test/whatsapp/send/route.ts — POST { phone, message }",
-      "src/app/api/test/whatsapp/logout/route.ts — POST: logout + wipe auth folder",
-      "src/app/test/whatsapp/page.tsx — force-dynamic shell mounting WhatsAppTestPage",
-      "src/app/test/whatsapp/WhatsAppTestPage.tsx — client UI: status chip (Hebrew labels), QR card with connect/logout buttons, phone+message form, sonner toasts, 2s status polling"
-    ],
-    "open_questions_for_this_spike": [
-      "Should this become a real feature (e.g. resident WhatsApp notification on package arrival)? If yes — where in the UI does the connection live (admin/settings?), and how do we expose phone numbers from the residents+phones tables to it?",
-      "Singleton runtime works for single-process pm2 fork but would break under cluster mode — fine given current production setup ([[project_production_setup]]).",
-      "The reconnect-on-close timer (1.5s) has no backoff or attempt cap; for production we'd want exponential backoff + a hard stop.",
-      "logout() deletes the auth folder unconditionally — fine for a test, but a real integration should probably preserve creds across logouts unless explicitly forgotten."
-    ],
-    "route_not_visible_in_sidebar": "The /test/whatsapp page is not linked from Sidebar.tsx — it's reached by URL only, deliberate for a spike."
-  },
+  "session_summary": "Session 7 wrapped 2026-05-14 (third session same calendar day — Sessions 5/6/7 all 2026-05-14). WhatsApp moved from 'spike with autofill' to a real chat UI. New whatsapp_messages table (id, resident_id FK SET NULL, phone, direction in|out, body, status pending|sent|delivered|read|failed, wa_message_id for receipt correlation, error, created_at/updated_at) with 3 indexes (phone+created_at, resident_id+created_at, wa_message_id). Runtime (src/lib/whatsapp-test.ts) extended: sendText persists pending row → flips to 'sent' on success (storing the Baileys wa_message_id) or 'failed' + error on throw; new messages.upsert listener records inbound rows, matches resident_id by last-9-digit phone compare; new messages.update listener flips status forward (pending→sent→delivered→read) with a guard that never downgrades from 'read' or 'failed'. extractText helper unwraps ephemeralMessage / viewOnceMessage(V2) and picks up image/video captions. Diagnostic console.logs were added to the upsert listener (logs envelope keys + recordInboundMessage outcome) — LEFT IN PLACE so Moti can debug inbound when he gets a second phone in a few hours. Page redesigned as chat layout: ConversationSidebar on the RTL-start side (w-64, border-e) listing one row per phone with last-message preview + apartment number + time + 'אתה: ' prefix for outbound; ChatPanel with phone-editable header chip, RTL-correct message bubbles (out=justify-end=visually-left in RTL, matches WhatsApp Hebrew), lucide status ticks (Clock/Check/CheckCheck/CheckCheck-sky for read/X for failed), auto-scroll-on-new. Composer wrapped textarea + send button in a single bordered container with focus-within ring; send button is ghost variant with brand-red icon, flipped via -scale-x-100 so the paper-airplane points forward in RTL. Polling tick now fetches status + active-conversation messages + conversation list every 2s using refs for active phone/residentId so the interval never re-creates on keystrokes. New server actions in src/app/test/whatsapp/actions.ts: getWhatsAppMessages({residentId, phone}) (OR-merges both filters when both present) and getWhatsAppConversations() (CTE last-per-phone joined to residents/apartments/zones returning the SelectedResident shape so a side-panel click can update the global selectedResident store). Layout container widened from max-w-3xl to max-w-5xl to fit sidebar + chat. Known runtime gotchas surfaced this session: (1) globalThis-cached singletons (db handle AND WhatsApp runtime) survive Turbopack HMR — must fully restart `next dev` after schema/runtime edits. (2) Stale Baileys creds bit again — manual `rm -rf .baileys-auth/test-whatsapp` unblock required. BUG 1 + BUG 2 (logout-hang) still NOT FIXED — deferred deliberately a second time per Moti's call to keep scope tight. Inbound flow could not be tested this session (no second phone) — Moti will smoke-test later today; outbound persistence + chat UI + sidebar list confirmed working visually.",
 
   "stack": {
     "framework": "Next.js 16 (App Router, Turbopack)",
@@ -49,8 +18,8 @@
     "global_state": "zustand (vanilla store + Context provider, SSR-seeded from server)",
     "toasts": "sonner (top-left, dir=rtl, richColors)",
     "runtime_target": "lobby PC, localhost only — not a server deployment",
-    "import_tooling": "xlsx package + npx tsx for one-shot scripts under scripts/",
-    "spike_only_deps": "baileys + qrcode — only used by /test/whatsapp + /api/test/whatsapp/*; not yet wired into production surfaces"
+    "import_tooling": "xlsx + npx tsx for one-shot scripts under scripts/",
+    "whatsapp_deps": "baileys + qrcode — drives the chat-style WhatsApp page at /test/whatsapp + /api/test/whatsapp/* (still sidebar-visible to all lobbyists). Outbound persisted with status tracking; inbound listener wired but not test-driven yet."
   },
 
   "schema": {
@@ -63,74 +32,114 @@
       "apartment_keys (id, apartment_id FK CASCADE, nickname, is_default, is_active, is_in_lobby, created_at)",
       "apartment_keys_history (id, apartment_key_id FK CASCADE, is_in_lobby, resident_id FK SET NULL, lobbyist_name, comment NULLABLE, created_at)",
       "apartment_vehicles (id, apartment_id FK CASCADE, license_plate, color, model, notes, created_at)",
-      "guest_parking (id, resident_id FK CASCADE, car_plate, lobbyist_name, created_at)",
+      "guest_parking (id, resident_id FK CASCADE, car_plate, guest_name, lobbyist_name, created_at) — car_plate may be empty string now (column still NOT NULL)",
       "packages (id, resident_id FK SET NULL, recipient_name NULLABLE, type package|envelope|laundry, direction in|out, delivered_by, received_by, is_delivered, comment, created_at, delivered_at)",
-      "users (id, lobbyist_name, is_active, created_at) — lobby staff for the active-lobbyist selector",
+      "users (id, lobbyist_name, is_active, created_at, password TEXT, user_role TEXT NOT NULL DEFAULT 'lobbyist')",
       "user_preferences (id=1, data JSON blob, updated_at) — single-row prefs",
       "system_messages (id, title, body, start_at, end_at, priority low|med|high, created_at)",
-      "suggestions (id, category bug|improvement|idea, status open|in_progress|done|wont_fix, title, body, submitter_name, resolution_note, created_at, updated_at)"
+      "suggestions (id, category bug|improvement|idea, status open|in_progress|done|wont_fix, title, body, submitter_name, resolution_note, created_at, updated_at)",
+      "whatsapp_messages (id, resident_id FK SET NULL, phone TEXT NOT NULL, direction in|out, body TEXT, status pending|sent|delivered|read|failed, wa_message_id TEXT NULL for receipt correlation, error TEXT NULL, created_at, updated_at) — added Session 7. 3 indexes: phone+created_at, resident_id+created_at, wa_message_id"
     ],
-    "evolution_helper": "src/lib/db.ts ensureColumn() — used several times for is_default/is_active/is_in_lobby on apartment_keys, received_by on packages, lobbyist_name on guest_parking. Made idempotent + lazy-open DB in commit 44f8304.",
-    "datetime_local_storage": "system_messages.start_at and end_at store browser <input type=\"datetime-local\"> wall-clock format (YYYY-MM-DDTHH:MM); active query uses strftime('%Y-%m-%dT%H:%M', 'now', 'localtime') so comparisons stay in local time",
-    "rebuild_pattern_used_once": "apartment_keys_history.comment relaxed from NOT NULL to NULL via CREATE-new + INSERT SELECT + DROP + RENAME inside a transaction with foreign_keys OFF — preserved 2 existing rows"
+    "evolution_helper": "src/lib/db.ts ensureColumn() + a one-shot UPDATE seeds: existing users get password='1234' WHERE password IS NULL on every db open (idempotent). user_role defaults to 'lobbyist' for new rows. NOTE: schema-add-on-running-dev-server requires full `next dev` restart — globalThis.__raamDb caches the connection.",
+    "datetime_local_storage": "system_messages.start_at and end_at store browser <input type=\"datetime-local\"> wall-clock format (YYYY-MM-DDTHH:MM); active query uses strftime('%Y-%m-%dT%H:%M', 'now', 'localtime') so comparisons stay in local time. whatsapp_messages.created_at uses SQLite CURRENT_TIMESTAMP which is UTC — the page's formatTime() helper treats them as UTC and renders in local time (he-IL locale).",
+    "phone_match_strategy": "WhatsApp inbound listener resolves resident by querying SELECT resident_id, number FROM phones, normalizing each via digitsOnly() and matching on the LAST 9 DIGITS. Robust to 972/+972/0xx prefixes. JS-side match, not SQL — runs once per inbound message, ~250 rows, trivial."
+  },
+
+  "auth_system": {
+    "model": "Plain-text passwords stored in users.password. No encryption per user spec (lobby PC, localhost — anti-misclick, not anti-attacker).",
+    "session_cookie": "raam_session — httpOnly, sameSite='lax', no maxAge (dies on browser close). Holds the user id as plain string, no JWT/encryption.",
+    "server_helpers": "src/lib/auth.ts — getCurrentUser() (cached via React cache, reads cookie → DB), setSessionCookie(id), clearSessionCookie(), isManager() (returns boolean). UserRole = 'lobbyist' | 'manager'.",
+    "proxy_gate": "src/proxy.ts (Next 16 proxy, formerly middleware) — no cookie + non-/login → redirect /login; cookie + /login → redirect /. Optimistic check, no DB hit. Matcher excludes /api, _next/*, common static assets.",
+    "client_context": "src/components/AuthProvider.tsx — exposes useCurrentUser() and useIsManager(). Layout passes the resolved user from getCurrentUser(); when null, layout renders bare body (login page paints itself); when truthy, full chrome (Header + Sidebar + StickyMessages).",
+    "login_flow": "/login → kiosk grid (LoginPicker) shows active users by name + role badge → click name → modal with masked password input → submit → server action verifies + sets cookie + redirects /. Logout = form action that clears cookie and redirects to /login.",
+    "bootstrap_gotcha": "user_role defaults to 'lobbyist' for ALL existing rows when the column is added. Bootstrap fix (auto-promote lowest-id active user when no manager exists) is STILL on the carry-over list — has bit dev (Session 5) and prod (Session 6); promoted-to-top each session and still un-done.",
+    "no_per_action_auth": "Server actions don't re-check the cookie — proxy gate is the line of defense. Acceptable per threat model; would be inadequate for a public deployment."
+  },
+
+  "role_gating": {
+    "lobbyist": "Default role. Can: log keys/packages/guest-parking events, view residents/apartments/zones/system-messages, search, submit suggestions, access the WhatsApp page (Session 6 — managerOnly flag dropped). Cannot: delete events (trash icon hidden), edit anything in apartments/residents/zones (form wrapped in <fieldset disabled>), change suggestion status, add/edit system messages, access /users at all.",
+    "manager": "Full access. Sees everything lobbyist sees + edit/delete surfaces + the /users management page.",
+    "implementation_pattern": "Two flavours: server pages compute `const canEdit = await isManager()` and conditionally render Add/Edit/Delete buttons. Client components call useIsManager() and either return null (action buttons) or wrap forms in <fieldset disabled={!isManager}>. Sidebar filters out managerOnly items (currently only /users)."
   },
 
   "design_system": {
     "primitives": [
       "src/components/ui/Button.tsx — variants primary/secondary/ghost/outline/destructive; sizes sm/md/lg/icon/icon-sm",
-      "src/components/ui/Input.tsx — exports inputBase; prevents Enter from submitting unless submitOnEnter prop",
+      "src/components/ui/Input.tsx — exports inputBase; prevents Enter from submitting unless submitOnEnter prop; forwardRef'd",
       "src/components/ui/Textarea.tsx",
-      "src/components/ui/Field.tsx — label + child + required asterisk",
-      "src/components/ui/Dropdown.tsx — custom button + portal panel, framer-motion, brand-red highlight, keyboard nav",
+      "src/components/ui/Field.tsx — label + child + required asterisk + optional hint",
+      "src/components/ui/Dropdown.tsx — custom button + portal panel, framer-motion, brand-red highlight, keyboard nav; controlled or uncontrolled",
       "src/components/ui/Tabs.tsx — sliding red underline via framer-motion layoutId; supports optional badge prop per tab",
-      "src/components/ui/ConfirmDialog.tsx — reusable destructive-confirm built on Modal; props open/onClose/onConfirm/title/description/confirmLabel/cancelLabel/pendingLabel/variant/pending"
+      "src/components/ui/ConfirmDialog.tsx — reusable destructive-confirm built on Modal"
     ],
-    "shells": [
+    "shells_and_session": [
       "src/components/Modal.tsx — portal, AnimatePresence, backdrop blur, scale-in, ESC/click-outside, sm|md|lg",
-      "src/components/Header.tsx — logo + SearchBar + ActiveLobbyistSelector + ThemeToggle",
-      "src/components/Sidebar.tsx — animated width 224↔64 via framer-motion, icons-only collapsed mode, brand-red active item gradient",
+      "src/components/Header.tsx — logo + SearchBar + CurrentUserChip + ThemeToggle. Takes lobbyistName prop from layout.",
+      "src/components/CurrentUserChip.tsx — server component with name + logout form action",
+      "src/components/AuthProvider.tsx — client context exposing useCurrentUser() / useIsManager()",
+      "src/components/Sidebar.tsx — nav items support managerOnly flag; useIsManager() filters. Items: כללי, אירועים, דירות, דיירים, פקידים (mgr-only), ווטסאפ (open to all), הגדרות.",
       "src/components/SidebarToggle.tsx — chevron at top",
-      "src/components/SearchBar.tsx — debounced live search, results dropdown, keyboard nav, race-safe via reqId ref; auto-focuses input after clearing a selected resident chip",
-      "src/components/SelectedResidentChip.tsx — replaces SearchBar input when a resident is in store; X clears",
-      "src/components/ActiveLobbyistSelector.tsx — Dropdown bound to prefs store, pre-fills lobbyist_name in event modals",
-      "src/components/StickyMessages.tsx — fixed-position cards on the left edge, max 3, priority-ordered + color-coded",
-      "src/components/PreferencesProvider.tsx — Zustand store with debounced auto-save to user_preferences",
-      "src/components/ThemeToggle.tsx — class-based dark/light, no-flash inline script in layout",
-      "src/components/events/DeleteEventButton.tsx — generic icon-trash button bound to a server-action prop; uses ConfirmDialog + hidden form + formRef.requestSubmit() + defer-close pattern"
-    ]
+      "src/components/SearchBar.tsx — global resident search (debounced, race-safe, auto-focus on chip clear)",
+      "src/components/SelectedResidentChip.tsx — replaces SearchBar input when a resident is in store",
+      "src/components/StickyMessages.tsx — fixed cards on the left edge",
+      "src/components/PreferencesProvider.tsx — Zustand store; activeLobbyist seeded from server-resolved currentUser. Debounced auto-save (300ms) for sidebar.collapsed + selectedResident.",
+      "src/components/ThemeToggle.tsx — class-based dark/light",
+      "src/components/events/DeleteEventButton.tsx — generic icon-trash + ConfirmDialog. Conditionally rendered via useIsManager()."
+    ],
+    "list_patterns": "Renters list + Apartments list both use a SortHeader subcomponent (duplicated, not extracted — only 2 consumers). Sort uses localeCompare locale='he' numeric:true so Hebrew names + alphanumeric apt numbers collate correctly. Nulls sink to bottom. Renters name-sort is first_name-first (Session 6). Renters has Dropdown filter (all/owners/renters); Users page has all/active/inactive (default active)."
   },
 
   "preferences_shape": {
     "sidebar": "{ collapsed: boolean }",
-    "selectedResident": "SelectedResident | null — search-bar selection, persisted, drives /events context",
-    "activeLobbyist": "{ id, lobbyist_name } | null — current shift lobbyist; defaults the lobbyist_name field in keys/packages/guest-parking forms"
+    "selectedResident": "SelectedResident | null — search-bar selection, persisted. Now ALSO settable by clicking a ConversationSidebar row on the WhatsApp page (Session 7)."
   },
 
-  "screen_pattern_now": "Dropped the View/Edit toggle entirely — detail pages render the form directly (always edit). Form's onCancel is now optional; rendered only by the modal context. After save, revalidatePath rerenders server-side and form DOM state stays. See memory/project_screen_pattern.md.",
+  "screen_pattern_now": "Detail pages render the form directly (always-edit). For lobbyists, the entire form is wrapped in <fieldset disabled> so it stays readable but inert. Heading flips between 'עריכת X' (manager) and 'פרטי X' (lobbyist). See ApartmentDetail and ResidentDetail.",
 
-  "events_page_architecture": "/events is a single page that reads selectedResident from the Zustand store. Three tabs: ניהול מפתחות, ניהול חבילות, ניהול רכבים. With a resident selected → action surfaces (add modal, mark-delivered, log key event); without → global recent-history feeds with apartment number prefix on each row. Keys tab pre-fills lobbyist_name from activeLobbyist; same for packages received_by and guest parking lobbyist. All three event types now have row-level delete via DeleteEventButton + ConfirmDialog; deleteKeyEvent reconciles apartment_keys.is_in_lobby to the new latest event so deletion never leaves a stale flag.",
+  "events_page_architecture": "/events is a single page that reads selectedResident from the Zustand store. Three tabs: ניהול מפתחות, ניהול חבילות, ניהול אורחים. With a resident selected → action surfaces (add modal, mark-delivered, log key event); without → global recent-history feeds. Lobbyist name auto-fills from session. All event types have row-level delete via DeleteEventButton — trash icon hidden for lobbyists. Vehicles/guest tab has server-side search (searchGuestParking action, LIKE on guest_name OR car_plate). car_plate is optional.",
 
-  "global_state_pattern": "PreferencesProvider creates a Zustand vanilla store + Context once on mount, seeded from server-fetched prefs in layout.tsx. A subscribe callback in the provider debounce-saves any change at 300ms via savePreferences server action. Selectors split per slice (useSidebarCollapsed, useSelectedResident, useActiveLobbyist) so components only re-render on their slice.",
+  "global_state_pattern": "PreferencesProvider creates a Zustand vanilla store + Context once on mount, seeded from server-fetched prefs in layout.tsx + server-resolved currentUser. Subscribe callback debounce-saves any change at 300ms via savePreferences server action. AuthProvider is a parallel context for the resolved currentUser (used by useIsManager).",
 
-  "form_pipeline": "Every CRUD form uses useActionState + a *FormState type with { error, errorAt, submittedAt } shape. Server returns fail() helpers that set errorAt = Date.now() on every error so consecutive identical errors still re-toast. useFormToasts(state) hook fires sonner toasts (success on submittedAt, error on errorAt). Modals close via Promise.resolve().then(() => setOpen(false)) to satisfy the React 19 set-state-in-effect rule. NOTE: when multiple components subscribe to the same form state (badge + tab), wrap the success-effect trigger in a guard ref so it fires once per submittedAt (see SuggestionForm).",
+  "form_pipeline": "useActionState + a *FormState type with { error, errorAt, submittedAt }. fail() helper sets errorAt = Date.now() so consecutive identical errors still re-toast. useFormToasts(state) hook fires sonner toasts. Modals close via Promise.resolve().then(() => setOpen(false)) (React 19 set-state-in-effect rule). Settings tabs use a client-side broadcast event pattern (system-messages-events, suggestions-events, zones-events) so AddX/EditX buttons can notify the list to refetch.",
 
-  "next_16_quirk_logged": "revalidatePath() inside a server action under Next 16 + Turbopack can trap the action response, leaving useActionState's submittedAt unpropagated and any modal that closes on success frozen. If you have a client-side broadcast handling refresh, prefer dropping revalidatePath there.",
+  "next_16_quirk_logged": "revalidatePath() inside a server action under Next 16 + Turbopack can trap the action response, leaving useActionState's submittedAt unpropagated and any modal that closes on success frozen. If you have a client-side broadcast handling refresh, prefer dropping revalidatePath there. Also: Next 16 renamed middleware → proxy.ts; cookies() is now async (await cookies()). NEW IN SESSION 7: globalThis-cached singletons (db handle in db.ts, WhatsApp runtime in whatsapp-test.ts) survive Turbopack HMR — schema/runtime edits require a FULL `next dev` restart, not just a file-save.",
 
   "routes": {
-    "/": "Dashboard — live counts (apartments, active residents, zones)",
-    "/zones": "List + add modal + per-row pencil edit modal",
-    "/apartments": "List + add modal (lg, parking/storage/keys/vehicles subforms)",
-    "/apartments/[id]": "Always-edit form (parking, storage, keys with flags, vehicles registry)",
-    "/renters": "List + add modal (lg)",
-    "/renters/[id]": "Always-edit form (phones)",
-    "/events": "Tabs (keys, packages, vehicles+guest parking); reads selectedResident from prefs store; row-level delete on all event types",
-    "/users": "Lobby staff CRUD (id, lobbyist_name, is_active)",
-    "/settings": "Tabs primitive — tab 1: system messages (CRUD + sticky display), tab 2: הצעות ייעול staff suggestions inbox with red open-count badge",
-    "/test/whatsapp": "Uncommitted spike — Baileys WhatsApp Web QR pair + send-message form. Not linked from Sidebar, URL-only."
+    "/": "Dashboard — live counts (apartments, active residents, zones). PLANNED SESSION 8: full chart-based rebuild (recharts the working pick).",
+    "/login": "Public — kiosk picker + password modal. Not gated by proxy; hard-redirects to / if cookie present.",
+    "/apartments": "List + add modal (manager-only add). Sortable headers.",
+    "/apartments/[id]": "Form (manager: editable; lobbyist: <fieldset disabled>, heading 'פרטי דירה')",
+    "/renters": "List + add modal (manager-only add). Type filter (all/owners/renters) + sortable headers. Name sort first_name-first.",
+    "/renters/[id]": "Form (same lobbyist disabled pattern as apartments)",
+    "/events": "Tabs (keys, packages, אורחים); reads selectedResident from prefs store. Lobbyists can log + view but not delete events.",
+    "/users": "Manager-only (server redirect lobbyists to /). Inline password reset column (visible text for managers, masked for lobbyists). Status filter (default active). Hidden from lobbyist sidebar.",
+    "/settings": "Tabs: הודעות מערכת, הצעות ייעול (badge), אזורים.",
+    "/test/whatsapp": "Sidebar-visible to all lobbyists. CHAT-STYLE UI as of Session 7: top status bar (status chip + connected user + Connect/Disconnect) | error banner | split panel: ConversationSidebar (right side in RTL, one row per phone with last-message preview + apartment + time) + ChatPanel (chat header with editable phone field + selected resident name | RTL-correct bubbles with status ticks | composer = wrapped textarea + ghost send button with brand-red icon flipped via -scale-x-100). Polling every 2s pulls status + active-conversation messages + conversation list together. Route still under /test/* — rename to /whatsapp when spike-naming officially graduates."
+  },
+
+  "whatsapp_state": {
+    "status": "Full chat UI shipped Session 7. Outbound sends are persisted with status tracking (pending→sent→delivered→read or failed). Inbound listener is wired but UNTESTED — Moti will smoke-test in a few hours with a second phone. NOTHING in the app auto-triggers a send yet — manual chat composer is still the only send path.",
+    "runtime": "src/lib/whatsapp-test.ts — WhatsAppTestRuntime singleton on globalThis.__raamWhatsAppTest. Auth persisted at .baileys-auth/test-whatsapp/ (gitignored, per-machine). NEW IN SESSION 7: sendText wraps the Baileys send in pending→sent/failed DB updates capturing wa_message_id for receipt correlation. messages.upsert listener records inbound rows (filters fromMe + non-1:1 chats) using extractText that unwraps ephemeralMessage / viewOnceMessage(V2) / image+video captions. messages.update listener flips status forward with a guard (never downgrades from read or failed). Diagnostic console.logs LEFT IN PLACE on the upsert listener — Moti can tail .next/dev/logs/next-development.log when testing inbound.",
+    "api_routes": "src/app/api/test/whatsapp/{connect,status,send,logout}/route.ts — thin Response.json wrappers, runtime=nodejs, no auth gate (proxy excludes /api/*). Status polled every 2s from the client alongside server actions for messages + conversations.",
+    "server_actions": "src/app/test/whatsapp/actions.ts — getWhatsAppMessages({residentId, phone}) (OR-merges both filters), getWhatsAppConversations() (CTE last-per-phone with residents/apartments/zones join returning SelectedResident-shaped resident or null).",
+    "phone_normalization": "normalizePhoneOrNull exported from whatsapp-test.ts — returns digits-only with 972 prefix if input was 0xx-style, null if empty. Resident matching uses last-9-digit compare for robustness across formats.",
+    "known_bugs_in_runtime_NOT_FIXED": [
+      "BUG 1 — logout() can hang. `await this.socket?.logout()` has no timeout. If the underlying WebSocket is degraded the protocol logout never acks and the await sits forever. The `finally` block is guarded by that await, so `fs.rm(AUTH_DIR)` never runs. Symptom: stale creds persist on disk; next connect hits the server with dead creds and the server returns `{reason:401, location:'cln'}` or `{reason:401, location:'atn'}` — Moti hit the 'atn' variant this session. Manual unblock: `rm -rf .baileys-auth/test-whatsapp`.",
+      "BUG 2 — listeners stay attached during/after wipe. Even when fs.rm runs, the socket's `creds.update` listener (saveCreds) and Baileys' internal key-store I/O can write fresh files into the just-wiped folder. Net effect: stale files can resurrect post-wipe.",
+      "FIX SKETCH (not applied yet, deferred A THIRD TIME): grab a local `socket` reference, immediately null `this.socket` + reset state, race `socket.logout()` against a 3s timeout, call `socket.end()`, remove all listeners (`socket.ev.removeAllListeners?.()` or equivalent), THEN await `fs.rm(AUTH_DIR, ...)`."
+    ],
+    "decision_log_session_7": [
+      "Chat UI scope: persist outbound, log inbound, status tracking — all in one session. Confirmed by Moti decision matrix at session start.",
+      "ConversationSidebar derived from whatsapp_messages table, NOT from Baileys' chats.* events (Path B). Reason: matches lobby UX (staff sees only conversations the app has touched), zero extra event wiring, single SQL query.",
+      "Logout-hang fix DEFERRED A THIRD TIME — kept session 7 PR tight. Should be Session 8's first move BEFORE any auto-triggered send wiring lands.",
+      "Diagnostic console.logs in messages.upsert listener LEFT IN PLACE for next-session inbound smoke-testing. Remove once inbound is confirmed working.",
+      "Send icon flipped via -scale-x-100 (not rtl: variant) — app is RTL-only, the simpler class is enough."
+    ],
+    "session_7_test_gap": "Inbound flow could not be exercised — Moti had no second phone available. Will smoke-test later today. Console logs are in place. Most likely failure mode if inbound silently doesn't work: stale runtime singleton on globalThis (full `next dev` restart fixes); secondary: extractText misses a wrapper Baileys delivers (the diagnostic log will show which key)."
   },
 
   "scripts_directory": {
-    "import-residents.ts": "One-shot Hebrew spreadsheet → schema importer. Usage: npx tsx scripts/import-residents.ts <xlsx-path> [--reset]. Sheet name 'דיירים ' (trailing space in file). Backs up data/raam.db before --reset. Skips rows marked לא מאוכלסת. Has helpers for stripWaPrefix (leading 'ו'), sameOwners (surname-tolerant compare), splitName (single-name fallback to '-' for NOT NULL last_name)."
+    "import-residents.ts": "One-shot Hebrew spreadsheet → schema importer. Usage: npx tsx scripts/import-residents.ts <xlsx-path> [--reset]. Backs up data/raam.db before --reset. Skips rows marked לא מאוכלסת."
   },
 
   "decisions_logged_to_memory": [
@@ -140,25 +149,37 @@
     "memory/project_business_context.md — outsourced security, app is free value-add, Moti's credit on the line",
     "memory/project_screen_pattern.md — always-edit, no view layer, onCancel optional",
     "memory/project_planned_features.md — most queue done",
-    "memory/project_production_setup.md — pm2 + ecosystem.config.js, single-instance fork (SQLite WAL safety)"
+    "memory/project_production_setup.md — pm2 + ecosystem.config.js, single-instance fork (SQLite WAL safety)",
+    "memory/project_auth_architecture.md — cookie + proxy + AuthProvider + fieldset-disabled read-only",
+    "memory/feedback_plaintext_passwords.md — passwords are stored unencrypted by Moti's instruction",
+    "memory/feedback_staff_familiarity.md — UX calls follow what lobby staff are already used to"
   ],
 
-  "current_focus": "Session 5 opens 2026-05-14. Working tree has an uncommitted WhatsApp/Baileys spike from 2026-05-12 (see working_tree_pending). First call of the session: decide whether to integrate, polish, or discard the spike. Lobby-operations v1 itself is feature-complete plus full delete; main branch is clean at 14a7413 (pm2 ecosystem config).",
+  "current_focus": "Session 8 kickoff 2026-05-14 — animated charts for the dashboard at '/'. Library decided: Recharts (declarative React, built-in animations, MIT, ~95KB gz, declared winner against Visx/Tremor/ECharts/Chart.js/Nivo for fit with 'keep simple' rule + Tailwind v4 + brand-red identity). Audience decided: LOBBY STAFF (operational) — tiles should help during a shift, not give Moti a strategic management view. Logout-hang fix deferred A FOURTH TIME so Session 8 stays scope-tight on charts.",
 
   "candidate_directions_carried_over": [
-    "WhatsApp spike — promote to a real feature: most natural fit is 'notify recipient on package arrival' since we already have packages.resident_id + phones table with is_primary. Would need a settings tab to manage the WA connection out of the test page, an admin pair-once flow, and message templates in Hebrew.",
-    "Per-key full history view (currently only the last event is shown next to each key; the table has all the data, just need a UI surface).",
-    "Persist 'recent recipients' for the package modal (free-text recipient_name autocomplete from history).",
-    "Real-data cleanup if the seeded 119 residents revealed Hebrew normalization / phone format / Israeli ID checksum quirks worth handling.",
-    "Reuse opportunities for the new ConfirmDialog primitive — other destructive actions in the app (delete zone/apartment/resident/user/system-message) currently have no confirmation; could wire them up if the lobby staff request it.",
+    "Session 8 headline (Moti's call at end of session 7): rebuild / extend the dashboard at '/' with a chart library. framer-motion is ALREADY installed (used by Tabs/Dropdown/Modal) — no need to add it. Recharts is the working pick (declarative, fits 'keep it simple'). Alternatives mentioned: Visx (lower-level), Tremor (opinionated dashboard kit). Decision still open. Surface candidates: occupancy stats, recent events velocity, packages-pending count, suggestion inbox health, WhatsApp send/receive volume (now that we log it).",
+    "WhatsApp logout robustness fix (BUG 1 + BUG 2). Deferred THREE sessions running. Should land BEFORE auto-triggered sends are wired — a deadlocked runtime would silently kill notifications.",
+    "Bootstrap-on-db-open: auto-promote lowest-id active user to manager if no managers exist. 3 lines, idempotent. Bit dev + prod. Promoted to top of carry-over list — still un-done.",
+    "Inbound WhatsApp smoke-test with second phone (likely in a few hours). Diagnostic console.logs already wired into messages.upsert listener.",
+    "Auto-triggered sends — e.g. notify resident on package arrival or key checkout. Block on logout-fix.",
+    "Resident soft-delete UX (move_out is in the schema but no UI sets it).",
+    "PhoneFields.label is dead code — type/serialize go to DB but no input renders it.",
+    "Per-key full apartment_keys_history view (currently only the last event shows per key).",
+    "Persist 'recent recipients' for the package modal autocomplete from history.",
+    "Real-data Hebrew normalization / phone format / Israeli ID checksum.",
+    "ConfirmDialog reuse — other destructive actions (delete zone/apartment/resident/user/system-message) currently have no confirm.",
     "Inbox-driven items if staff submitted הצעות ייעול worth picking up.",
     "Whatever new request Moti opens the session with (likely takes priority)."
   ],
 
   "open_questions_for_next_session": [
-    "WhatsApp spike — keep, polish, or discard? If keep: where does the pairing UI live (settings tab?), and what's the first real use case (package-arrival notification?)?",
-    "Any rough edges from real lobby use over the past few days to address?",
-    "Are there open הצעות ייעול worth pulling into the queue?"
+    "Dashboard chart library — Recharts (recommended), Visx, or Tremor? Recharts fits 'keep it simple' best.",
+    "Dashboard scope — which metrics actually help lobby staff vs. which would help Moti as the building manager? Different audiences want different tiles.",
+    "Does the WhatsApp send/receive volume chart live on the dashboard tile, on /test/whatsapp itself, or both?",
+    "Should outbound auto-triggered sends (package arrival etc.) wait until logout-hang is fixed? Decision needed before any send hook is wired.",
+    "When auto-triggered sends ARE wired, where does the per-resident opt-out live — phones.notify_whatsapp boolean, residents.notify_whatsapp, or skip until staff request it?",
+    "Once inbound is confirmed working: remove the diagnostic console.logs in src/lib/whatsapp-test.ts or leave them in for future debugging?"
   ],
 
   "current_test_data": {
@@ -169,23 +190,31 @@
     "parking": "249 spots",
     "storage": "123 units",
     "zones": "4",
-    "users": "lobby staff seeded for the active-lobbyist selector",
+    "users": "1 active (Moti, manager). Default password '1234' for all.",
     "system_messages": "tested with active/scheduled/expired states; sticky cards rendered",
-    "suggestions": "ready to receive entries"
+    "suggestions": "ready to receive entries",
+    "whatsapp_messages_seeded_session_7": "Two outbound test sends to Moti's own number (972505277558) confirmed visible in the chat UI with single-tick 'sent' status. No inbound test yet (no second phone). Conversation sidebar correctly shows the resident match + apartment number for that phone.",
+    "production_users_note": "Production lobby PC required manual SQL promote of Moti to manager. Bootstrap-fix would have prevented this."
   },
 
-  "git_state": "Main branch is clean at 14a7413 and up to date with origin. Working tree carries uncommitted WhatsApp/Baileys spike from 2026-05-12 — 4 modified files (.gitignore, next.config.ts, package.json, package-lock.json) and 4 new paths (src/app/api/test/, src/app/test/, src/lib/whatsapp-test.ts, src/types/). See working_tree_pending.",
+  "git_state": "Session 7 commit pending at handoff time. Working tree contains: M src/lib/db.ts (whatsapp_messages table), M src/lib/whatsapp-test.ts (persist + inbound + receipts), M src/app/test/whatsapp/WhatsAppTestPage.tsx (chat UI rebuild), ?? src/app/test/whatsapp/actions.ts (new server actions), M current_session.json. About to be committed + pushed.",
 
-  "design_system_additions": {
-    "ConfirmDialog": "src/components/ui/ConfirmDialog.tsx — reusable confirm dialog built on Modal. Props: open, onClose, onConfirm, title, description?, confirmLabel?, cancelLabel?, pendingLabel?, variant? (destructive|primary, defaults destructive), pending?. Used by DeleteEventButton; reusable for any future destructive confirm."
+  "design_system_additions_session_7": {
+    "whatsapp_messages_table": "First message-log style table in the app. Pattern: status enum with check constraint + wa_message_id correlation key.",
+    "ConversationSidebar": "src/app/test/whatsapp/WhatsAppTestPage.tsx — one-off, not extracted. w-64, border-e for RTL-correct divider, last-message preview with 'אתה: ' prefix for outbound.",
+    "chat_composer_pattern": "Wrapper div with focus-within ring; textarea has border-0/bg-transparent overriding the Textarea primitive base; send button is ghost variant with text-red-600 to keep brand cue without a solid button background. Send icon flipped via -scale-x-100 for RTL forward-pointing.",
+    "message_bubble_RTL": "justify-end for outbound = visually-LEFT in RTL = matches WhatsApp Hebrew. justify-start = visually-RIGHT = inbound. Use that pattern when adding other directional UIs.",
+    "normalizePhoneOrNull_export": "src/lib/whatsapp-test.ts — safe variant of normalizePhone that returns null on empty input. Used by server actions to filter without throwing."
   },
 
   "session_history": [
     "Session 1 (pre-2026-05-06): three CRUD trees, design primitives, dark mode, Hebrew RTL.",
     "Session 2 (2026-05-06): full lobby-operations system — search, prefs store, sidebar collapse, always-edit pattern, keys flags, packages flow, vehicles/guest-parking, lobby staff + active selector, system messages with sticky display.",
-    "Session 3 (2026-05-06 evening + 2026-05-10): residents importer + 122-apartment seed run, system_messages bugfix trio, הצעות ייעול staff suggestions inbox, events polish (guest names, list search, global history, brand text).",
-    "Session 4 (2026-05-11): delete events across all three event types with reusable ConfirmDialog primitive; deleteKeyEvent reconciles apartment_keys.is_in_lobby to new latest event so deletion never leaves a stale flag. Plus search auto-focus on chip clear. Plus pm2 ecosystem config + ensureColumn idempotency fix.",
-    "Between sessions (2026-05-12): uncommitted WhatsApp/Baileys spike landed in working tree — singleton runtime, QR pair, send-message API, /test/whatsapp page. Awaiting direction call.",
-    "Session 5 (2026-05-14, opening): TBD — first item is the WhatsApp spike disposition."
+    "Session 3 (2026-05-06 evening + 2026-05-10): residents importer + 122-apartment seed run, system_messages bugfix trio, הצעות ייעול staff suggestions inbox, events polish.",
+    "Session 4 (2026-05-11): delete events across all three event types with reusable ConfirmDialog primitive; deleteKeyEvent reconciles apartment_keys.is_in_lobby. Plus search auto-focus on chip clear, pm2 ecosystem config, ensureColumn idempotency fix.",
+    "Between sessions (2026-05-12): uncommitted WhatsApp/Baileys spike landed in working tree.",
+    "Session 5 (2026-05-14): full auth + role gating + list polish — single big commit (28c2645). Also bundled the WhatsApp spike.",
+    "Session 6 (2026-05-14, same day as 5): renters name sort flip; WhatsApp UI redesign (QR → Modal, top status bar); primary-phone autofill from selectedResident; sidebar entry 'ווטסאפ' (manager-only → opened to all); diagnosed logout() hang + listener-race bugs without fixing them; production deploy hit bootstrap-gotcha again.",
+    "Session 7 (2026-05-14, same day as 5 + 6): chat-style WhatsApp UI. New whatsapp_messages table with status tracking. Runtime persists outbound, logs inbound (untested), updates status via receipts. ConversationSidebar with per-phone last-message preview. Chat composer with wrapped border + ghost send button + RTL-flipped icon. Stale Baileys creds bit again (manual rm unblock). Logout-hang fix deferred a 3rd time. Inbound flow not yet test-driven (no second phone available)."
   ]
 }

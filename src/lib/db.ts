@@ -172,6 +172,27 @@ CREATE TABLE IF NOT EXISTS suggestions (
 
 CREATE INDEX IF NOT EXISTS idx_suggestions_status ON suggestions(status);
 
+CREATE TABLE IF NOT EXISTS whatsapp_messages (
+  id            INTEGER PRIMARY KEY,
+  resident_id   INTEGER REFERENCES residents(id) ON DELETE SET NULL,
+  phone         TEXT NOT NULL,
+  direction     TEXT NOT NULL CHECK (direction IN ('in','out')),
+  body          TEXT NOT NULL DEFAULT '',
+  status        TEXT NOT NULL DEFAULT 'pending'
+                  CHECK (status IN ('pending','sent','delivered','read','failed')),
+  wa_message_id TEXT,
+  error         TEXT,
+  created_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_whatsapp_messages_phone
+  ON whatsapp_messages(phone, created_at);
+CREATE INDEX IF NOT EXISTS idx_whatsapp_messages_resident
+  ON whatsapp_messages(resident_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_whatsapp_messages_wa_id
+  ON whatsapp_messages(wa_message_id);
+
 CREATE TABLE IF NOT EXISTS user_preferences (
   id         INTEGER PRIMARY KEY CHECK (id = 1),
   data       TEXT NOT NULL DEFAULT '{}',

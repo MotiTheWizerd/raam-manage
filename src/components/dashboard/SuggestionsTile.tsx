@@ -87,7 +87,7 @@ export function SuggestionsTile({
                 color: "#111",
               }}
               cursor={{ fill: "currentColor", opacity: 0.04 }}
-              formatter={(v: number) => [v, "כמות"]}
+              formatter={(v) => [Number(v ?? 0), "כמות"]}
             />
             <Bar dataKey="value" radius={[4, 4, 4, 4]} animationDuration={700}>
               {chartData.map((entry, idx) => (

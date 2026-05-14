@@ -5,11 +5,26 @@ export type PackagesWaitingData = {
   pending: number;
   series: (DayPoint & { incoming: number; delivered: number })[];
 };
+export type KeyInLobbyEvent = {
+  id: number;
+  apartment_number: string;
+  nickname: string | null;
+  since: string | null;
+};
 export type KeysInLobbyData = {
   count: number;
+  recent: KeyInLobbyEvent[];
+};
+export type GuestCarEvent = {
+  id: number;
+  car_plate: string;
+  guest_name: string;
+  apartment_number: string | null;
+  created_at: string;
 };
 export type GuestCarsTodayData = {
   count: number;
+  recent: GuestCarEvent[];
 };
 export type ActivityTimelineData = {
   series: { hour: string; keys: number; packages: number; guests: number }[];
@@ -101,7 +116,24 @@ export function getKeysInLobby(): KeysInLobbyData {
       .get() as { n: number }
   ).n;
 
-  return { count: total };
+  const recent = db
+    .prepare(
+      `SELECT
+         k.id,
+         k.nickname,
+         a.number as apartment_number,
+         (SELECT MAX(h.created_at)
+            FROM apartment_keys_history h
+           WHERE h.apartment_key_id = k.id AND h.is_in_lobby = 1) as since
+       FROM apartment_keys k
+       JOIN apartments a ON a.id = k.apartment_id
+       WHERE k.is_in_lobby = 1 AND k.is_active = 1
+       ORDER BY since DESC, k.id DESC
+       LIMIT 5`
+    )
+    .all() as KeyInLobbyEvent[];
+
+  return { count: total, recent };
 }
 
 export function getGuestCarsToday(): GuestCarsTodayData {
@@ -113,7 +145,25 @@ export function getGuestCarsToday(): GuestCarsTodayData {
       )
       .get() as { n: number }
   ).n;
-  return { count: n };
+
+  const recent = db
+    .prepare(
+      `SELECT
+         gp.id,
+         gp.car_plate,
+         gp.guest_name,
+         gp.created_at,
+         a.number as apartment_number
+       FROM guest_parking gp
+       LEFT JOIN residents r ON r.id = gp.resident_id
+       LEFT JOIN apartments a ON a.id = r.apartment_id
+       WHERE date(gp.created_at, 'localtime') = date('now', 'localtime')
+       ORDER BY gp.created_at DESC, gp.id DESC
+       LIMIT 5`
+    )
+    .all() as GuestCarEvent[];
+
+  return { count: n, recent };
 }
 
 export function getActivityTimeline(): ActivityTimelineData {

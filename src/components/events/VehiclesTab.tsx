@@ -1,5 +1,6 @@
 "use client";
 
+import { Search, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import {
   getApartmentVehicles,
@@ -7,8 +8,11 @@ import {
 } from "@/app/events/vehicles-actions";
 import {
   getRecentGuestParking,
+  searchGuestParking,
   type GuestParkingRow,
 } from "@/app/events/guest-parking-actions";
+import { Input } from "@/components/ui/Input";
+import { useDebouncedValue } from "@/lib/hooks/useDebouncedValue";
 import { GuestParkingHistoryList } from "./GuestParkingHistoryList";
 import { GuestParkingSection } from "./GuestParkingSection";
 
@@ -21,6 +25,9 @@ export function VehiclesTab({ apartmentId, residentId }: Props) {
   const [vehicles, setVehicles] = useState<ApartmentVehicleRow[] | null>(null);
   const [guestRows, setGuestRows] = useState<GuestParkingRow[]>([]);
   const [refreshTick, setRefreshTick] = useState(0);
+  const [query, setQuery] = useState("");
+  const debouncedQuery = useDebouncedValue(query.trim(), 250);
+  const searching = debouncedQuery.length > 0;
 
   const refresh = useCallback(() => setRefreshTick((t) => t + 1), []);
 
@@ -40,13 +47,16 @@ export function VehiclesTab({ apartmentId, residentId }: Props) {
 
   useEffect(() => {
     let active = true;
-    getRecentGuestParking(residentId, 10).then((rows) => {
+    const fetcher = searching
+      ? searchGuestParking(debouncedQuery, 50)
+      : getRecentGuestParking(residentId, 10);
+    fetcher.then((rows) => {
       if (active) setGuestRows(rows);
     });
     return () => {
       active = false;
     };
-  }, [residentId, refreshTick]);
+  }, [residentId, refreshTick, searching, debouncedQuery]);
 
   return (
     <div className="space-y-6">
@@ -104,11 +114,38 @@ export function VehiclesTab({ apartmentId, residentId }: Props) {
         <GuestParkingSection residentId={residentId} onCreated={refresh} />
       )}
 
-      <GuestParkingHistoryList
-        rows={guestRows}
-        showApartment={residentId === null}
-        onDeleted={refresh}
-      />
+      <section className="space-y-3">
+        <div className="relative max-w-sm">
+          <Search
+            size={14}
+            aria-hidden="true"
+            className="pointer-events-none absolute top-1/2 -translate-y-1/2 start-3 opacity-50"
+          />
+          <Input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="חיפוש לפי שם אורח או מספר רישוי"
+            className="ps-9 pe-9"
+          />
+          {query && (
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              aria-label="נקה חיפוש"
+              className="absolute top-1/2 -translate-y-1/2 end-2 inline-flex items-center justify-center h-6 w-6 rounded-full opacity-60 hover:opacity-100 hover:bg-black/[0.05] dark:hover:bg-white/[0.06] transition-colors"
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
+
+        <GuestParkingHistoryList
+          rows={guestRows}
+          showApartment={searching || residentId === null}
+          onDeleted={refresh}
+        />
+      </section>
     </div>
   );
 }

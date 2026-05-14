@@ -9,8 +9,16 @@ export type ZoneFormState = {
   submittedAt?: number;
 };
 
+export type ZoneRow = { id: number; name: string };
+
 function fail(error: string): ZoneFormState {
   return { error, errorAt: Date.now() };
+}
+
+export async function getAllZones(): Promise<ZoneRow[]> {
+  return db
+    .prepare("SELECT id, name FROM zones ORDER BY name")
+    .all() as ZoneRow[];
 }
 
 export async function createZone(
@@ -30,7 +38,6 @@ export async function createZone(
     throw e;
   }
 
-  revalidatePath("/zones");
   revalidatePath("/apartments");
   revalidatePath("/");
   return { submittedAt: Date.now() };
@@ -60,7 +67,6 @@ export async function updateZone(
     throw e;
   }
 
-  revalidatePath("/zones");
   revalidatePath("/apartments");
   revalidatePath("/");
   return { submittedAt: Date.now() };

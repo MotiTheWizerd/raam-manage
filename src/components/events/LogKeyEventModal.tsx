@@ -63,7 +63,7 @@ export function LogKeyEventModal({
         <form action={action} className="space-y-4">
           <input type="hidden" name="apartment_key_id" value={keyId} />
 
-          <Field label="שם הסדרן" htmlFor="lobbyist-name" required>
+          <Field label="שם הפקיד" htmlFor="lobbyist-name" required>
             <Input
               id="lobbyist-name"
               name="lobbyist_name"

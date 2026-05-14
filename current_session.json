@@ -1,9 +1,40 @@
 {
   "project": "Raam-manage",
-  "last_session_at": "2026-05-11",
-  "previous_handoff_at": "2026-05-10",
+  "last_session_at": "2026-05-14",
+  "previous_handoff_at": "2026-05-11",
 
-  "session_summary": "Session 4 wrapped 2026-05-11. Two commits landed: the delete-events feature with a reusable confirm dialog, and a small search-input auto-focus polish.\n\n  1) feat (381df7a): delete events — keys, packages, guest parking + reusable ConfirmDialog. New src/components/ui/ConfirmDialog.tsx wraps Modal with cancel/confirm buttons, defaults to destructive variant, supports pending state and a pendingLabel for the in-flight button text. New src/components/events/DeleteEventButton.tsx is a generic icon-only trash button bound to a server action prop — passes the row id via a hidden form + formRef.requestSubmit() on confirm, then closes the dialog and calls onDeleted in a Promise.resolve().then() defer (matches the React 19 set-state-in-effect rule used elsewhere). Wired into KeysHistoryList / PackagesHistoryList / GuestParkingHistoryList; each receives onDeleted plumbed up to the tab's existing refresh callback. Three new server actions: deleteKeyEvent (in a transaction — also reconciles apartment_keys.is_in_lobby to whatever the new latest event says, so deleting a stale or wrong key event doesn't leave the key's flag wrong), deletePackage, deleteGuestParking. All revalidate /events.\n\n  2) feat (4a578cc): search — auto-focus input after clearing selected resident chip. SearchBar tracks the prior selection in a ref; on the transition from 'had resident' to null, it focuses the input on the next render so the lobbyist can immediately start typing again.",
+  "session_summary": "Session 4 wrapped clean on 2026-05-11 (delete events + ConfirmDialog primitive + search auto-focus on chip clear, all committed and pushed). Between that and today (2026-05-14), an uncommitted WhatsApp/Baileys spike was added to the working tree on 2026-05-12 — see working_tree_pending. Session 5 opens with that spike sitting in working changes awaiting a direction call from Moti.",
+
+  "working_tree_pending": {
+    "summary": "Uncommitted WhatsApp Web spike using Baileys, isolated to a /test route + /api/test/* surface. Not wired into any production page yet. Decision needed: integrate (e.g. notify resident on package arrival), polish first, or discard.",
+    "added_dependencies": {
+      "baileys": "^6.7.19",
+      "qrcode": "^1.5.4"
+    },
+    "modified_files": [
+      ".gitignore — excludes /.baileys-auth/ (the persisted Baileys session folder, kept out of git)",
+      "next.config.ts — serverExternalPackages: ['baileys'] so Turbopack/webpack don't try to bundle it",
+      "package.json — adds baileys + qrcode deps and a new 'dev:webpack' script (next dev --webpack) for testing under webpack when Turbopack misbehaves with baileys",
+      "package-lock.json — dep tree updates"
+    ],
+    "new_files": [
+      "src/types/test-whatsapp-modules.d.ts — wildcard declare module 'baileys' / 'qrcode' to satisfy TS (no upstream types)",
+      "src/lib/whatsapp-test.ts — WhatsAppTestRuntime class (singleton on globalThis.__raamWhatsAppTest so the socket survives HMR/route invalidations); methods: connect(), sendText(phone, text), logout(), getStatus(); state machine idle→connecting→qr→connected→closed; QR is rendered to a data URL via qrcode.toDataURL; auth persisted under .baileys-auth/test-whatsapp via useMultiFileAuthState; reconnect-on-close unless loggedOut; normalizePhone() handles 0XXXXXXXXX → 972XXXXXXXXX",
+      "src/app/api/test/whatsapp/connect/route.ts — POST: calls runtime.connect()",
+      "src/app/api/test/whatsapp/status/route.ts — GET: returns runtime.getStatus() (polled every 2s from the client)",
+      "src/app/api/test/whatsapp/send/route.ts — POST { phone, message }",
+      "src/app/api/test/whatsapp/logout/route.ts — POST: logout + wipe auth folder",
+      "src/app/test/whatsapp/page.tsx — force-dynamic shell mounting WhatsAppTestPage",
+      "src/app/test/whatsapp/WhatsAppTestPage.tsx — client UI: status chip (Hebrew labels), QR card with connect/logout buttons, phone+message form, sonner toasts, 2s status polling"
+    ],
+    "open_questions_for_this_spike": [
+      "Should this become a real feature (e.g. resident WhatsApp notification on package arrival)? If yes — where in the UI does the connection live (admin/settings?), and how do we expose phone numbers from the residents+phones tables to it?",
+      "Singleton runtime works for single-process pm2 fork but would break under cluster mode — fine given current production setup ([[project_production_setup]]).",
+      "The reconnect-on-close timer (1.5s) has no backoff or attempt cap; for production we'd want exponential backoff + a hard stop.",
+      "logout() deletes the auth folder unconditionally — fine for a test, but a real integration should probably preserve creds across logouts unless explicitly forgotten."
+    ],
+    "route_not_visible_in_sidebar": "The /test/whatsapp page is not linked from Sidebar.tsx — it's reached by URL only, deliberate for a spike."
+  },
 
   "stack": {
     "framework": "Next.js 16 (App Router, Turbopack)",
@@ -18,7 +49,8 @@
     "global_state": "zustand (vanilla store + Context provider, SSR-seeded from server)",
     "toasts": "sonner (top-left, dir=rtl, richColors)",
     "runtime_target": "lobby PC, localhost only — not a server deployment",
-    "import_tooling": "xlsx package + npx tsx for one-shot scripts under scripts/"
+    "import_tooling": "xlsx package + npx tsx for one-shot scripts under scripts/",
+    "spike_only_deps": "baileys + qrcode — only used by /test/whatsapp + /api/test/whatsapp/*; not yet wired into production surfaces"
   },
 
   "schema": {
@@ -38,7 +70,7 @@
       "system_messages (id, title, body, start_at, end_at, priority low|med|high, created_at)",
       "suggestions (id, category bug|improvement|idea, status open|in_progress|done|wont_fix, title, body, submitter_name, resolution_note, created_at, updated_at)"
     ],
-    "evolution_helper": "src/lib/db.ts ensureColumn() — used several times for is_default/is_active/is_in_lobby on apartment_keys, received_by on packages, lobbyist_name on guest_parking",
+    "evolution_helper": "src/lib/db.ts ensureColumn() — used several times for is_default/is_active/is_in_lobby on apartment_keys, received_by on packages, lobbyist_name on guest_parking. Made idempotent + lazy-open DB in commit 44f8304.",
     "datetime_local_storage": "system_messages.start_at and end_at store browser <input type=\"datetime-local\"> wall-clock format (YYYY-MM-DDTHH:MM); active query uses strftime('%Y-%m-%dT%H:%M', 'now', 'localtime') so comparisons stay in local time",
     "rebuild_pattern_used_once": "apartment_keys_history.comment relaxed from NOT NULL to NULL via CREATE-new + INSERT SELECT + DROP + RENAME inside a transaction with foreign_keys OFF — preserved 2 existing rows"
   },
@@ -50,19 +82,21 @@
       "src/components/ui/Textarea.tsx",
       "src/components/ui/Field.tsx — label + child + required asterisk",
       "src/components/ui/Dropdown.tsx — custom button + portal panel, framer-motion, brand-red highlight, keyboard nav",
-      "src/components/ui/Tabs.tsx — sliding red underline via framer-motion layoutId; supports optional badge prop per tab"
+      "src/components/ui/Tabs.tsx — sliding red underline via framer-motion layoutId; supports optional badge prop per tab",
+      "src/components/ui/ConfirmDialog.tsx — reusable destructive-confirm built on Modal; props open/onClose/onConfirm/title/description/confirmLabel/cancelLabel/pendingLabel/variant/pending"
     ],
     "shells": [
       "src/components/Modal.tsx — portal, AnimatePresence, backdrop blur, scale-in, ESC/click-outside, sm|md|lg",
       "src/components/Header.tsx — logo + SearchBar + ActiveLobbyistSelector + ThemeToggle",
       "src/components/Sidebar.tsx — animated width 224↔64 via framer-motion, icons-only collapsed mode, brand-red active item gradient",
       "src/components/SidebarToggle.tsx — chevron at top",
-      "src/components/SearchBar.tsx — debounced live search, results dropdown, keyboard nav, race-safe via reqId ref",
+      "src/components/SearchBar.tsx — debounced live search, results dropdown, keyboard nav, race-safe via reqId ref; auto-focuses input after clearing a selected resident chip",
       "src/components/SelectedResidentChip.tsx — replaces SearchBar input when a resident is in store; X clears",
       "src/components/ActiveLobbyistSelector.tsx — Dropdown bound to prefs store, pre-fills lobbyist_name in event modals",
       "src/components/StickyMessages.tsx — fixed-position cards on the left edge, max 3, priority-ordered + color-coded",
       "src/components/PreferencesProvider.tsx — Zustand store with debounced auto-save to user_preferences",
-      "src/components/ThemeToggle.tsx — class-based dark/light, no-flash inline script in layout"
+      "src/components/ThemeToggle.tsx — class-based dark/light, no-flash inline script in layout",
+      "src/components/events/DeleteEventButton.tsx — generic icon-trash button bound to a server-action prop; uses ConfirmDialog + hidden form + formRef.requestSubmit() + defer-close pattern"
     ]
   },
 
@@ -74,7 +108,7 @@
 
   "screen_pattern_now": "Dropped the View/Edit toggle entirely — detail pages render the form directly (always edit). Form's onCancel is now optional; rendered only by the modal context. After save, revalidatePath rerenders server-side and form DOM state stays. See memory/project_screen_pattern.md.",
 
-  "events_page_architecture": "/events is a single page that reads selectedResident from the Zustand store. Three tabs: ניהול מפתחות, ניהול חבילות, ניהול רכבים. With a resident selected → action surfaces (add modal, mark-delivered, log key event); without → global recent-history feeds with apartment number prefix on each row. Keys tab pre-fills lobbyist_name from activeLobbyist; same for packages received_by and guest parking lobbyist.",
+  "events_page_architecture": "/events is a single page that reads selectedResident from the Zustand store. Three tabs: ניהול מפתחות, ניהול חבילות, ניהול רכבים. With a resident selected → action surfaces (add modal, mark-delivered, log key event); without → global recent-history feeds with apartment number prefix on each row. Keys tab pre-fills lobbyist_name from activeLobbyist; same for packages received_by and guest parking lobbyist. All three event types now have row-level delete via DeleteEventButton + ConfirmDialog; deleteKeyEvent reconciles apartment_keys.is_in_lobby to the new latest event so deletion never leaves a stale flag.",
 
   "global_state_pattern": "PreferencesProvider creates a Zustand vanilla store + Context once on mount, seeded from server-fetched prefs in layout.tsx. A subscribe callback in the provider debounce-saves any change at 300ms via savePreferences server action. Selectors split per slice (useSidebarCollapsed, useSelectedResident, useActiveLobbyist) so components only re-render on their slice.",
 
@@ -89,9 +123,10 @@
     "/apartments/[id]": "Always-edit form (parking, storage, keys with flags, vehicles registry)",
     "/renters": "List + add modal (lg)",
     "/renters/[id]": "Always-edit form (phones)",
-    "/events": "Tabs (keys, packages, vehicles+guest parking); reads selectedResident from prefs store",
+    "/events": "Tabs (keys, packages, vehicles+guest parking); reads selectedResident from prefs store; row-level delete on all event types",
     "/users": "Lobby staff CRUD (id, lobbyist_name, is_active)",
-    "/settings": "Tabs primitive — tab 1: system messages (CRUD + sticky display), tab 2: הצעות ייעול staff suggestions inbox with red open-count badge"
+    "/settings": "Tabs primitive — tab 1: system messages (CRUD + sticky display), tab 2: הצעות ייעול staff suggestions inbox with red open-count badge",
+    "/test/whatsapp": "Uncommitted spike — Baileys WhatsApp Web QR pair + send-message form. Not linked from Sidebar, URL-only."
   },
 
   "scripts_directory": {
@@ -104,12 +139,14 @@
     "memory/project_schema_decisions.md — flat residents, no buildings/floors tables, zones lookup",
     "memory/project_business_context.md — outsourced security, app is free value-add, Moti's credit on the line",
     "memory/project_screen_pattern.md — always-edit, no view layer, onCancel optional",
-    "memory/project_planned_features.md — most queue done"
+    "memory/project_planned_features.md — most queue done",
+    "memory/project_production_setup.md — pm2 + ecosystem.config.js, single-instance fork (SQLite WAL safety)"
   ],
 
-  "current_focus": "Session 4 wrapped 2026-05-11. Working tree clean, branch up to date with origin/main. Lobby-operations is now feature-complete v1 plus full delete capability across all event types.",
+  "current_focus": "Session 5 opens 2026-05-14. Working tree has an uncommitted WhatsApp/Baileys spike from 2026-05-12 (see working_tree_pending). First call of the session: decide whether to integrate, polish, or discard the spike. Lobby-operations v1 itself is feature-complete plus full delete; main branch is clean at 14a7413 (pm2 ecosystem config).",
 
   "candidate_directions_carried_over": [
+    "WhatsApp spike — promote to a real feature: most natural fit is 'notify recipient on package arrival' since we already have packages.resident_id + phones table with is_primary. Would need a settings tab to manage the WA connection out of the test page, an admin pair-once flow, and message templates in Hebrew.",
     "Per-key full history view (currently only the last event is shown next to each key; the table has all the data, just need a UI surface).",
     "Persist 'recent recipients' for the package modal (free-text recipient_name autocomplete from history).",
     "Real-data cleanup if the seeded 119 residents revealed Hebrew normalization / phone format / Israeli ID checksum quirks worth handling.",
@@ -119,7 +156,8 @@
   ],
 
   "open_questions_for_next_session": [
-    "Any rough edges from real lobby use over the past day to address?",
+    "WhatsApp spike — keep, polish, or discard? If keep: where does the pairing UI live (settings tab?), and what's the first real use case (package-arrival notification?)?",
+    "Any rough edges from real lobby use over the past few days to address?",
     "Are there open הצעות ייעול worth pulling into the queue?"
   ],
 
@@ -136,7 +174,7 @@
     "suggestions": "ready to receive entries"
   },
 
-  "git_state": "All committed and pushed. Latest commit: 4a578cc — feat: search — auto-focus input after clearing selected resident chip. Branch main is clean and up to date with origin.",
+  "git_state": "Main branch is clean at 14a7413 and up to date with origin. Working tree carries uncommitted WhatsApp/Baileys spike from 2026-05-12 — 4 modified files (.gitignore, next.config.ts, package.json, package-lock.json) and 4 new paths (src/app/api/test/, src/app/test/, src/lib/whatsapp-test.ts, src/types/). See working_tree_pending.",
 
   "design_system_additions": {
     "ConfirmDialog": "src/components/ui/ConfirmDialog.tsx — reusable confirm dialog built on Modal. Props: open, onClose, onConfirm, title, description?, confirmLabel?, cancelLabel?, pendingLabel?, variant? (destructive|primary, defaults destructive), pending?. Used by DeleteEventButton; reusable for any future destructive confirm."
@@ -146,6 +184,8 @@
     "Session 1 (pre-2026-05-06): three CRUD trees, design primitives, dark mode, Hebrew RTL.",
     "Session 2 (2026-05-06): full lobby-operations system — search, prefs store, sidebar collapse, always-edit pattern, keys flags, packages flow, vehicles/guest-parking, lobby staff + active selector, system messages with sticky display.",
     "Session 3 (2026-05-06 evening + 2026-05-10): residents importer + 122-apartment seed run, system_messages bugfix trio, הצעות ייעול staff suggestions inbox, events polish (guest names, list search, global history, brand text).",
-    "Session 4 (2026-05-11): delete events across all three event types with reusable ConfirmDialog primitive; deleteKeyEvent reconciles apartment_keys.is_in_lobby to new latest event so deletion never leaves a stale flag. Plus search auto-focus on chip clear."
+    "Session 4 (2026-05-11): delete events across all three event types with reusable ConfirmDialog primitive; deleteKeyEvent reconciles apartment_keys.is_in_lobby to new latest event so deletion never leaves a stale flag. Plus search auto-focus on chip clear. Plus pm2 ecosystem config + ensureColumn idempotency fix.",
+    "Between sessions (2026-05-12): uncommitted WhatsApp/Baileys spike landed in working tree — singleton runtime, QR pair, send-message API, /test/whatsapp page. Awaiting direction call.",
+    "Session 5 (2026-05-14, opening): TBD — first item is the WhatsApp spike disposition."
   ]
 }

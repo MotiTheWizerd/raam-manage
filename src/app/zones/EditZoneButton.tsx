@@ -3,10 +3,12 @@
 import { Pencil } from "lucide-react";
 import { useActionState, useEffect, useRef, useState } from "react";
 import { Modal } from "@/components/Modal";
+import { useIsManager } from "@/components/AuthProvider";
 import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
 import { useFormToasts } from "@/lib/hooks/useFormToasts";
+import { notifyZonesChanged } from "@/lib/zones-events";
 import { updateZone, type ZoneFormState } from "./actions";
 
 const initialState: ZoneFormState = {};
@@ -16,6 +18,7 @@ export function EditZoneButton({
 }: {
   zone: { id: number; name: string };
 }) {
+  const isManager = useIsManager();
   const [open, setOpen] = useState(false);
   const [state, action, pending] = useActionState(updateZone, initialState);
   const formRef = useRef<HTMLFormElement>(null);
@@ -24,8 +27,11 @@ export function EditZoneButton({
 
   useEffect(() => {
     if (!state.submittedAt) return;
+    notifyZonesChanged();
     Promise.resolve().then(() => setOpen(false));
   }, [state.submittedAt]);
+
+  if (!isManager) return null;
 
   return (
     <>

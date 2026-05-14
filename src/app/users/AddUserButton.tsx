@@ -4,6 +4,7 @@ import { Plus } from "lucide-react";
 import { useActionState, useEffect, useRef, useState } from "react";
 import { Modal } from "@/components/Modal";
 import { Button } from "@/components/ui/Button";
+import { Dropdown } from "@/components/ui/Dropdown";
 import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
 import { useFormToasts } from "@/lib/hooks/useFormToasts";
@@ -28,10 +29,10 @@ export function AddUserButton() {
     <>
       <Button onClick={() => setOpen(true)} size="sm">
         <Plus size={16} />
-        הוסף סדרן
+        הוסף פקיד
       </Button>
 
-      <Modal open={open} onClose={() => setOpen(false)} title="סדרן חדש">
+      <Modal open={open} onClose={() => setOpen(false)} title="פקיד חדש">
         <form ref={formRef} action={action} className="space-y-4">
           <Field label="שם" htmlFor="user-name" required>
             <Input
@@ -40,6 +41,33 @@ export function AddUserButton() {
               required
               autoFocus
               placeholder="ישראל ישראלי"
+            />
+          </Field>
+
+          <Field label="תפקיד" htmlFor="user-role" required>
+            <Dropdown
+              id="user-role"
+              name="user_role"
+              defaultValue="lobbyist"
+              options={[
+                { value: "lobbyist", label: "פקיד" },
+                { value: "manager", label: "פקיד - הרשאות" },
+              ]}
+            />
+          </Field>
+
+          <Field
+            label="סיסמה"
+            htmlFor="user-password"
+            hint="ברירת מחדל: 1234"
+          >
+            <Input
+              id="user-password"
+              name="password"
+              type="text"
+              placeholder="1234"
+              defaultValue="1234"
+              autoComplete="off"
             />
           </Field>
 

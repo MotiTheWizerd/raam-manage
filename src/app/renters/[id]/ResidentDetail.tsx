@@ -1,5 +1,6 @@
 "use client";
 
+import { useIsManager } from "@/components/AuthProvider";
 import { updateResident } from "../actions";
 import { ResidentForm, type ApartmentOption } from "../ResidentForm";
 import { type PhoneInit } from "../PhoneFields";
@@ -41,27 +42,32 @@ export function ResidentDetail({
     is_primary: p.is_primary === 1,
   }));
 
+  const canEdit = useIsManager();
+
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-semibold tracking-tight">
-        עריכת דייר — {resident.first_name} {resident.last_name}
+        {canEdit ? "עריכת דייר" : "פרטי דייר"} — {resident.first_name}{" "}
+        {resident.last_name}
       </h1>
-      <ResidentForm
-        apartments={apartments}
-        initialValues={{
-          first_name: resident.first_name,
-          last_name: resident.last_name,
-          apartment_id: String(resident.apartment_id),
-          type: resident.type,
-          id_number: resident.id_number ?? "",
-          po_box: resident.po_box ?? "",
-          notes: resident.notes ?? "",
-        }}
-        initialPhones={initialPhones}
-        hiddenIdValue={resident.id}
-        action={updateResident}
-        submitLabel="שמור שינויים"
-      />
+      <fieldset disabled={!canEdit} className="min-w-0 border-0 p-0 m-0">
+        <ResidentForm
+          apartments={apartments}
+          initialValues={{
+            first_name: resident.first_name,
+            last_name: resident.last_name,
+            apartment_id: String(resident.apartment_id),
+            type: resident.type,
+            id_number: resident.id_number ?? "",
+            po_box: resident.po_box ?? "",
+            notes: resident.notes ?? "",
+          }}
+          initialPhones={initialPhones}
+          hiddenIdValue={resident.id}
+          action={updateResident}
+          submitLabel="שמור שינויים"
+        />
+      </fieldset>
     </div>
   );
 }

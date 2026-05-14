@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
 import { useFormToasts } from "@/lib/hooks/useFormToasts";
+import { notifyZonesChanged } from "@/lib/zones-events";
 import { createZone, type ZoneFormState } from "./actions";
 
 const initialState: ZoneFormState = {};
@@ -21,6 +22,7 @@ export function AddZoneButton() {
   useEffect(() => {
     if (!state.submittedAt) return;
     formRef.current?.reset();
+    notifyZonesChanged();
     Promise.resolve().then(() => setOpen(false));
   }, [state.submittedAt]);
 

@@ -12,6 +12,7 @@ import {
   type SuggestionRow,
   type SuggestionStatus,
 } from "@/app/settings/suggestions-actions";
+import { useIsManager } from "@/components/AuthProvider";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
 import { useFormToasts } from "@/lib/hooks/useFormToasts";
@@ -57,6 +58,7 @@ function formatDate(iso: string): string {
 }
 
 export function SuggestionsTab() {
+  const isManager = useIsManager();
   const [items, setItems] = useState<SuggestionRow[] | null>(null);
   const [refreshTick, setRefreshTick] = useState(0);
   const [expandedId, setExpandedId] = useState<number | null>(null);
@@ -111,6 +113,7 @@ export function SuggestionsTab() {
                 setExpandedId((cur) => (cur === s.id ? null : s.id))
               }
               onClose={() => setExpandedId(null)}
+              canManage={isManager}
             />
           ))}
         </div>
@@ -124,9 +127,16 @@ type CardProps = {
   expanded: boolean;
   onToggle: () => void;
   onClose: () => void;
+  canManage: boolean;
 };
 
-function SuggestionCard({ suggestion, expanded, onToggle, onClose }: CardProps) {
+function SuggestionCard({
+  suggestion,
+  expanded,
+  onToggle,
+  onClose,
+  canManage,
+}: CardProps) {
   const dimmed =
     suggestion.status === "done" || suggestion.status === "wont_fix";
 
@@ -192,28 +202,35 @@ function SuggestionCard({ suggestion, expanded, onToggle, onClose }: CardProps) 
             className="overflow-hidden"
           >
             <div className="px-4 py-4 border-t border-black/10 dark:border-white/10 bg-black/[0.02] dark:bg-white/[0.03] space-y-4">
-              <SuggestionForm
-                mode="edit"
-                id={suggestion.id}
-                initialValues={{
-                  title: suggestion.title,
-                  body: suggestion.body,
-                  category: suggestion.category,
-                  status: suggestion.status,
-                  resolution_notes: suggestion.resolution_notes,
-                }}
-                action={updateSuggestion}
-                onCancel={onClose}
-                onSuccess={onClose}
-                submitLabel="שמור שינויים"
-              />
+              <fieldset
+                disabled={!canManage}
+                className="min-w-0 border-0 p-0 m-0"
+              >
+                <SuggestionForm
+                  mode="edit"
+                  id={suggestion.id}
+                  initialValues={{
+                    title: suggestion.title,
+                    body: suggestion.body,
+                    category: suggestion.category,
+                    status: suggestion.status,
+                    resolution_notes: suggestion.resolution_notes,
+                  }}
+                  action={updateSuggestion}
+                  onCancel={onClose}
+                  onSuccess={onClose}
+                  submitLabel="שמור שינויים"
+                />
+              </fieldset>
               <div className="flex items-center justify-between pt-2 border-t border-black/5 dark:border-white/5">
                 <div className="text-xs opacity-50">
                   {suggestion.resolved_at
                     ? `נסגר: ${formatDate(suggestion.resolved_at)}`
                     : `עודכן: ${formatDate(suggestion.updated_at)}`}
                 </div>
-                <DeleteSuggestionButton suggestionId={suggestion.id} />
+                {canManage && (
+                  <DeleteSuggestionButton suggestionId={suggestion.id} />
+                )}
               </div>
             </div>
           </motion.div>

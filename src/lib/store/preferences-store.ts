@@ -12,23 +12,28 @@ export type PreferencesActions = {
   toggleSidebar: () => void;
   setSelectedResident: (r: SelectedResident | null) => void;
   clearSelectedResident: () => void;
-  setActiveLobbyist: (l: ActiveLobbyist | null) => void;
 };
 
-export type PreferencesState = Preferences & PreferencesActions;
+export type PreferencesState = Preferences &
+  PreferencesActions & {
+    activeLobbyist: ActiveLobbyist | null;
+  };
 
 export type PreferencesStoreApi = ReturnType<typeof createPreferencesStore>;
 
-export function createPreferencesStore(initial: Preferences) {
+export function createPreferencesStore(
+  initial: Preferences,
+  currentUser: ActiveLobbyist | null
+) {
   return createStore<PreferencesState>()((set) => ({
     ...initial,
+    activeLobbyist: currentUser,
     setSidebarCollapsed: (v) =>
       set((s) => ({ sidebar: { ...s.sidebar, collapsed: v } })),
     toggleSidebar: () =>
       set((s) => ({ sidebar: { ...s.sidebar, collapsed: !s.sidebar.collapsed } })),
     setSelectedResident: (r) => set({ selectedResident: r }),
     clearSelectedResident: () => set({ selectedResident: null }),
-    setActiveLobbyist: (l) => set({ activeLobbyist: l }),
   }));
 }
 
@@ -36,6 +41,5 @@ export function extractPreferences(state: PreferencesState): Preferences {
   return {
     sidebar: state.sidebar,
     selectedResident: state.selectedResident,
-    activeLobbyist: state.activeLobbyist,
   };
 }

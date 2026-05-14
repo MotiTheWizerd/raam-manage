@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
 import { Heebo } from "next/font/google";
 import { Toaster } from "sonner";
+import { AuthProvider } from "@/components/AuthProvider";
 import { Header } from "@/components/Header";
 import { PreferencesProvider } from "@/components/PreferencesProvider";
 import { Sidebar } from "@/components/Sidebar";
 import { StickyMessages } from "@/components/StickyMessages";
+import { getCurrentUser } from "@/lib/auth";
 import { getPreferences } from "@/lib/preferences";
 import "./globals.css";
 
@@ -25,7 +27,10 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const preferences = await getPreferences();
+  const [preferences, currentUser] = await Promise.all([
+    getPreferences(),
+    getCurrentUser(),
+  ]);
 
   return (
     <html
@@ -38,14 +43,22 @@ export default async function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
       <body className="min-h-full flex flex-col">
-        <PreferencesProvider initial={preferences}>
-          <Header />
-          <div className="flex-1 flex min-h-0">
-            <Sidebar />
-            <main className="flex-1 overflow-auto p-6">{children}</main>
-          </div>
-        </PreferencesProvider>
-        <StickyMessages />
+        <AuthProvider user={currentUser}>
+          <PreferencesProvider initial={preferences} currentUser={currentUser}>
+            {currentUser ? (
+              <>
+                <Header lobbyistName={currentUser.lobbyist_name} />
+                <div className="flex-1 flex min-h-0">
+                  <Sidebar />
+                  <main className="flex-1 overflow-auto p-6">{children}</main>
+                </div>
+                <StickyMessages />
+              </>
+            ) : (
+              children
+            )}
+          </PreferencesProvider>
+        </AuthProvider>
         <Toaster
           position="top-left"
           dir="rtl"

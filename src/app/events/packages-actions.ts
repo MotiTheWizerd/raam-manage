@@ -123,7 +123,7 @@ export async function createPackage(
     String(formData.get("delivered_by") ?? "").trim() || "שליח";
 
   const receivedBy = String(formData.get("received_by") ?? "").trim();
-  if (!receivedBy) return fail("שם הסדרן שקיבל את החבילה נדרש");
+  if (!receivedBy) return fail("שם הפקיד שקיבל את החבילה נדרש");
 
   const comment = String(formData.get("comment") ?? "").trim() || null;
 

@@ -5,6 +5,7 @@ import {
   deleteGuestParking,
   type GuestParkingRow,
 } from "@/app/events/guest-parking-actions";
+import { useIsManager } from "@/components/AuthProvider";
 import { DeleteEventButton } from "./DeleteEventButton";
 
 type Props = {
@@ -30,6 +31,7 @@ export function GuestParkingHistoryList({
   showApartment = false,
   onDeleted,
 }: Props) {
+  const isManager = useIsManager();
   return (
     <section className="space-y-3">
       <h2 className="text-sm font-medium opacity-80">חניית אורחים אחרונה</h2>
@@ -58,12 +60,11 @@ export function GuestParkingHistoryList({
                   {r.guest_name && (
                     <span className="font-medium">{r.guest_name}</span>
                   )}
-                  <span
-                    className="font-mono opacity-80"
-                    dir="ltr"
-                  >
-                    {r.car_plate}
-                  </span>
+                  {r.car_plate && (
+                    <span className="font-mono opacity-80" dir="ltr">
+                      {r.car_plate}
+                    </span>
+                  )}
                   <span className="text-xs opacity-70">
                     {formatTimestamp(r.created_at)}
                   </span>
@@ -82,21 +83,23 @@ export function GuestParkingHistoryList({
                     </span>
                   )}
                   {r.lobbyist_name && (
-                    <span>· סדרן: {r.lobbyist_name}</span>
+                    <span>· פקיד: {r.lobbyist_name}</span>
                   )}
                 </div>
               </div>
-              <div className="shrink-0 self-center">
-                <DeleteEventButton
-                  id={r.id}
-                  action={deleteGuestParking}
-                  successMessage="הרישום נמחק"
-                  confirmTitle="מחיקת חניית אורח"
-                  confirmDescription="האם למחוק את חניית האורח? פעולה זו אינה ניתנת לביטול."
-                  ariaLabel="מחק חניית אורח"
-                  onDeleted={onDeleted}
-                />
-              </div>
+              {isManager && (
+                <div className="shrink-0 self-center">
+                  <DeleteEventButton
+                    id={r.id}
+                    action={deleteGuestParking}
+                    successMessage="הרישום נמחק"
+                    confirmTitle="מחיקת חניית אורח"
+                    confirmDescription="האם למחוק את חניית האורח? פעולה זו אינה ניתנת לביטול."
+                    ariaLabel="מחק חניית אורח"
+                    onDeleted={onDeleted}
+                  />
+                </div>
+              )}
             </li>
           ))}
         </ul>

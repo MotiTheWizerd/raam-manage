@@ -6,6 +6,7 @@ import { Tabs, type TabItem } from "@/components/ui/Tabs";
 import { onSuggestionsChanged } from "@/lib/suggestions-events";
 import { SuggestionsTab } from "./SuggestionsTab";
 import { SystemMessagesTab } from "./SystemMessagesTab";
+import { ZonesTab } from "./ZonesTab";
 
 export function SettingsView() {
   const [tab, setTab] = useState<string>("system-messages");
@@ -35,6 +36,7 @@ export function SettingsView() {
   const tabs: TabItem[] = [
     { value: "system-messages", label: "הודעות מערכת" },
     { value: "suggestions", label: "הצעות ייעול", badge: openCount },
+    { value: "zones", label: "אזורים" },
   ];
 
   return (
@@ -48,6 +50,7 @@ export function SettingsView() {
       <section>
         {tab === "system-messages" && <SystemMessagesTab />}
         {tab === "suggestions" && <SuggestionsTab />}
+        {tab === "zones" && <ZonesTab />}
       </section>
     </div>
   );

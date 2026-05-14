@@ -5,6 +5,7 @@ import {
   getAllSystemMessages,
   type SystemMessageRow,
 } from "@/app/settings/actions";
+import { useIsManager } from "@/components/AuthProvider";
 import { cn } from "@/lib/cn";
 import { onSystemMessagesChanged } from "@/lib/system-messages-events";
 import { AddSystemMessageButton } from "./AddSystemMessageButton";
@@ -61,6 +62,7 @@ function formatRange(iso: string): string {
 }
 
 export function SystemMessagesTab() {
+  const isManager = useIsManager();
   const [messages, setMessages] = useState<SystemMessageRow[] | null>(null);
   const [refreshTick, setRefreshTick] = useState(0);
 
@@ -102,7 +104,7 @@ export function SystemMessagesTab() {
         <h2 className="text-sm font-medium opacity-80">
           {messages.length === 0 ? "אין הודעות" : `${messages.length} הודעות`}
         </h2>
-        <AddSystemMessageButton />
+        {isManager && <AddSystemMessageButton />}
       </div>
 
       {messages.length === 0 ? (
@@ -160,10 +162,12 @@ export function SystemMessagesTab() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-end">
-                      <div className="flex items-center justify-end gap-1">
-                        <EditSystemMessageButton message={m} />
-                        <DeleteSystemMessageButton messageId={m.id} />
-                      </div>
+                      {isManager && (
+                        <div className="flex items-center justify-end gap-1">
+                          <EditSystemMessageButton message={m} />
+                          <DeleteSystemMessageButton messageId={m.id} />
+                        </div>
+                      )}
                     </td>
                   </tr>
                 );

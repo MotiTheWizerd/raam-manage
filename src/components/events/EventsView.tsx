@@ -10,7 +10,7 @@ import { VehiclesTab } from "./VehiclesTab";
 const TABS: TabItem[] = [
   { value: "keys", label: "ניהול מפתחות" },
   { value: "packages", label: "ניהול חבילות" },
-  { value: "vehicles", label: "ניהול רכבים" },
+  { value: "vehicles", label: "ניהול אורחים" },
 ];
 
 export function EventsView() {

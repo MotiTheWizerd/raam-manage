@@ -1,20 +1,27 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Building2, ClipboardList, Home, Map, Settings, UserCog, Users } from "lucide-react";
+import { Building2, ClipboardList, Home, Settings, UserCog, Users } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/cn";
+import { useIsManager } from "@/components/AuthProvider";
 import { useSidebarCollapsed } from "@/components/PreferencesProvider";
 import { SidebarToggle } from "@/components/SidebarToggle";
 
-const items = [
+type Item = {
+  label: string;
+  href: string;
+  icon: typeof Home;
+  managerOnly?: boolean;
+};
+
+const items: Item[] = [
   { label: "כללי", href: "/", icon: Home },
   { label: "אירועים", href: "/events", icon: ClipboardList },
-  { label: "אזורים", href: "/zones", icon: Map },
   { label: "דירות", href: "/apartments", icon: Building2 },
   { label: "דיירים", href: "/renters", icon: Users },
-  { label: "סדרנים", href: "/users", icon: UserCog },
+  { label: "פקידים", href: "/users", icon: UserCog, managerOnly: true },
   { label: "הגדרות", href: "/settings", icon: Settings },
 ];
 
@@ -23,6 +30,8 @@ const EASE = [0.16, 1, 0.3, 1] as const;
 export function Sidebar() {
   const pathname = usePathname();
   const collapsed = useSidebarCollapsed();
+  const isManager = useIsManager();
+  const visibleItems = items.filter((it) => !it.managerOnly || isManager);
 
   return (
     <motion.aside
@@ -41,7 +50,7 @@ export function Sidebar() {
       </div>
 
       <nav className="flex flex-col gap-1 text-sm">
-        {items.map((item) => {
+        {visibleItems.map((item) => {
           const active =
             item.href === "/"
               ? pathname === "/"

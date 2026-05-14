@@ -5,6 +5,7 @@ import {
   deletePackage,
   type PackageRow,
 } from "@/app/events/packages-actions";
+import { useIsManager } from "@/components/AuthProvider";
 import { cn } from "@/lib/cn";
 import { DeleteEventButton } from "./DeleteEventButton";
 
@@ -42,6 +43,7 @@ function recipientLabel(r: PackageRow) {
 }
 
 export function PackagesHistoryList({ rows, onDeleted }: Props) {
+  const isManager = useIsManager();
   return (
     <section className="space-y-3">
       <h2 className="text-sm font-medium opacity-80">חבילות אחרונות</h2>
@@ -114,17 +116,19 @@ export function PackagesHistoryList({ rows, onDeleted }: Props) {
                     <div className="mt-1 text-sm">{r.comment}</div>
                   )}
                 </div>
-                <div className="shrink-0 self-center">
-                  <DeleteEventButton
-                    id={r.id}
-                    action={deletePackage}
-                    successMessage="החבילה נמחקה"
-                    confirmTitle="מחיקת חבילה"
-                    confirmDescription="האם למחוק את רישום החבילה? פעולה זו אינה ניתנת לביטול."
-                    ariaLabel="מחק חבילה"
-                    onDeleted={onDeleted}
-                  />
-                </div>
+                {isManager && (
+                  <div className="shrink-0 self-center">
+                    <DeleteEventButton
+                      id={r.id}
+                      action={deletePackage}
+                      successMessage="החבילה נמחקה"
+                      confirmTitle="מחיקת חבילה"
+                      confirmDescription="האם למחוק את רישום החבילה? פעולה זו אינה ניתנת לביטול."
+                      ariaLabel="מחק חבילה"
+                      onDeleted={onDeleted}
+                    />
+                  </div>
+                )}
               </li>
             );
           })}

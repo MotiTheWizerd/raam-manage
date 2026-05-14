@@ -2,6 +2,7 @@
 
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import { deleteKeyEvent, type KeyHistoryRow } from "@/app/events/actions";
+import { useIsManager } from "@/components/AuthProvider";
 import { cn } from "@/lib/cn";
 import { DeleteEventButton } from "./DeleteEventButton";
 
@@ -28,6 +29,7 @@ export function KeysHistoryList({
   showApartment = false,
   onDeleted,
 }: Props) {
+  const isManager = useIsManager();
   return (
     <section className="space-y-3">
       <h2 className="text-sm font-medium opacity-80">אירועים אחרונים</h2>
@@ -80,24 +82,26 @@ export function KeysHistoryList({
                     </span>
                   </div>
                   <div className="mt-0.5 text-xs opacity-70 flex flex-wrap gap-x-2">
-                    <span>סדרן: {r.lobbyist_name}</span>
+                    <span>פקיד: {r.lobbyist_name}</span>
                     {r.resident_name && <span>· דייר: {r.resident_name}</span>}
                   </div>
                   {r.comment && (
                     <div className="mt-1 text-sm">{r.comment}</div>
                   )}
                 </div>
-                <div className="shrink-0 self-center">
-                  <DeleteEventButton
-                    id={r.id}
-                    action={deleteKeyEvent}
-                    successMessage="האירוע נמחק"
-                    confirmTitle="מחיקת אירוע מפתח"
-                    confirmDescription="האם למחוק את אירוע המפתח? פעולה זו אינה ניתנת לביטול."
-                    ariaLabel="מחק אירוע"
-                    onDeleted={onDeleted}
-                  />
-                </div>
+                {isManager && (
+                  <div className="shrink-0 self-center">
+                    <DeleteEventButton
+                      id={r.id}
+                      action={deleteKeyEvent}
+                      successMessage="האירוע נמחק"
+                      confirmTitle="מחיקת אירוע מפתח"
+                      confirmDescription="האם למחוק את אירוע המפתח? פעולה זו אינה ניתנת לביטול."
+                      ariaLabel="מחק אירוע"
+                      onDeleted={onDeleted}
+                    />
+                  </div>
+                )}
               </li>
             );
           })}

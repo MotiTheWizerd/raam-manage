@@ -1,5 +1,6 @@
 "use client";
 
+import { useIsManager } from "@/components/AuthProvider";
 import { updateApartment } from "../actions";
 import { ApartmentForm, type Zone } from "../ApartmentForm";
 import type { AssetInit } from "../AssetsFields";
@@ -77,28 +78,32 @@ export function ApartmentDetail({
       notes: v.notes,
     }));
 
+  const canEdit = useIsManager();
+
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-semibold tracking-tight">
-        עריכת דירה {apartment.number}
+        {canEdit ? "עריכת דירה" : "פרטי דירה"} {apartment.number}
       </h1>
-      <ApartmentForm
-        zones={zones}
-        initialValues={{
-          number: apartment.number,
-          floor: apartment.floor !== null ? String(apartment.floor) : "",
-          zone_id:
-            apartment.zone_id !== null ? String(apartment.zone_id) : "",
-          notes: apartment.notes ?? "",
-        }}
-        initialParking={toAssetInit(parking)}
-        initialStorage={toAssetInit(storage)}
-        initialKeys={toKeyInit(keys)}
-        initialVehicles={toVehicleInit(vehicles)}
-        hiddenIdValue={apartment.id}
-        action={updateApartment}
-        submitLabel="שמור שינויים"
-      />
+      <fieldset disabled={!canEdit} className="min-w-0 border-0 p-0 m-0">
+        <ApartmentForm
+          zones={zones}
+          initialValues={{
+            number: apartment.number,
+            floor: apartment.floor !== null ? String(apartment.floor) : "",
+            zone_id:
+              apartment.zone_id !== null ? String(apartment.zone_id) : "",
+            notes: apartment.notes ?? "",
+          }}
+          initialParking={toAssetInit(parking)}
+          initialStorage={toAssetInit(storage)}
+          initialKeys={toKeyInit(keys)}
+          initialVehicles={toVehicleInit(vehicles)}
+          hiddenIdValue={apartment.id}
+          action={updateApartment}
+          submitLabel="שמור שינויים"
+        />
+      </fieldset>
     </div>
   );
 }

@@ -214,6 +214,12 @@ function open(): Database.Database {
   ensureColumn(db, "packages", "received_by", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "guest_parking", "lobbyist_name", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "guest_parking", "guest_name", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "users", "password", "TEXT");
+  ensureColumn(db, "users", "user_role", "TEXT NOT NULL DEFAULT 'lobbyist'");
+
+  // Seed any pre-existing users (added before login was a feature) with a
+  // default password so they can sign in. They can change it in the edit modal.
+  db.prepare(`UPDATE users SET password = '1234' WHERE password IS NULL`).run();
 
   return db;
 }

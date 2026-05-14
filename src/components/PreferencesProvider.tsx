@@ -8,18 +8,23 @@ import {
   type PreferencesState,
   type PreferencesStoreApi,
 } from "@/lib/store/preferences-store";
-import { savePreferences, type Preferences } from "@/lib/preferences";
+import {
+  savePreferences,
+  type ActiveLobbyist,
+  type Preferences,
+} from "@/lib/preferences";
 
 const Ctx = createContext<PreferencesStoreApi | null>(null);
 
 type Props = {
   initial: Preferences;
+  currentUser: ActiveLobbyist | null;
   children: ReactNode;
 };
 
-export function PreferencesProvider({ initial, children }: Props) {
+export function PreferencesProvider({ initial, currentUser, children }: Props) {
   const [store] = useState<PreferencesStoreApi>(() =>
-    createPreferencesStore(initial)
+    createPreferencesStore(initial, currentUser)
   );
 
   // Debounced auto-save: subscribe to store, push every change to the server.
@@ -62,5 +67,3 @@ export const useClearSelectedResident = () =>
   usePreferencesStore((s) => s.clearSelectedResident);
 export const useActiveLobbyist = () =>
   usePreferencesStore((s) => s.activeLobbyist);
-export const useSetActiveLobbyist = () =>
-  usePreferencesStore((s) => s.setActiveLobbyist);

@@ -66,6 +66,23 @@ export async function getRecentGuestParking(
     .all(limit) as GuestParkingRow[];
 }
 
+export async function searchGuestParking(
+  rawQuery: string,
+  limit: number = 50
+): Promise<GuestParkingRow[]> {
+  const q = rawQuery.trim();
+  if (!q) return [];
+  const like = `%${q}%`;
+  return db
+    .prepare(
+      `${ROW_SELECT}
+       WHERE g.guest_name LIKE ? OR g.car_plate LIKE ?
+       ORDER BY g.id DESC
+       LIMIT ?`
+    )
+    .all(like, like, limit) as GuestParkingRow[];
+}
+
 export async function createGuestParking(
   _prev: GuestParkingFormState,
   formData: FormData
@@ -75,13 +92,12 @@ export async function createGuestParking(
   if (Number.isNaN(residentId)) return fail("דייר לא חוקי");
 
   const carPlate = String(formData.get("car_plate") ?? "").trim();
-  if (!carPlate) return fail("חובה להזין מספר רישוי");
 
   const guestName = String(formData.get("guest_name") ?? "").trim();
   if (!guestName) return fail("שם האורח נדרש");
 
   const lobbyistName = String(formData.get("lobbyist_name") ?? "").trim();
-  if (!lobbyistName) return fail("שם הסדרן נדרש");
+  if (!lobbyistName) return fail("שם הפקיד נדרש");
 
   try {
     db.prepare(

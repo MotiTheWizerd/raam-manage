@@ -22,13 +22,11 @@ export type Preferences = {
     collapsed: boolean;
   };
   selectedResident: SelectedResident | null;
-  activeLobbyist: ActiveLobbyist | null;
 };
 
 const DEFAULTS: Preferences = {
   sidebar: { collapsed: false },
   selectedResident: null,
-  activeLobbyist: null,
 };
 
 function merge(stored: Partial<Preferences>): Preferences {
@@ -40,7 +38,6 @@ function merge(stored: Partial<Preferences>): Preferences {
           : DEFAULTS.sidebar.collapsed,
     },
     selectedResident: stored.selectedResident ?? DEFAULTS.selectedResident,
-    activeLobbyist: stored.activeLobbyist ?? DEFAULTS.activeLobbyist,
   };
 }
 

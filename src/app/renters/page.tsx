@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { isManager } from "@/lib/auth";
 import { AddResidentButton } from "./AddResidentButton";
 import { RentersList, type RentersListResident } from "./RentersList";
 
@@ -10,7 +11,7 @@ type ApartmentOption = {
   zone_name: string | null;
 };
 
-export default function RentersPage() {
+export default async function RentersPage() {
   const residents = db
     .prepare(
       `SELECT
@@ -35,11 +36,13 @@ export default function RentersPage() {
     )
     .all() as ApartmentOption[];
 
+  const canEdit = await isManager();
+
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold tracking-tight">דיירים</h1>
-        <AddResidentButton apartments={apartments} />
+        {canEdit && <AddResidentButton apartments={apartments} />}
       </div>
 
       {apartments.length === 0 ? (

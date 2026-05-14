@@ -49,6 +49,9 @@ next-env.d.ts
 # pm2 runtime logs
 /logs/
 
+# WhatsApp Web test auth/session files
+/.baileys-auth/
+
 # semantix cognition tooling (personal, not part of the project)
 /.semantix/
 /semantix-connector

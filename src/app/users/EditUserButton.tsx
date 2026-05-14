@@ -8,12 +8,18 @@ import { Dropdown } from "@/components/ui/Dropdown";
 import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
 import { useFormToasts } from "@/lib/hooks/useFormToasts";
+import type { UserRole } from "@/lib/auth";
 import { updateUser, type UserFormState } from "./actions";
 
 const initialState: UserFormState = {};
 
 type Props = {
-  user: { id: number; lobbyist_name: string; is_active: number };
+  user: {
+    id: number;
+    lobbyist_name: string;
+    is_active: number;
+    user_role: UserRole;
+  };
 };
 
 export function EditUserButton({ user }: Props) {
@@ -41,7 +47,7 @@ export function EditUserButton({ user }: Props) {
       <Modal
         open={open}
         onClose={() => setOpen(false)}
-        title={`עריכת סדרן — ${user.lobbyist_name}`}
+        title={`עריכת פקיד — ${user.lobbyist_name}`}
       >
         {open && (
           <form action={action} className="space-y-4">
@@ -57,6 +63,18 @@ export function EditUserButton({ user }: Props) {
               />
             </Field>
 
+            <Field label="תפקיד" htmlFor={`user-role-${user.id}`} required>
+              <Dropdown
+                id={`user-role-${user.id}`}
+                name="user_role"
+                defaultValue={user.user_role}
+                options={[
+                  { value: "lobbyist", label: "פקיד" },
+                  { value: "manager", label: "פקיד - הרשאות" },
+                ]}
+              />
+            </Field>
+
             <Field label="סטטוס" htmlFor={`user-active-${user.id}`} required>
               <Dropdown
                 id={`user-active-${user.id}`}
@@ -66,6 +84,20 @@ export function EditUserButton({ user }: Props) {
                   { value: "1", label: "פעיל" },
                   { value: "0", label: "לא פעיל" },
                 ]}
+              />
+            </Field>
+
+            <Field
+              label="סיסמה חדשה"
+              htmlFor={`user-password-${user.id}`}
+              hint="השאר ריק כדי לא לשנות"
+            >
+              <Input
+                id={`user-password-${user.id}`}
+                name="password"
+                type="text"
+                placeholder="••••"
+                autoComplete="off"
               />
             </Field>
 

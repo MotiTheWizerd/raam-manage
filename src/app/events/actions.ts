@@ -147,7 +147,7 @@ export async function logKeyEvent(
   }
 
   const lobbyistName = String(formData.get("lobbyist_name") ?? "").trim();
-  if (!lobbyistName) return fail("שם הסדרן נדרש");
+  if (!lobbyistName) return fail("שם הפקיד נדרש");
 
   const commentRaw = String(formData.get("comment") ?? "").trim();
   const comment = commentRaw || null;

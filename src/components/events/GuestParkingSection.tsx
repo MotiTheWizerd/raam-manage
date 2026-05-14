@@ -63,12 +63,11 @@ export function GuestParkingSection({ residentId, onCreated }: Props) {
             htmlFor="guest-plate"
             className="text-xs opacity-70"
           >
-            מספר רישוי
+            מספר רישוי <span className="opacity-60">(אופציונלי)</span>
           </label>
           <Input
             id="guest-plate"
             name="car_plate"
-            required
             placeholder="123-45-678"
             dir="ltr"
             className="w-40 text-end font-mono"
@@ -80,14 +79,14 @@ export function GuestParkingSection({ residentId, onCreated }: Props) {
             htmlFor="guest-lobbyist"
             className="text-xs opacity-70"
           >
-            סדרן
+            פקיד
           </label>
           <Input
             id="guest-lobbyist"
             name="lobbyist_name"
             required
             defaultValue={activeLobbyist?.lobbyist_name ?? ""}
-            placeholder="שם הסדרן"
+            placeholder="שם הפקיד"
             className="w-44"
           />
         </div>

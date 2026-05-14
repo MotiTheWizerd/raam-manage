@@ -146,7 +146,7 @@ export function AddPackageButton({
                   name="received_by"
                   required
                   defaultValue={activeLobbyist?.lobbyist_name ?? ""}
-                  placeholder="שם הסדרן"
+                  placeholder="שם הפקיד"
                 />
               </Field>
             </div>

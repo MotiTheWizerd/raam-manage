@@ -31,7 +31,7 @@ type SortDir = "asc" | "desc";
 function sortValue(r: RentersListResident, key: SortKey): string | null {
   switch (key) {
     case "name":
-      return `${r.last_name} ${r.first_name}`;
+      return `${r.first_name} ${r.last_name}`;
     case "apartment":
       return r.apartment_number;
     case "zone":

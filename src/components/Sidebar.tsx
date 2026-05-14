@@ -22,7 +22,7 @@ const items: Item[] = [
   { label: "דירות", href: "/apartments", icon: Building2 },
   { label: "דיירים", href: "/renters", icon: Users },
   { label: "פקידים", href: "/users", icon: UserCog, managerOnly: true },
-  { label: "ווטסאפ", href: "/test/whatsapp", icon: MessageCircle, managerOnly: true },
+  { label: "ווטסאפ", href: "/test/whatsapp", icon: MessageCircle },
   { label: "הגדרות", href: "/settings", icon: Settings },
 ];
 

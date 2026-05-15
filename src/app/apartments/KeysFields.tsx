@@ -4,6 +4,7 @@ import { Home, Plus, Power, Star } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { Textarea } from "@/components/ui/Textarea";
 import { cn } from "@/lib/cn";
 
 type Key = {
@@ -48,7 +49,13 @@ function fromInit(init: KeyInit[]): Key[] {
   }));
 }
 
-export function KeysFields({ initial }: { initial?: KeyInit[] }) {
+export function KeysFields({
+  initial,
+  initialComment,
+}: {
+  initial?: KeyInit[];
+  initialComment?: string | null;
+}) {
   const [keys, setKeys] = useState<Key[]>(() => {
     if (initial && initial.length > 0) {
       const seeded = fromInit(initial);
@@ -98,7 +105,7 @@ export function KeysFields({ initial }: { initial?: KeyInit[] }) {
   );
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       <input type="hidden" name="keys" value={serialized} />
 
       <div className="flex items-center justify-between">
@@ -191,6 +198,19 @@ export function KeysFields({ initial }: { initial?: KeyInit[] }) {
           ))}
         </div>
       )}
+
+      <div className="space-y-1">
+        <label htmlFor="keys-comment" className="text-xs opacity-70">
+          הערת מפתחות
+        </label>
+        <Textarea
+          id="keys-comment"
+          name="keys_comment"
+          rows={2}
+          placeholder="הערה כללית שתופיע בעמוד אירועי המפתחות"
+          defaultValue={initialComment ?? ""}
+        />
+      </div>
     </div>
   );
 }

@@ -3,17 +3,22 @@
 import { Home, Star } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import {
+  getApartmentKeysComment,
   getApartmentKeysForEvents,
   getApartmentResidents,
-  getRecentKeysHistory,
+  getKeysHistoryPage,
   type ApartmentResidentOption,
   type EventsKeyRow,
   type KeyHistoryRow,
 } from "@/app/events/actions";
 import { Button } from "@/components/ui/Button";
+import { ResidentLink } from "@/components/entity-links";
+import { Pagination } from "@/components/ui/Pagination";
 import { cn } from "@/lib/cn";
 import { KeysHistoryList } from "./KeysHistoryList";
 import { LogKeyEventModal } from "./LogKeyEventModal";
+
+const HISTORY_PAGE_SIZE = 10;
 
 type Props = {
   apartmentId: number | null;
@@ -21,7 +26,11 @@ type Props = {
 
 export function KeysTab({ apartmentId }: Props) {
   const [keys, setKeys] = useState<EventsKeyRow[] | null>(null);
+  const [keysComment, setKeysComment] = useState<string | null>(null);
   const [history, setHistory] = useState<KeyHistoryRow[]>([]);
+  const [historyTotal, setHistoryTotal] = useState(0);
+  const [historyTotalPages, setHistoryTotalPages] = useState(1);
+  const [historyPage, setHistoryPage] = useState(1);
   const [residents, setResidents] = useState<ApartmentResidentOption[]>([]);
   const [refreshTick, setRefreshTick] = useState(0);
   const [activeKey, setActiveKey] = useState<EventsKeyRow | null>(null);
@@ -32,37 +41,48 @@ export function KeysTab({ apartmentId }: Props) {
   useEffect(() => {
     let active = true;
     if (apartmentId === null) {
-      // No apartment selected — only fetch global history
-      getRecentKeysHistory(null, 10).then((rows) => {
+      getKeysHistoryPage(null, historyPage, HISTORY_PAGE_SIZE).then((result) => {
         if (!active) return;
-        setHistory(rows);
+        setHistory(result.rows);
+        setHistoryTotal(result.total);
+        setHistoryTotalPages(result.totalPages);
+        if (result.page !== historyPage) setHistoryPage(result.page);
         setKeys([]);
+        setKeysComment(null);
         setResidents([]);
       });
     } else {
       Promise.all([
         getApartmentKeysForEvents(apartmentId),
+        getApartmentKeysComment(apartmentId),
         getApartmentResidents(apartmentId),
-        getRecentKeysHistory(apartmentId, 10),
-      ]).then(([keyRows, residentRows, historyRows]) => {
+        getKeysHistoryPage(apartmentId, historyPage, HISTORY_PAGE_SIZE),
+      ]).then(([keyRows, keyComment, residentRows, historyResult]) => {
         if (!active) return;
         setKeys(keyRows);
+        setKeysComment(keyComment);
         setResidents(residentRows);
-        setHistory(historyRows);
+        setHistory(historyResult.rows);
+        setHistoryTotal(historyResult.total);
+        setHistoryTotalPages(historyResult.totalPages);
+        if (historyResult.page !== historyPage) setHistoryPage(historyResult.page);
       });
     }
     return () => {
       active = false;
     };
-  }, [apartmentId, refreshTick]);
+  }, [apartmentId, refreshTick, historyPage]);
 
   return (
     <div className="space-y-6">
       {apartmentId !== null ? (
-        <KeysSection
-          keys={keys}
-          onLogEvent={setActiveKey}
-        />
+        <>
+          <KeysComment comment={keysComment} />
+          <KeysSection
+            keys={keys}
+            onLogEvent={setActiveKey}
+          />
+        </>
       ) : (
         <div className="rounded-lg border border-dashed border-black/10 dark:border-white/10 p-4 text-center text-sm opacity-60">
           יש לבחור דייר בכדי להוסיף אירוע
@@ -73,6 +93,14 @@ export function KeysTab({ apartmentId }: Props) {
         rows={history}
         showApartment={apartmentId === null}
         onDeleted={refresh}
+      />
+
+      <Pagination
+        page={historyPage}
+        totalPages={historyTotalPages}
+        pageSize={HISTORY_PAGE_SIZE}
+        total={historyTotal}
+        onPageChange={setHistoryPage}
       />
 
       {activeKey && apartmentId !== null && (
@@ -87,6 +115,17 @@ export function KeysTab({ apartmentId }: Props) {
         />
       )}
     </div>
+  );
+}
+
+function KeysComment({ comment }: { comment: string | null }) {
+  if (!comment) return null;
+
+  return (
+    <section className="rounded-lg border border-black/10 dark:border-white/10 p-4 space-y-1">
+      <h2 className="text-sm font-medium opacity-80">הערת מפתחות</h2>
+      <p className="text-sm whitespace-pre-wrap opacity-80">{comment}</p>
+    </section>
   );
 }
 
@@ -164,7 +203,17 @@ function KeysSection({
                           <> · {k.last_lobbyist_name}</>
                         )}
                         {k.last_resident_name && (
-                          <> · {k.last_resident_name}</>
+                          <>
+                            {" "}
+                            ·{" "}
+                            {k.last_resident_id ? (
+                              <ResidentLink id={k.last_resident_id} isNewTab>
+                                {k.last_resident_name}
+                              </ResidentLink>
+                            ) : (
+                              k.last_resident_name
+                            )}
+                          </>
                         )}
                       </div>
                       {k.last_comment && (

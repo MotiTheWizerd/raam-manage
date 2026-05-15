@@ -5,6 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 const DB_PATH = path.join(process.cwd(), "data", "raam.db");
+const SCHEMA_EVOLUTION_VERSION = 2;
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS zones (
@@ -18,6 +19,7 @@ CREATE TABLE IF NOT EXISTS apartments (
   floor      INTEGER,
   zone_id    INTEGER REFERENCES zones(id) ON DELETE SET NULL,
   notes      TEXT,
+  keys_comment TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -146,6 +148,7 @@ CREATE TABLE IF NOT EXISTS packages (
                     CHECK (direction IN ('in', 'out')),
   delivered_by    TEXT NOT NULL DEFAULT 'שליח',
   received_by     TEXT NOT NULL DEFAULT '',
+  delivered_to    TEXT,
   is_delivered    INTEGER NOT NULL DEFAULT 0,
   comment         TEXT,
   created_at      TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -220,19 +223,14 @@ function ensureColumn(
   }
 }
 
-function open(): Database.Database {
-  fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
-  const db = new Database(DB_PATH);
-  db.pragma("journal_mode = WAL");
-  db.pragma("foreign_keys = ON");
-  db.exec(SCHEMA);
-
-  // Idempotent column adds for schema evolution on existing DBs
+function applySchemaEvolution(db: Database.Database) {
+  ensureColumn(db, "apartments", "keys_comment", "TEXT");
   ensureColumn(db, "phones", "comment", "TEXT");
   ensureColumn(db, "apartment_keys", "is_default", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "apartment_keys", "is_active", "INTEGER NOT NULL DEFAULT 1");
   ensureColumn(db, "apartment_keys", "is_in_lobby", "INTEGER NOT NULL DEFAULT 1");
   ensureColumn(db, "packages", "received_by", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "packages", "delivered_to", "TEXT");
   ensureColumn(db, "guest_parking", "lobbyist_name", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "guest_parking", "guest_name", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "users", "password", "TEXT");
@@ -241,17 +239,31 @@ function open(): Database.Database {
   // Seed any pre-existing users (added before login was a feature) with a
   // default password so they can sign in. They can change it in the edit modal.
   db.prepare(`UPDATE users SET password = '1234' WHERE password IS NULL`).run();
+  globalThis.__raamDbSchemaVersion = SCHEMA_EVOLUTION_VERSION;
+}
+
+function open(): Database.Database {
+  fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
+  const db = new Database(DB_PATH);
+  db.pragma("journal_mode = WAL");
+  db.pragma("foreign_keys = ON");
+  db.exec(SCHEMA);
+  applySchemaEvolution(db);
 
   return db;
 }
 
 declare global {
-  // eslint-disable-next-line no-var
   var __raamDb: Database.Database | undefined;
+  var __raamDbSchemaVersion: number | undefined;
 }
 
 function getDb(): Database.Database {
-  return globalThis.__raamDb ?? (globalThis.__raamDb = open());
+  const db = globalThis.__raamDb ?? (globalThis.__raamDb = open());
+  if (globalThis.__raamDbSchemaVersion !== SCHEMA_EVOLUTION_VERSION) {
+    applySchemaEvolution(db);
+  }
+  return db;
 }
 
 export const db: Database.Database = new Proxy({} as Database.Database, {

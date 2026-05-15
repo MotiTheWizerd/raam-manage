@@ -7,14 +7,17 @@ import {
   type ApartmentResidentOption,
 } from "@/app/events/actions";
 import {
-  getRecentPackages,
+  getPackagesPage,
   getResidentPendingPackages,
   type PackageRow,
 } from "@/app/events/packages-actions";
+import { Pagination } from "@/components/ui/Pagination";
 import { cn } from "@/lib/cn";
 import { AddPackageButton } from "./AddPackageButton";
 import { MarkDeliveredButton } from "./MarkDeliveredButton";
 import { PackagesHistoryList } from "./PackagesHistoryList";
+
+const HISTORY_PAGE_SIZE = 10;
 
 type Props = {
   residentId: number | null;
@@ -48,6 +51,9 @@ function formatTimestamp(iso: string) {
 export function PackagesTab({ residentId, apartmentId }: Props) {
   const [pending, setPending] = useState<PackageRow[] | null>(null);
   const [history, setHistory] = useState<PackageRow[]>([]);
+  const [historyTotal, setHistoryTotal] = useState(0);
+  const [historyTotalPages, setHistoryTotalPages] = useState(1);
+  const [historyPage, setHistoryPage] = useState(1);
   const [residents, setResidents] = useState<ApartmentResidentOption[]>([]);
   const [refreshTick, setRefreshTick] = useState(0);
 
@@ -56,23 +62,29 @@ export function PackagesTab({ residentId, apartmentId }: Props) {
 
     if (residentId === null) {
       // No resident — global history only
-      getRecentPackages(null, 10).then((rows) => {
+      getPackagesPage(null, historyPage, HISTORY_PAGE_SIZE).then((result) => {
         if (!active) return;
-        setHistory(rows);
+        setHistory(result.rows);
+        setHistoryTotal(result.total);
+        setHistoryTotalPages(result.totalPages);
+        if (result.page !== historyPage) setHistoryPage(result.page);
         setPending([]);
         setResidents([]);
       });
     } else {
       Promise.all([
         getResidentPendingPackages(residentId),
-        getRecentPackages(residentId, 10),
+        getPackagesPage(residentId, historyPage, HISTORY_PAGE_SIZE),
         apartmentId !== null
           ? getApartmentResidents(apartmentId)
           : Promise.resolve([] as ApartmentResidentOption[]),
-      ]).then(([pendingRows, historyRows, residentRows]) => {
+      ]).then(([pendingRows, historyResult, residentRows]) => {
         if (!active) return;
         setPending(pendingRows);
-        setHistory(historyRows);
+        setHistory(historyResult.rows);
+        setHistoryTotal(historyResult.total);
+        setHistoryTotalPages(historyResult.totalPages);
+        if (historyResult.page !== historyPage) setHistoryPage(historyResult.page);
         setResidents(residentRows);
       });
     }
@@ -80,7 +92,7 @@ export function PackagesTab({ residentId, apartmentId }: Props) {
     return () => {
       active = false;
     };
-  }, [residentId, apartmentId, refreshTick]);
+  }, [residentId, apartmentId, refreshTick, historyPage]);
 
   const refresh = useCallback(() => setRefreshTick((t) => t + 1), []);
 
@@ -105,6 +117,14 @@ export function PackagesTab({ residentId, apartmentId }: Props) {
       )}
 
       <PackagesHistoryList rows={history} onDeleted={refresh} />
+
+      <Pagination
+        page={historyPage}
+        totalPages={historyTotalPages}
+        pageSize={HISTORY_PAGE_SIZE}
+        total={historyTotal}
+        onPageChange={setHistoryPage}
+      />
     </div>
   );
 }

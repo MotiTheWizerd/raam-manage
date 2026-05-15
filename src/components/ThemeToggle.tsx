@@ -1,17 +1,15 @@
 "use client";
 
 import { Moon, Sun } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 
 export function ThemeToggle() {
-  const [isDark, setIsDark] = useState(false);
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setIsDark(document.documentElement.classList.contains("dark"));
-    setMounted(true);
-  }, []);
+  const [isDark, setIsDark] = useState(
+    () =>
+      typeof document !== "undefined" &&
+      document.documentElement.classList.contains("dark")
+  );
 
   function toggle() {
     const next = !isDark;
@@ -27,7 +25,7 @@ export function ThemeToggle() {
       onClick={toggle}
       aria-label="החלף מצב כהה/בהיר"
     >
-      {mounted && isDark ? <Sun size={18} /> : <Moon size={18} />}
+      {isDark ? <Sun size={18} /> : <Moon size={18} />}
     </Button>
   );
 }

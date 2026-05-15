@@ -27,6 +27,7 @@ type Props = {
   initialParking?: AssetInit[];
   initialStorage?: AssetInit[];
   initialKeys?: KeyInit[];
+  initialKeysComment?: string | null;
   initialVehicles?: VehicleInit[];
   hiddenIdValue?: number;
   action: (
@@ -46,6 +47,7 @@ export function ApartmentForm({
   initialParking,
   initialStorage,
   initialKeys,
+  initialKeysComment,
   initialVehicles,
   hiddenIdValue,
   action,
@@ -107,7 +109,7 @@ export function ApartmentForm({
 
       <AssetsFields kind="parking" initial={initialParking} />
       <AssetsFields kind="storage" initial={initialStorage} />
-      <KeysFields initial={initialKeys} />
+      <KeysFields initial={initialKeys} initialComment={initialKeysComment} />
       <VehiclesFields initial={initialVehicles} />
 
       <Field label="הערות" htmlFor="apt-notes">

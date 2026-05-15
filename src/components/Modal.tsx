@@ -2,7 +2,7 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import { X } from "lucide-react";
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/Button";
 
@@ -21,12 +21,7 @@ const sizeClass = {
 };
 
 export function Modal({ open, onClose, title, size = "md", children }: Props) {
-  const [mounted, setMounted] = useState(false);
   const titleId = useId();
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -42,7 +37,7 @@ export function Modal({ open, onClose, title, size = "md", children }: Props) {
     };
   }, [open, onClose]);
 
-  if (!mounted) return null;
+  if (typeof document === "undefined") return null;
 
   return createPortal(
     <AnimatePresence>

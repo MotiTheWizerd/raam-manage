@@ -43,14 +43,6 @@ export function Dropdown({
   const value = isControlled ? controlledValue : internal;
   const selected = options.find((o) => o.value === value);
 
-  // Reset highlight to current selection whenever the menu opens
-  useEffect(() => {
-    if (open) {
-      const idx = options.findIndex((o) => o.value === value);
-      setHighlight(idx >= 0 ? idx : 0);
-    }
-  }, [open, options, value]);
-
   // Auto-scroll highlighted option into view
   useEffect(() => {
     if (!open) return;
@@ -89,12 +81,18 @@ export function Dropdown({
     triggerRef.current?.focus();
   }
 
+  function openMenu() {
+    const idx = options.findIndex((o) => o.value === value);
+    setHighlight(idx >= 0 ? idx : 0);
+    setOpen(true);
+  }
+
   function onKeyDown(e: React.KeyboardEvent) {
     if (disabled) return;
     if (!open) {
       if (e.key === "ArrowDown" || e.key === "Enter" || e.key === " ") {
         e.preventDefault();
-        setOpen(true);
+        openMenu();
       }
       return;
     }
@@ -130,7 +128,11 @@ export function Dropdown({
         type="button"
         id={id}
         disabled={disabled}
-        onClick={() => !disabled && setOpen((o) => !o)}
+        onClick={() => {
+          if (disabled) return;
+          if (open) setOpen(false);
+          else openMenu();
+        }}
         aria-haspopup="listbox"
         aria-expanded={open}
         className={cn(

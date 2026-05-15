@@ -58,6 +58,7 @@ type ParsedFields = {
   floor: number | null;
   zone_id: number | null;
   notes: string | null;
+  keys_comment: string | null;
   parking: CleanedAsset[];
   storage: CleanedAsset[];
   keys: CleanedKey[];
@@ -121,6 +122,8 @@ function parseFields(formData: FormData): ParsedFields | { error: string } {
   const floorRaw = String(formData.get("floor") ?? "").trim();
   const zoneIdRaw = String(formData.get("zone_id") ?? "").trim();
   const notes = String(formData.get("notes") ?? "").trim() || null;
+  const keys_comment =
+    String(formData.get("keys_comment") ?? "").trim() || null;
 
   if (!number) return { error: "מספר דירה נדרש" };
 
@@ -145,7 +148,17 @@ function parseFields(formData: FormData): ParsedFields | { error: string } {
   const vehicles = parseVehicles(formData);
   if ("error" in vehicles) return { error: vehicles.error };
 
-  return { number, floor, zone_id, notes, parking, storage, keys, vehicles };
+  return {
+    number,
+    floor,
+    zone_id,
+    notes,
+    keys_comment,
+    parking,
+    storage,
+    keys,
+    vehicles,
+  };
 }
 
 function insertAssets(
@@ -233,8 +246,8 @@ export async function createApartment(
 
   try {
     const insertApt = db.prepare(
-      `INSERT INTO apartments (number, floor, zone_id, notes)
-       VALUES (?, ?, ?, ?) RETURNING id`
+      `INSERT INTO apartments (number, floor, zone_id, notes, keys_comment)
+       VALUES (?, ?, ?, ?, ?) RETURNING id`
     );
 
     const tx = db.transaction(() => {
@@ -242,7 +255,8 @@ export async function createApartment(
         parsed.number,
         parsed.floor,
         parsed.zone_id,
-        parsed.notes
+        parsed.notes,
+        parsed.keys_comment
       ) as { id: number };
       insertAssets(id, "parking", parsed.parking);
       insertAssets(id, "storage", parsed.storage);
@@ -282,7 +296,7 @@ export async function updateApartment(
   try {
     const updateApt = db.prepare(
       `UPDATE apartments
-       SET number = ?, floor = ?, zone_id = ?, notes = ?,
+       SET number = ?, floor = ?, zone_id = ?, notes = ?, keys_comment = ?,
            updated_at = CURRENT_TIMESTAMP
        WHERE id = ?`
     );
@@ -302,6 +316,7 @@ export async function updateApartment(
         parsed.floor,
         parsed.zone_id,
         parsed.notes,
+        parsed.keys_comment,
         id
       );
       if (result.changes === 0) {
@@ -335,6 +350,7 @@ export async function updateApartment(
 
   revalidatePath("/apartments");
   revalidatePath(`/apartments/${id}`);
+  revalidatePath("/events");
   revalidatePath("/");
   return { submittedAt: Date.now() };
 }

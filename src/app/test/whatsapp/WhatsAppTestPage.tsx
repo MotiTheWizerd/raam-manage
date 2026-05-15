@@ -6,6 +6,7 @@ import { Check, CheckCheck, Clock, LogOut, QrCode, Send, X } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
+import { Dropdown, type DropdownOption } from "@/components/ui/Dropdown";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/Modal";
 import { Textarea } from "@/components/ui/Textarea";
@@ -13,10 +14,11 @@ import {
   useSelectedResident,
   useSetSelectedResident,
 } from "@/components/PreferencesProvider";
-import { getResidentPrimaryPhone } from "@/app/renters/actions";
 import {
+  getResidentPhoneOptions,
   getWhatsAppConversations,
   getWhatsAppMessages,
+  type ResidentPhoneOption,
   type WhatsAppConversation,
   type WhatsAppMessageRow,
 } from "@/app/test/whatsapp/actions";
@@ -45,6 +47,9 @@ export function WhatsAppTestPage() {
     lastError: null,
   });
   const [phone, setPhone] = useState("");
+  const [residentPhones, setResidentPhones] = useState<ResidentPhoneOption[]>(
+    []
+  );
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<WhatsAppMessageRow[]>([]);
   const [conversations, setConversations] = useState<WhatsAppConversation[]>([]);
@@ -120,10 +125,22 @@ export function WhatsAppTestPage() {
   }, [connected, loginOpen]);
 
   useEffect(() => {
-    if (selectedResidentId === null) return;
     let active = true;
-    void getResidentPrimaryPhone(selectedResidentId).then((primary) => {
-      if (active && primary) setPhone(primary);
+    if (selectedResidentId === null) {
+      void Promise.resolve().then(() => {
+        if (active) setResidentPhones([]);
+      });
+      return () => {
+        active = false;
+      };
+    }
+    void getResidentPhoneOptions(selectedResidentId).then((phones) => {
+      if (!active) return;
+      setResidentPhones(phones);
+      const selected =
+        phones.find((p) => p.is_primary === 1) ?? phones[0] ?? null;
+      if (selected) setPhone(selected.number);
+      else setPhone("");
     });
     return () => {
       active = false;
@@ -136,7 +153,9 @@ export function WhatsAppTestPage() {
     let active = true;
     const trimmed = phone.trim();
     if (!selectedResidentId && !trimmed) {
-      setMessages([]);
+      void Promise.resolve().then(() => {
+        if (active) setMessages([]);
+      });
       return;
     }
     void getWhatsAppMessages({
@@ -271,6 +290,7 @@ export function WhatsAppTestPage() {
           }
           phone={phone}
           onPhoneChange={setPhone}
+          phoneOptions={toPhoneDropdownOptions(residentPhones)}
           messages={messages}
           message={message}
           onMessageChange={setMessage}
@@ -319,6 +339,16 @@ export function WhatsAppTestPage() {
       </Modal>
     </div>
   );
+}
+
+function toPhoneDropdownOptions(phones: ResidentPhoneOption[]): DropdownOption[] {
+  return phones.map((p) => {
+    const details = [p.comment, p.label].filter(Boolean).join(" · ");
+    return {
+      value: p.number,
+      label: details ? `${p.number} · ${details}` : p.number,
+    };
+  });
 }
 
 type ConversationSidebarProps = {
@@ -393,6 +423,7 @@ type ChatPanelProps = {
   residentName: string | null;
   phone: string;
   onPhoneChange: (value: string) => void;
+  phoneOptions: DropdownOption[];
   messages: WhatsAppMessageRow[];
   message: string;
   onMessageChange: (value: string) => void;
@@ -405,6 +436,7 @@ function ChatPanel({
   residentName,
   phone,
   onPhoneChange,
+  phoneOptions,
   messages,
   message,
   onMessageChange,
@@ -435,14 +467,24 @@ function ChatPanel({
             {phone.trim() ? phone : "ללא מספר"}
           </span>
         </div>
-        <Input
-          value={phone}
-          onChange={(event) => onPhoneChange(event.target.value)}
-          placeholder="972501234567"
-          inputMode="tel"
-          className="sm:w-48"
-          aria-label="מספר טלפון"
-        />
+        {phoneOptions.length > 0 ? (
+          <Dropdown
+            value={phone}
+            onChange={onPhoneChange}
+            options={phoneOptions}
+            placeholder="בחר טלפון"
+            className="sm:w-60"
+          />
+        ) : (
+          <Input
+            value={phone}
+            onChange={(event) => onPhoneChange(event.target.value)}
+            placeholder="972501234567"
+            inputMode="tel"
+            className="sm:w-48"
+            aria-label="מספר טלפון"
+          />
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto bg-zinc-50/40 p-3 dark:bg-zinc-950/20">

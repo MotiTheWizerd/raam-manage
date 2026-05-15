@@ -7,14 +7,17 @@ import {
   type ApartmentVehicleRow,
 } from "@/app/events/vehicles-actions";
 import {
-  getRecentGuestParking,
+  getGuestParkingPage,
   searchGuestParking,
   type GuestParkingRow,
 } from "@/app/events/guest-parking-actions";
 import { Input } from "@/components/ui/Input";
+import { Pagination } from "@/components/ui/Pagination";
 import { useDebouncedValue } from "@/lib/hooks/useDebouncedValue";
 import { GuestParkingHistoryList } from "./GuestParkingHistoryList";
 import { GuestParkingSection } from "./GuestParkingSection";
+
+const HISTORY_PAGE_SIZE = 10;
 
 type Props = {
   apartmentId: number | null;
@@ -24,6 +27,9 @@ type Props = {
 export function VehiclesTab({ apartmentId, residentId }: Props) {
   const [vehicles, setVehicles] = useState<ApartmentVehicleRow[] | null>(null);
   const [guestRows, setGuestRows] = useState<GuestParkingRow[]>([]);
+  const [guestTotal, setGuestTotal] = useState(0);
+  const [guestTotalPages, setGuestTotalPages] = useState(1);
+  const [guestPage, setGuestPage] = useState(1);
   const [refreshTick, setRefreshTick] = useState(0);
   const [query, setQuery] = useState("");
   const debouncedQuery = useDebouncedValue(query.trim(), 250);
@@ -32,14 +38,12 @@ export function VehiclesTab({ apartmentId, residentId }: Props) {
   const refresh = useCallback(() => setRefreshTick((t) => t + 1), []);
 
   useEffect(() => {
-    if (apartmentId === null) {
-      setVehicles(null);
-      return;
-    }
     let active = true;
-    getApartmentVehicles(apartmentId).then((rows) => {
-      if (active) setVehicles(rows);
-    });
+    if (apartmentId !== null) {
+      getApartmentVehicles(apartmentId).then((rows) => {
+        if (active) setVehicles(rows);
+      });
+    }
     return () => {
       active = false;
     };
@@ -47,16 +51,28 @@ export function VehiclesTab({ apartmentId, residentId }: Props) {
 
   useEffect(() => {
     let active = true;
-    const fetcher = searching
-      ? searchGuestParking(debouncedQuery, 50)
-      : getRecentGuestParking(residentId, 10);
-    fetcher.then((rows) => {
-      if (active) setGuestRows(rows);
-    });
+    if (searching) {
+      searchGuestParking(debouncedQuery, 50).then((rows) => {
+        if (!active) return;
+        setGuestRows(rows);
+        setGuestTotal(rows.length);
+        setGuestTotalPages(1);
+      });
+    } else {
+      getGuestParkingPage(residentId, guestPage, HISTORY_PAGE_SIZE).then(
+        (result) => {
+          if (!active) return;
+          setGuestRows(result.rows);
+          setGuestTotal(result.total);
+          setGuestTotalPages(result.totalPages);
+          if (result.page !== guestPage) setGuestPage(result.page);
+        }
+      );
+    }
     return () => {
       active = false;
     };
-  }, [residentId, refreshTick, searching, debouncedQuery]);
+  }, [residentId, refreshTick, searching, debouncedQuery, guestPage]);
 
   return (
     <div className="space-y-6">
@@ -145,6 +161,16 @@ export function VehiclesTab({ apartmentId, residentId }: Props) {
           showApartment={searching || residentId === null}
           onDeleted={refresh}
         />
+
+        {!searching && (
+          <Pagination
+            page={guestPage}
+            totalPages={guestTotalPages}
+            pageSize={HISTORY_PAGE_SIZE}
+            total={guestTotal}
+            onPageChange={setGuestPage}
+          />
+        )}
       </section>
     </div>
   );

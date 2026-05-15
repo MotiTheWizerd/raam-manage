@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { ApartmentLink, ResidentLink } from "@/components/entity-links";
 import { useSelectedResident } from "@/components/PreferencesProvider";
 import { Tabs, type TabItem } from "@/components/ui/Tabs";
 import { KeysTab } from "./KeysTab";
@@ -25,9 +26,13 @@ export function EventsView() {
           <p className="text-sm opacity-70 flex flex-wrap items-center gap-x-3 gap-y-1">
             <span>
               דירה{" "}
-              <span className="font-medium text-foreground">
+              <ApartmentLink
+                id={resident.apartment_id}
+                className="font-medium text-foreground"
+                isNewTab
+              >
                 {resident.apartment_number}
-              </span>
+              </ApartmentLink>
             </span>
             {resident.zone_name && (
               <>
@@ -44,9 +49,13 @@ export function EventsView() {
             <span aria-hidden="true">·</span>
             <span>
               דייר נוכחי:{" "}
-              <span className="font-medium text-foreground">
+              <ResidentLink
+                id={resident.id}
+                className="font-medium text-foreground"
+                isNewTab
+              >
                 {resident.first_name} {resident.last_name}
-              </span>
+              </ResidentLink>
             </span>
           </p>
         ) : (
@@ -60,16 +69,21 @@ export function EventsView() {
 
       <section>
         {tab === "keys" && (
-          <KeysTab apartmentId={resident?.apartment_id ?? null} />
+          <KeysTab
+            key={resident?.apartment_id ?? "global"}
+            apartmentId={resident?.apartment_id ?? null}
+          />
         )}
         {tab === "packages" && (
           <PackagesTab
+            key={resident?.id ?? "global"}
             residentId={resident?.id ?? null}
             apartmentId={resident?.apartment_id ?? null}
           />
         )}
         {tab === "vehicles" && (
           <VehiclesTab
+            key={resident?.id ?? "global"}
             apartmentId={resident?.apartment_id ?? null}
             residentId={resident?.id ?? null}
           />

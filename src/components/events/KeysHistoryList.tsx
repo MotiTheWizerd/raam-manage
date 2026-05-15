@@ -3,6 +3,7 @@
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import { deleteKeyEvent, type KeyHistoryRow } from "@/app/events/actions";
 import { useIsManager } from "@/components/AuthProvider";
+import { ApartmentLink, ResidentLink } from "@/components/entity-links";
 import { cn } from "@/lib/cn";
 import { DeleteEventButton } from "./DeleteEventButton";
 
@@ -63,7 +64,10 @@ export function KeysHistoryList({
                   <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm">
                     {showApartment && (
                       <span className="text-xs font-medium opacity-70">
-                        דירה {r.apartment_number} ·
+                        <ApartmentLink id={r.apartment_id} isNewTab>
+                          דירה {r.apartment_number}
+                        </ApartmentLink>{" "}
+                        ·
                       </span>
                     )}
                     <span className="font-medium">{r.key_nickname}</span>
@@ -83,7 +87,18 @@ export function KeysHistoryList({
                   </div>
                   <div className="mt-0.5 text-xs opacity-70 flex flex-wrap gap-x-2">
                     <span>פקיד: {r.lobbyist_name}</span>
-                    {r.resident_name && <span>· דייר: {r.resident_name}</span>}
+                    {r.resident_name && (
+                      <span>
+                        · דייר:{" "}
+                        {r.resident_id ? (
+                          <ResidentLink id={r.resident_id} isNewTab>
+                            {r.resident_name}
+                          </ResidentLink>
+                        ) : (
+                          r.resident_name
+                        )}
+                      </span>
+                    )}
                   </div>
                   {r.comment && (
                     <div className="mt-1 text-sm">{r.comment}</div>

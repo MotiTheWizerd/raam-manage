@@ -13,6 +13,7 @@ type Apartment = {
   zone_id: number | null;
   zone_name: string | null;
   notes: string | null;
+  keys_comment: string | null;
 };
 
 type Asset = {
@@ -52,7 +53,7 @@ export default async function ApartmentPage({
 
   const apartment = db
     .prepare(
-      `SELECT a.id, a.number, a.floor, a.zone_id, a.notes,
+      `SELECT a.id, a.number, a.floor, a.zone_id, a.notes, a.keys_comment,
               z.name AS zone_name
        FROM apartments a
        LEFT JOIN zones z ON z.id = a.zone_id

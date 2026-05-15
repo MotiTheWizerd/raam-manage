@@ -25,6 +25,16 @@ export type GuestParkingRow = {
   created_at: string;
 };
 
+export type PaginatedGuestParking = {
+  rows: GuestParkingRow[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+};
+
+const DEFAULT_HISTORY_PAGE_SIZE = 30;
+
 const ROW_SELECT = `
   SELECT
     g.id,
@@ -47,23 +57,61 @@ export async function getRecentGuestParking(
   residentId: number | null,
   limit: number = 10
 ): Promise<GuestParkingRow[]> {
+  const result = await getGuestParkingPage(residentId, 1, limit);
+  return result.rows;
+}
+
+export async function getGuestParkingPage(
+  residentId: number | null,
+  page: number = 1,
+  pageSize: number = DEFAULT_HISTORY_PAGE_SIZE
+): Promise<PaginatedGuestParking> {
+  const safePageSize = Math.max(1, Math.min(100, Math.floor(pageSize)));
+  const requestedPage = Math.max(1, Math.floor(page));
+
+  const total = (
+    residentId !== null
+      ? (db
+          .prepare(
+            `SELECT COUNT(*) AS count FROM guest_parking WHERE resident_id = ?`
+          )
+          .get(residentId) as { count: number })
+      : (db
+          .prepare(`SELECT COUNT(*) AS count FROM guest_parking`)
+          .get() as { count: number })
+  ).count;
+
+  const totalPages = Math.max(1, Math.ceil(total / safePageSize));
+  const safePage = Math.min(requestedPage, totalPages);
+  const offset = (safePage - 1) * safePageSize;
+
+  let rows: GuestParkingRow[];
   if (residentId !== null) {
-    return db
+    rows = db
       .prepare(
         `${ROW_SELECT}
          WHERE g.resident_id = ?
          ORDER BY g.id DESC
-         LIMIT ?`
+         LIMIT ? OFFSET ?`
       )
-      .all(residentId, limit) as GuestParkingRow[];
+      .all(residentId, safePageSize, offset) as GuestParkingRow[];
+  } else {
+    rows = db
+      .prepare(
+        `${ROW_SELECT}
+         ORDER BY g.id DESC
+         LIMIT ? OFFSET ?`
+      )
+      .all(safePageSize, offset) as GuestParkingRow[];
   }
-  return db
-    .prepare(
-      `${ROW_SELECT}
-       ORDER BY g.id DESC
-       LIMIT ?`
-    )
-    .all(limit) as GuestParkingRow[];
+
+  return {
+    rows,
+    page: safePage,
+    pageSize: safePageSize,
+    total,
+    totalPages,
+  };
 }
 
 export async function searchGuestParking(

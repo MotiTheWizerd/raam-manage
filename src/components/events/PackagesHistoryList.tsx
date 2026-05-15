@@ -6,6 +6,7 @@ import {
   type PackageRow,
 } from "@/app/events/packages-actions";
 import { useIsManager } from "@/components/AuthProvider";
+import { ApartmentLink, ResidentLink } from "@/components/entity-links";
 import { cn } from "@/lib/cn";
 import { DeleteEventButton } from "./DeleteEventButton";
 
@@ -40,6 +41,16 @@ function formatTimestamp(iso: string) {
 
 function recipientLabel(r: PackageRow) {
   return r.resident_full_name ?? r.recipient_name ?? "—";
+}
+
+function recipientNode(r: PackageRow) {
+  const label = recipientLabel(r);
+  if (r.resident_id === null || !r.resident_full_name) return label;
+  return (
+    <ResidentLink id={r.resident_id} isNewTab>
+      {label}
+    </ResidentLink>
+  );
 }
 
 export function PackagesHistoryList({ rows, onDeleted }: Props) {
@@ -79,10 +90,17 @@ export function PackagesHistoryList({ rows, onDeleted }: Props) {
                   <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm">
                     {r.apartment_number && (
                       <span className="font-medium">
-                        דירה {r.apartment_number} ·
+                        {r.apartment_id ? (
+                          <ApartmentLink id={r.apartment_id} isNewTab>
+                            דירה {r.apartment_number}
+                          </ApartmentLink>
+                        ) : (
+                          <>דירה {r.apartment_number}</>
+                        )}{" "}
+                        ·
                       </span>
                     )}
-                    <span className="font-medium">{recipientLabel(r)}</span>
+                    <span className="font-medium">{recipientNode(r)}</span>
                     <span className="text-xs opacity-70">
                       · {TYPE_LABEL[r.type]}
                     </span>
@@ -105,6 +123,9 @@ export function PackagesHistoryList({ rows, onDeleted }: Props) {
                       <span className="text-emerald-700 dark:text-emerald-300">
                         · נמסרה: {formatTimestamp(r.delivered_at)}
                       </span>
+                    )}
+                    {delivered && r.delivered_to && (
+                      <span>· נמסרה ל: {r.delivered_to}</span>
                     )}
                     {!delivered && (
                       <span className="text-amber-700 dark:text-amber-300">

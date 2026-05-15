@@ -6,6 +6,7 @@ import {
   type GuestParkingRow,
 } from "@/app/events/guest-parking-actions";
 import { useIsManager } from "@/components/AuthProvider";
+import { ApartmentLink, ResidentLink } from "@/components/entity-links";
 import { DeleteEventButton } from "./DeleteEventButton";
 
 type Props = {
@@ -54,7 +55,14 @@ export function GuestParkingHistoryList({
                 <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-sm">
                   {showApartment && r.apartment_number && (
                     <span className="text-xs font-medium opacity-70">
-                      דירה {r.apartment_number} ·
+                      {r.apartment_id ? (
+                        <ApartmentLink id={r.apartment_id} isNewTab>
+                          דירה {r.apartment_number}
+                        </ApartmentLink>
+                      ) : (
+                        <>דירה {r.apartment_number}</>
+                      )}{" "}
+                      ·
                     </span>
                   )}
                   {r.guest_name && (
@@ -73,13 +81,26 @@ export function GuestParkingHistoryList({
                   {r.resident_full_name && (
                     <span>
                       אצל:{" "}
-                      {r.apartment_number && (
+                      {r.apartment_number && r.apartment_id && (
+                        <span className="font-medium">
+                          <ApartmentLink id={r.apartment_id} isNewTab>
+                            דירה {r.apartment_number}
+                          </ApartmentLink>
+                        </span>
+                      )}
+                      {r.apartment_number && !r.apartment_id && (
                         <span className="font-medium">
                           דירה {r.apartment_number}
                         </span>
                       )}
                       {r.apartment_number && " · "}
-                      {r.resident_full_name}
+                      {r.resident_id ? (
+                        <ResidentLink id={r.resident_id} isNewTab>
+                          {r.resident_full_name}
+                        </ResidentLink>
+                      ) : (
+                        r.resident_full_name
+                      )}
                     </span>
                   )}
                   {r.lobbyist_name && (

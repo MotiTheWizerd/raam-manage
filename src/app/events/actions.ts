@@ -52,6 +52,16 @@ export async function getApartmentKeysForEvents(
     .all(apartmentId) as EventsKeyRow[];
 }
 
+export async function getApartmentKeysComment(
+  apartmentId: number
+): Promise<string | null> {
+  const row = db
+    .prepare("SELECT keys_comment FROM apartments WHERE id = ?")
+    .get(apartmentId) as { keys_comment: string | null } | undefined;
+
+  return row?.keys_comment ?? null;
+}
+
 export type KeyHistoryRow = {
   id: number;
   created_at: string;
@@ -66,10 +76,32 @@ export type KeyHistoryRow = {
   comment: string | null;
 };
 
+export type PaginatedKeyHistory = {
+  rows: KeyHistoryRow[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+};
+
+const DEFAULT_HISTORY_PAGE_SIZE = 30;
+
 export async function getRecentKeysHistory(
   apartmentId: number | null,
   limit: number = 10
 ): Promise<KeyHistoryRow[]> {
+  const result = await getKeysHistoryPage(apartmentId, 1, limit);
+  return result.rows;
+}
+
+export async function getKeysHistoryPage(
+  apartmentId: number | null,
+  page: number = 1,
+  pageSize: number = DEFAULT_HISTORY_PAGE_SIZE
+): Promise<PaginatedKeyHistory> {
+  const safePageSize = Math.max(1, Math.min(100, Math.floor(pageSize)));
+  const requestedPage = Math.max(1, Math.floor(page));
+
   const baseSelect = `SELECT
        h.id,
        h.created_at,
@@ -89,24 +121,52 @@ export async function getRecentKeysHistory(
      JOIN apartments a ON a.id = k.apartment_id
      LEFT JOIN residents r ON r.id = h.resident_id`;
 
+  const total = (
+    apartmentId !== null
+      ? (db
+          .prepare(
+            `SELECT COUNT(*) AS count
+             FROM apartment_keys_history h
+             JOIN apartment_keys k ON k.id = h.apartment_key_id
+             WHERE k.apartment_id = ?`
+          )
+          .get(apartmentId) as { count: number })
+      : (db
+          .prepare(`SELECT COUNT(*) AS count FROM apartment_keys_history`)
+          .get() as { count: number })
+  ).count;
+
+  const totalPages = Math.max(1, Math.ceil(total / safePageSize));
+  const safePage = Math.min(requestedPage, totalPages);
+  const offset = (safePage - 1) * safePageSize;
+
+  let rows: KeyHistoryRow[];
   if (apartmentId !== null) {
-    return db
+    rows = db
       .prepare(
         `${baseSelect}
          WHERE k.apartment_id = ?
          ORDER BY h.id DESC
-         LIMIT ?`
+         LIMIT ? OFFSET ?`
       )
-      .all(apartmentId, limit) as KeyHistoryRow[];
+      .all(apartmentId, safePageSize, offset) as KeyHistoryRow[];
+  } else {
+    rows = db
+      .prepare(
+        `${baseSelect}
+         ORDER BY h.id DESC
+         LIMIT ? OFFSET ?`
+      )
+      .all(safePageSize, offset) as KeyHistoryRow[];
   }
 
-  return db
-    .prepare(
-      `${baseSelect}
-       ORDER BY h.id DESC
-       LIMIT ?`
-    )
-    .all(limit) as KeyHistoryRow[];
+  return {
+    rows,
+    page: safePage,
+    pageSize: safePageSize,
+    total,
+    totalPages,
+  };
 }
 
 export type ApartmentResidentOption = {

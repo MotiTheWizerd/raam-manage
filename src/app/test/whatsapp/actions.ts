@@ -24,6 +24,27 @@ export type WhatsAppMessageRow = {
   created_at: string;
 };
 
+export type ResidentPhoneOption = {
+  id: number;
+  number: string;
+  label: string | null;
+  comment: string | null;
+  is_primary: number;
+};
+
+export async function getResidentPhoneOptions(
+  residentId: number
+): Promise<ResidentPhoneOption[]> {
+  return db
+    .prepare(
+      `SELECT id, number, label, comment, is_primary
+         FROM phones
+        WHERE resident_id = ?
+        ORDER BY is_primary DESC, id ASC`
+    )
+    .all(residentId) as ResidentPhoneOption[];
+}
+
 export async function getWhatsAppMessages(args: {
   residentId?: number | null;
   phone?: string | null;

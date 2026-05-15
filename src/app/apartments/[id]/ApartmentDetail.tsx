@@ -14,6 +14,7 @@ type Apartment = {
   zone_id: number | null;
   zone_name: string | null;
   notes: string | null;
+  keys_comment: string | null;
 };
 
 type Asset = {
@@ -98,6 +99,7 @@ export function ApartmentDetail({
           initialParking={toAssetInit(parking)}
           initialStorage={toAssetInit(storage)}
           initialKeys={toKeyInit(keys)}
+          initialKeysComment={apartment.keys_comment}
           initialVehicles={toVehicleInit(vehicles)}
           hiddenIdValue={apartment.id}
           action={updateApartment}

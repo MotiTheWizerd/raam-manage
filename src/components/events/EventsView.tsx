@@ -31,11 +31,12 @@ export function EventsView() {
   });
   const [guestPlatePrefill, setGuestPlatePrefill] = useState<{
     plate: string;
+    guestName?: string | null;
     nonce: number;
   } | null>(null);
 
   const handleUseCarForGuest = useCallback(
-    (plate: string) => {
+    (plate: string, guestName?: string | null) => {
       const trimmed = plate.trim();
       if (!trimmed) return;
       if (!resident) {
@@ -44,6 +45,7 @@ export function EventsView() {
       }
       setGuestPlatePrefill((prev) => ({
         plate: trimmed,
+        guestName: guestName?.trim() || null,
         nonce: (prev?.nonce ?? 0) + 1,
       }));
       setTab("vehicles");

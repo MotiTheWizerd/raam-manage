@@ -19,7 +19,7 @@ const initialState: GuestParkingFormState = {};
 type Props = {
   residentId: number;
   onCreated: () => void;
-  prefill?: { plate: string; nonce: number } | null;
+  prefill?: { plate: string; guestName?: string | null; nonce: number } | null;
 };
 
 export function GuestParkingSection({ residentId, onCreated, prefill }: Props) {
@@ -29,6 +29,7 @@ export function GuestParkingSection({ residentId, onCreated, prefill }: Props) {
   );
   const formRef = useRef<HTMLFormElement>(null);
   const plateInputRef = useRef<HTMLInputElement>(null);
+  const guestNameInputRef = useRef<HTMLInputElement>(null);
   const [fetchingPlate, setFetchingPlate] = useState(false);
   const activeLobbyist = useActiveLobbyist();
 
@@ -61,12 +62,21 @@ export function GuestParkingSection({ residentId, onCreated, prefill }: Props) {
   }, [state.submittedAt, onCreated]);
 
   useEffect(() => {
-    const plate = prefill?.plate?.trim();
-    if (!plate || !plateInputRef.current) return;
-    plateInputRef.current.value = plate;
-    plateInputRef.current.focus();
-    plateInputRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
-  }, [prefill?.nonce, prefill?.plate]);
+    if (!prefill) return;
+    const plate = prefill.plate?.trim();
+    const guestName = prefill.guestName?.trim();
+    if (plate && plateInputRef.current) plateInputRef.current.value = plate;
+    if (guestName && guestNameInputRef.current) {
+      guestNameInputRef.current.value = guestName;
+    }
+    // Land on the name when it's a known guest (so staff can confirm it),
+    // otherwise on the plate for manual entry.
+    const focusTarget = guestName
+      ? guestNameInputRef.current
+      : plateInputRef.current;
+    focusTarget?.focus();
+    focusTarget?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [prefill?.nonce]);
 
   return (
     <section className="space-y-3">
@@ -84,6 +94,7 @@ export function GuestParkingSection({ residentId, onCreated, prefill }: Props) {
             שם האורח
           </label>
           <Input
+            ref={guestNameInputRef}
             id="guest-name"
             name="guest_name"
             required

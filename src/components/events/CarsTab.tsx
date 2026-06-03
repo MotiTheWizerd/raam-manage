@@ -151,7 +151,7 @@ function CarDetails({ row }: { row: SlprCarEventRow | null }) {
 }
 
 type CarsTabProps = {
-  onUseForGuest: (plate: string) => void;
+  onUseForGuest: (plate: string, guestName?: string | null) => void;
 };
 
 export function CarsTab({ onUseForGuest }: CarsTabProps) {
@@ -306,7 +306,9 @@ export function CarsTab({ onUseForGuest }: CarsTabProps) {
                         <td className="px-3 py-2.5 text-center">
                           <button
                             type="button"
-                            onClick={() => onUseForGuest(row.plate)}
+                            onClick={() =>
+                              onUseForGuest(row.plate, row.guest?.guestName)
+                            }
                             disabled={!row.plate}
                             aria-label={`רישום חניית אורח עם רישוי ${row.plate}`}
                             title="רישום חניית אורח עם רישוי זה"

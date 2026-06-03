@@ -22,7 +22,11 @@ const HISTORY_PAGE_SIZE = 10;
 type Props = {
   apartmentId: number | null;
   residentId: number | null;
-  guestPlatePrefill?: { plate: string; nonce: number } | null;
+  guestPlatePrefill?: {
+    plate: string;
+    guestName?: string | null;
+    nonce: number;
+  } | null;
 };
 
 export function VehiclesTab({ apartmentId, residentId, guestPlatePrefill }: Props) {

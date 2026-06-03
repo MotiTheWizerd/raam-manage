@@ -4,10 +4,12 @@ import { ImageIcon, RefreshCw, UserRound, UserRoundPlus } from "lucide-react";
 import NextImage from "next/image";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  forgetResidentGuest,
   getRecentCarEvents,
   type SlprCarEventRow,
 } from "@/app/events/cars-actions";
 import { Button } from "@/components/ui/Button";
+import { DeleteEventButton } from "@/components/events/DeleteEventButton";
 import { cn } from "@/lib/cn";
 
 const AUTO_REFRESH_MS = 10000;
@@ -53,7 +55,13 @@ function DetailRow({ label, value }: { label: string; value: React.ReactNode }) 
   );
 }
 
-function CarDetails({ row }: { row: SlprCarEventRow | null }) {
+function CarDetails({
+  row,
+  onForgetGuest,
+}: {
+  row: SlprCarEventRow | null;
+  onForgetGuest: () => void;
+}) {
   const src = imageUrl(row?.imagePath ?? null);
 
   if (!row) {
@@ -100,17 +108,30 @@ function CarDetails({ row }: { row: SlprCarEventRow | null }) {
       </div>
 
       {row.guest && (
-        <div className="mb-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs dark:border-emerald-900 dark:bg-emerald-950/30">
-          <div className="font-semibold text-emerald-700 dark:text-emerald-300">
-            אורח מזוהה: {row.guest.guestName || "אורח ידוע"}
-          </div>
-          {(row.guest.apartmentNumber || row.guest.residentName) && (
-            <div className="mt-0.5 opacity-70">
-              {row.guest.apartmentNumber ? `דירה ${row.guest.apartmentNumber}` : ""}
-              {row.guest.apartmentNumber && row.guest.residentName ? " · " : ""}
-              {row.guest.residentName ?? ""}
+        <div className="mb-3 flex items-start justify-between gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs dark:border-emerald-900 dark:bg-emerald-950/30">
+          <div>
+            <div className="font-semibold text-emerald-700 dark:text-emerald-300">
+              אורח מזוהה: {row.guest.guestName || "אורח ידוע"}
             </div>
-          )}
+            {(row.guest.apartmentNumber || row.guest.residentName) && (
+              <div className="mt-0.5 opacity-70">
+                {row.guest.apartmentNumber ? `דירה ${row.guest.apartmentNumber}` : ""}
+                {row.guest.apartmentNumber && row.guest.residentName ? " · " : ""}
+                {row.guest.residentName ?? ""}
+              </div>
+            )}
+          </div>
+          <DeleteEventButton
+            id={row.guest.id}
+            action={forgetResidentGuest}
+            successMessage="האורח הוסר מהזיהוי"
+            confirmTitle="הסרת אורח מזוהה"
+            confirmDescription={`להסיר את "${
+              row.guest.guestName || "האורח"
+            }" מזיהוי לוחית ${row.plate}? הרכב לא יזוהה אוטומטית יותר.`}
+            ariaLabel="הסר אורח מזוהה"
+            onDeleted={onForgetGuest}
+          />
         </div>
       )}
 
@@ -341,7 +362,7 @@ export function CarsTab({ onUseForGuest }: CarsTabProps) {
           </div>
         </div>
 
-        <CarDetails row={selectedRow} />
+        <CarDetails row={selectedRow} onForgetGuest={load} />
       </div>
     </div>
   );

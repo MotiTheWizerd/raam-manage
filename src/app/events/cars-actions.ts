@@ -5,6 +5,7 @@ import { normalizePlate } from "@/lib/plate";
 import { querySlpr } from "@/lib/slpr-mysql";
 
 export type RecognizedGuest = {
+  id: number;
   guestName: string | null;
   residentId: number | null;
   apartmentId: number | null;
@@ -25,6 +26,7 @@ export type SlprCarEventRow = {
 };
 
 type ResidentGuestLookupRow = {
+  id: number;
   plate_key: string;
   guest_name: string | null;
   resident_id: number | null;
@@ -50,6 +52,7 @@ function matchKnownGuests(
   const rows = db
     .prepare(
       `SELECT
+         rg.id,
          rg.plate_key,
          rg.guest_name,
          rg.resident_id,
@@ -68,6 +71,7 @@ function matchKnownGuests(
   const map = new Map<string, RecognizedGuest>();
   for (const row of rows) {
     map.set(row.plate_key, {
+      id: row.id,
       guestName: row.guest_name?.trim() || null,
       residentId: row.resident_id,
       apartmentId: row.apartment_id,
@@ -76,6 +80,30 @@ function matchKnownGuests(
     });
   }
   return map;
+}
+
+export type ForgetGuestState = {
+  error?: string;
+  errorAt?: number;
+  submittedAt?: number;
+};
+
+/** Remove a learned guest so its plate stops being recognized. */
+export async function forgetResidentGuest(
+  _prev: ForgetGuestState,
+  formData: FormData
+): Promise<ForgetGuestState> {
+  const id = parseInt(String(formData.get("id") ?? "").trim(), 10);
+  if (Number.isNaN(id)) return { error: "מזהה לא חוקי", errorAt: Date.now() };
+
+  const result = db
+    .prepare("DELETE FROM resident_guests WHERE id = ?")
+    .run(id);
+  if (result.changes === 0) {
+    return { error: "הרישום לא נמצא", errorAt: Date.now() };
+  }
+
+  return { submittedAt: Date.now() };
 }
 
 type SlprRawLogRow = {

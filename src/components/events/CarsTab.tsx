@@ -30,6 +30,18 @@ function imageUrl(path: string | null): string | null {
   return `/api/slpr/image?path=${encodeURIComponent(path)}`;
 }
 
+/**
+ * Compact "DD/MM HH:MM" for the table — drops year and seconds. The full
+ * timestamp stays available via the cell's title (hover). Falls back to the
+ * raw value if the shape is unexpected.
+ */
+function formatEventTime(raw: string): string {
+  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/);
+  if (!match) return raw;
+  const [, , month, day, hour, minute] = match;
+  return `${day}/${month} ${hour}:${minute}`;
+}
+
 function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="grid grid-cols-[4.75rem_1fr] items-center gap-2 text-xs">
@@ -86,6 +98,21 @@ function CarDetails({ row }: { row: SlprCarEventRow | null }) {
           <UserRound size={42} className="text-zinc-500" />
         </div>
       </div>
+
+      {row.guest && (
+        <div className="mb-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs dark:border-emerald-900 dark:bg-emerald-950/30">
+          <div className="font-semibold text-emerald-700 dark:text-emerald-300">
+            אורח מזוהה: {row.guest.guestName || "אורח ידוע"}
+          </div>
+          {(row.guest.apartmentNumber || row.guest.residentName) && (
+            <div className="mt-0.5 opacity-70">
+              {row.guest.apartmentNumber ? `דירה ${row.guest.apartmentNumber}` : ""}
+              {row.guest.apartmentNumber && row.guest.residentName ? " · " : ""}
+              {row.guest.residentName ?? ""}
+            </div>
+          )}
+        </div>
+      )}
 
       {src ? (
         <div className="space-y-2">
@@ -207,8 +234,7 @@ export function CarsTab({ onUseForGuest }: CarsTabProps) {
                   <th className="px-3 py-2 font-medium text-start">מספר רישוי</th>
                   <th className="px-3 py-2 font-medium text-start">תאריך</th>
                   <th className="px-3 py-2 font-medium text-start">סטטוס</th>
-                  <th className="px-3 py-2 font-medium text-start">מצלמה</th>
-                  <th className="px-3 py-2 font-medium text-start">לקוח</th>
+                  <th className="px-3 py-2 font-medium text-start">אורח מזוהה</th>
                   <th className="px-3 py-2 font-medium text-center">רישום אורח</th>
                   <th className="px-3 py-2 font-medium text-center">פרטים</th>
                 </tr>
@@ -216,13 +242,13 @@ export function CarsTab({ onUseForGuest }: CarsTabProps) {
               <tbody className="divide-y divide-black/5 dark:divide-white/5">
                 {loading && rows.length === 0 ? (
                   <tr>
-                    <td className="px-3 py-7 text-center opacity-60" colSpan={7}>
+                    <td className="px-3 py-7 text-center opacity-60" colSpan={6}>
                       טוען רכבים...
                     </td>
                   </tr>
                 ) : rows.length === 0 ? (
                   <tr>
-                    <td className="px-3 py-7 text-center opacity-60" colSpan={7}>
+                    <td className="px-3 py-7 text-center opacity-60" colSpan={6}>
                       אין אירועי רכבים להצגה
                     </td>
                   </tr>
@@ -240,8 +266,12 @@ export function CarsTab({ onUseForGuest }: CarsTabProps) {
                         <td className="px-3 py-2.5 font-mono font-semibold" dir="ltr">
                           {row.plate || "-"}
                         </td>
-                        <td className="whitespace-nowrap px-3 py-2.5" dir="ltr">
-                          {row.eventTime || "-"}
+                        <td
+                          className="whitespace-nowrap px-3 py-2.5"
+                          dir="ltr"
+                          title={row.eventTime || undefined}
+                        >
+                          {formatEventTime(row.eventTime) || "-"}
                         </td>
                         <td className="px-3 py-2.5">
                           <span
@@ -254,9 +284,24 @@ export function CarsTab({ onUseForGuest }: CarsTabProps) {
                            {row.status && row.status.toUpperCase() != "INVALID" ?  "מאושר" : "לא מאושר"} 
                           </span>
                         </td>
-                        <td className="px-3 py-2.5">{formatCamera(row.cameraId)}</td>
-                        <td className="px-3 py-2.5" dir="ltr">
-                          {row.customerId && row.customerId > 0 ? row.customerId : "-"}
+                        <td className="px-3 py-2.5">
+                          {row.guest ? (
+                            <div className="flex flex-col">
+                              <span className="font-medium text-emerald-700 dark:text-emerald-300">
+                                {row.guest.guestName || "אורח ידוע"}
+                              </span>
+                              {row.guest.apartmentNumber && (
+                                <span className="text-[11px] opacity-60">
+                                  דירה {row.guest.apartmentNumber}
+                                  {row.guest.residentName
+                                    ? ` · ${row.guest.residentName}`
+                                    : ""}
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="opacity-40">-</span>
+                          )}
                         </td>
                         <td className="px-3 py-2.5 text-center">
                           <button

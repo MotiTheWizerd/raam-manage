@@ -5,7 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 const DB_PATH = path.join(process.cwd(), "data", "raam.db");
-const SCHEMA_EVOLUTION_VERSION = 3;
+const SCHEMA_EVOLUTION_VERSION = 4;
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS zones (
@@ -230,6 +230,17 @@ CREATE TABLE IF NOT EXISTS equipment_loans (
 CREATE INDEX IF NOT EXISTS idx_equipment_loans_resident ON equipment_loans(resident_id);
 CREATE INDEX IF NOT EXISTS idx_equipment_loans_open ON equipment_loans(resident_id) WHERE is_returned = 0;
 
+CREATE TABLE IF NOT EXISTS resident_guests (
+  id           INTEGER PRIMARY KEY,
+  plate_key    TEXT NOT NULL UNIQUE,
+  car_plate    TEXT NOT NULL,
+  guest_name   TEXT NOT NULL DEFAULT '',
+  resident_id  INTEGER REFERENCES residents(id) ON DELETE SET NULL,
+  apartment_id INTEGER REFERENCES apartments(id) ON DELETE SET NULL,
+  created_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS user_preferences (
   id         INTEGER PRIMARY KEY CHECK (id = 1),
   data       TEXT NOT NULL DEFAULT '{}',
@@ -291,6 +302,17 @@ function applySchemaEvolution(db: Database.Database) {
     );
     CREATE INDEX IF NOT EXISTS idx_equipment_loans_resident ON equipment_loans(resident_id);
     CREATE INDEX IF NOT EXISTS idx_equipment_loans_open ON equipment_loans(resident_id) WHERE is_returned = 0;
+
+    CREATE TABLE IF NOT EXISTS resident_guests (
+      id           INTEGER PRIMARY KEY,
+      plate_key    TEXT NOT NULL UNIQUE,
+      car_plate    TEXT NOT NULL,
+      guest_name   TEXT NOT NULL DEFAULT '',
+      resident_id  INTEGER REFERENCES residents(id) ON DELETE SET NULL,
+      apartment_id INTEGER REFERENCES apartments(id) ON DELETE SET NULL,
+      created_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
   `);
 
   // Seed any pre-existing users (added before login was a feature) with a

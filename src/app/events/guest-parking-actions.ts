@@ -1,6 +1,7 @@
 "use server";
 
 import { db } from "@/lib/db";
+import { normalizePlate } from "@/lib/plate";
 import { revalidatePath } from "next/cache";
 
 export type GuestParkingFormState = {
@@ -163,8 +164,44 @@ export async function createGuestParking(
     throw e;
   }
 
+  rememberResidentGuest(residentId, carPlate, guestName);
+
   revalidatePath("/events");
   return { submittedAt: Date.now() };
+}
+
+/**
+ * Build up the plate → guest memory used by the cars (רכבים) tab. First time we
+ * see a plate we record who it belongs to; if it's already known we leave it
+ * untouched. Never throws — a guest registration must not fail over this.
+ */
+function rememberResidentGuest(
+  residentId: number,
+  carPlate: string,
+  guestName: string
+) {
+  const plateKey = normalizePlate(carPlate);
+  if (!plateKey) return;
+
+  try {
+    const resident = db
+      .prepare(`SELECT apartment_id FROM residents WHERE id = ?`)
+      .get(residentId) as { apartment_id: number | null } | undefined;
+
+    db.prepare(
+      `INSERT OR IGNORE INTO resident_guests
+         (plate_key, car_plate, guest_name, resident_id, apartment_id)
+       VALUES (?, ?, ?, ?, ?)`
+    ).run(
+      plateKey,
+      carPlate,
+      guestName,
+      residentId,
+      resident?.apartment_id ?? null
+    );
+  } catch {
+    // Learning is best-effort; ignore failures.
+  }
 }
 
 export async function deleteGuestParking(

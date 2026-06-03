@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Building2, ClipboardList, Home, MessageCircle, Settings, UserCog, Users } from "lucide-react";
+import { Building2, ClipboardList, Crown, Home, MessageCircle, Settings, UserCog, Users } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/cn";
@@ -21,9 +21,10 @@ const items: Item[] = [
   { label: "אירועים", href: "/events", icon: ClipboardList },
   { label: "דירות", href: "/apartments", icon: Building2 },
   { label: "דיירים", href: "/renters", icon: Users },
-  { label: "פקידים", href: "/users", icon: UserCog, managerOnly: true },
+  { label: "בעלי דירות", href: "/owners", icon: Crown },
+  { label: "פקידי לובי", href: "/users", icon: UserCog, managerOnly: true },
   { label: "ווטסאפ", href: "/test/whatsapp", icon: MessageCircle },
-  { label: "הגדרות", href: "/settings", icon: Settings },
+  { label: "הגדרות", href: "/settings", icon: Settings, managerOnly: true },
 ];
 
 const EASE = [0.16, 1, 0.3, 1] as const;

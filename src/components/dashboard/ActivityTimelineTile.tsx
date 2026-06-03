@@ -27,8 +27,8 @@ export function ActivityTimelineTile({
 
   return (
     <ChartCard
-      title="פעילות היום"
-      subtitle="מפתחות, חבילות ואורחים — לפי שעה"
+      title="פעילות"
+      subtitle="מפתחות, חבילות ואורחים — 7 ימים אחרונים"
       value={total}
       accent="violet"
       delay={delay}
@@ -55,12 +55,11 @@ export function ActivityTimelineTile({
           </defs>
           <CartesianGrid strokeDasharray="3 3" stroke="currentColor" opacity={0.08} />
           <XAxis
-            dataKey="hour"
+            dataKey="label"
             reversed
             tick={{ fontSize: 10, fill: "currentColor", opacity: 0.6 }}
             tickLine={false}
             axisLine={false}
-            interval={2}
           />
           <YAxis
             allowDecimals={false}

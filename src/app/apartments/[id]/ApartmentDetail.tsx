@@ -1,11 +1,15 @@
 "use client";
 
 import { useIsManager } from "@/components/AuthProvider";
-import { updateApartment } from "../actions";
+import { updateApartment, updateApartmentKeys } from "../actions";
 import { ApartmentForm, type Zone } from "../ApartmentForm";
 import type { AssetInit } from "../AssetsFields";
-import type { KeyInit } from "../KeysFields";
+import { KeysFields, type KeyInit } from "../KeysFields";
 import type { VehicleInit } from "../VehiclesFields";
+import { useActionState } from "react";
+import { Button } from "@/components/ui/Button";
+import { useFormToasts } from "@/lib/hooks/useFormToasts";
+import type { ApartmentFormState } from "../actions";
 
 type Apartment = {
   id: number;
@@ -81,12 +85,19 @@ export function ApartmentDetail({
 
   const canEdit = useIsManager();
 
+  const [keysState, keysAction, keysPending] = useActionState(
+    updateApartmentKeys,
+    {} as ApartmentFormState
+  );
+  useFormToasts(keysState, "מפתחות עודכנו");
+
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-semibold tracking-tight">
         {canEdit ? "עריכת דירה" : "פרטי דירה"} {apartment.number}
       </h1>
-      <fieldset disabled={!canEdit} className="min-w-0 border-0 p-0 m-0">
+
+      {canEdit ? (
         <ApartmentForm
           zones={zones}
           initialValues={{
@@ -105,7 +116,43 @@ export function ApartmentDetail({
           action={updateApartment}
           submitLabel="שמור שינויים"
         />
-      </fieldset>
+      ) : (
+        <>
+          <fieldset disabled className="min-w-0 border-0 p-0 m-0">
+            <ApartmentForm
+              zones={zones}
+              initialValues={{
+                number: apartment.number,
+                floor: apartment.floor !== null ? String(apartment.floor) : "",
+                zone_id:
+                  apartment.zone_id !== null ? String(apartment.zone_id) : "",
+                notes: apartment.notes ?? "",
+              }}
+              initialParking={toAssetInit(parking)}
+              initialStorage={toAssetInit(storage)}
+              initialKeys={toKeyInit(keys)}
+              initialKeysComment={apartment.keys_comment}
+              initialVehicles={toVehicleInit(vehicles)}
+              hiddenIdValue={apartment.id}
+              action={updateApartment}
+              submitLabel="שמור שינויים"
+            />
+          </fieldset>
+
+          <form action={keysAction} className="space-y-3 pt-2 border-t border-black/10 dark:border-white/10">
+            <input type="hidden" name="id" value={apartment.id} />
+            <KeysFields
+              initial={toKeyInit(keys)}
+              initialComment={apartment.keys_comment}
+            />
+            <div className="flex justify-end pt-1">
+              <Button type="submit" size="sm" disabled={keysPending}>
+                {keysPending ? "שומר..." : "שמור מפתחות"}
+              </Button>
+            </div>
+          </form>
+        </>
+      )}
     </div>
   );
 }

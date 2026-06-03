@@ -1,5 +1,6 @@
 "use client";
 
+import { PackageCheck } from "lucide-react";
 import { useActionState, useEffect, useState } from "react";
 import {
   markPackageDelivered,
@@ -16,9 +17,10 @@ const initialState: PackageFormState = {};
 type Props = {
   packageId: number;
   onSuccess: () => void;
+  compact?: boolean;
 };
 
-export function MarkDeliveredButton({ packageId, onSuccess }: Props) {
+export function MarkDeliveredButton({ packageId, onSuccess, compact }: Props) {
   const [open, setOpen] = useState(false);
   const [state, action, pending] = useActionState(
     markPackageDelivered,
@@ -37,14 +39,26 @@ export function MarkDeliveredButton({ packageId, onSuccess }: Props) {
 
   return (
     <>
-      <Button
-        type="button"
-        size="sm"
-        variant="outline"
-        onClick={() => setOpen(true)}
-      >
-        סמן נמסרה
-      </Button>
+      {compact ? (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          aria-label="סמן נמסרה"
+          title="סמן נמסרה"
+          className="inline-flex items-center justify-center h-7 w-7 rounded opacity-50 hover:opacity-100 hover:text-emerald-600 dark:hover:text-emerald-400 transition-all"
+        >
+          <PackageCheck size={15} />
+        </button>
+      ) : (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={() => setOpen(true)}
+        >
+          סמן נמסרה
+        </Button>
+      )}
 
       <Modal
         open={open}

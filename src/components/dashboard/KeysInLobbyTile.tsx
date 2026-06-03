@@ -16,6 +16,7 @@ export function KeysInLobbyTile({
   return (
     <ChartCard
       title="מפתחות בלובי"
+      titleHref="/events?tab=keys"
       subtitle="פעילים, ניתנים למסירה"
       value={data.count}
       accent="amber"

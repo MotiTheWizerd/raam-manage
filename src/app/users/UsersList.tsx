@@ -46,7 +46,7 @@ export function UsersList({ users }: Props) {
 
       {filtered.length === 0 ? (
         <div className="rounded-lg border border-dashed border-black/10 dark:border-white/10 p-8 text-center text-sm opacity-60">
-          אין פקידים תואמים
+          אין פקידי לובי תואמים
         </div>
       ) : (
         <div className="rounded-lg border border-black/10 dark:border-white/10 overflow-hidden">
@@ -69,8 +69,8 @@ export function UsersList({ users }: Props) {
                   <td className="px-4 py-2.5 font-medium">{u.lobbyist_name}</td>
                   <td className="px-4 py-2.5 opacity-80">
                     {u.user_role === "manager" ? (
-                      <span className="inline-flex items-center gap-1.5 rounded-full bg-red-500/10 px-2 py-0.5 text-xs font-medium text-red-700 dark:text-red-300">
-                        פקיד - הרשאות
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-red-500/10 px-2 py-0.5 text-xs font-medium text-red-700 dark:text-sky-300">
+                        פקיד
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-500/10 px-2 py-0.5 text-xs font-medium text-sky-700 dark:text-sky-300">

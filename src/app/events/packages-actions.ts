@@ -42,6 +42,14 @@ export type PaginatedPackages = {
   totalPages: number;
 };
 
+export type PackageStatusFilter = "all" | "pending" | "delivered";
+
+function statusClause(status: PackageStatusFilter): string {
+  if (status === "pending") return "p.is_delivered = 0";
+  if (status === "delivered") return "p.is_delivered = 1";
+  return "1=1";
+}
+
 const DEFAULT_HISTORY_PAGE_SIZE = 30;
 
 const PACKAGE_SELECT = `
@@ -61,6 +69,49 @@ const PACKAGE_SELECT = `
   LEFT JOIN residents r ON r.id = p.resident_id
   LEFT JOIN apartments a ON a.id = r.apartment_id
 `;
+
+export async function searchPackages(
+  rawQuery: string,
+  limit: number = 50,
+  status: PackageStatusFilter = "all"
+): Promise<PackageRow[]> {
+  const q = rawQuery.trim();
+  if (!q) return [];
+  const like = `%${q}%`;
+  return db
+    .prepare(
+      `${PACKAGE_SELECT}
+       WHERE (a.number LIKE ?
+          OR (r.first_name || ' ' || r.last_name) LIKE ?
+          OR p.recipient_name LIKE ?)
+          AND ${statusClause(status)}
+       ORDER BY p.id DESC
+       LIMIT ?`
+    )
+    .all(like, like, like, limit) as PackageRow[];
+}
+
+export type PackagesPendingStats = {
+  totalPending: number;
+  uniqueResidents: number;
+};
+
+export async function getPackagesPendingStats(): Promise<PackagesPendingStats> {
+  const totalRow = db
+    .prepare(`SELECT COUNT(*) AS count FROM packages WHERE is_delivered = 0`)
+    .get() as { count: number };
+  const residentsRow = db
+    .prepare(
+      `SELECT COUNT(DISTINCT resident_id) AS count
+       FROM packages
+       WHERE is_delivered = 0 AND resident_id IS NOT NULL`
+    )
+    .get() as { count: number };
+  return {
+    totalPending: totalRow.count,
+    uniqueResidents: residentsRow.count,
+  };
+}
 
 export async function getResidentPendingPackages(
   residentId: number
@@ -85,18 +136,23 @@ export async function getRecentPackages(
 export async function getPackagesPage(
   residentId: number | null,
   page: number = 1,
-  pageSize: number = DEFAULT_HISTORY_PAGE_SIZE
+  pageSize: number = DEFAULT_HISTORY_PAGE_SIZE,
+  status: PackageStatusFilter = "all"
 ): Promise<PaginatedPackages> {
   const safePageSize = Math.max(1, Math.min(100, Math.floor(pageSize)));
   const requestedPage = Math.max(1, Math.floor(page));
+  const where = statusClause(status);
 
   const total = (
     residentId !== null
       ? (db
-          .prepare(`SELECT COUNT(*) AS count FROM packages WHERE resident_id = ?`)
+          .prepare(
+            `SELECT COUNT(*) AS count FROM packages p
+             WHERE p.resident_id = ? AND ${where}`
+          )
           .get(residentId) as { count: number })
       : (db
-          .prepare(`SELECT COUNT(*) AS count FROM packages`)
+          .prepare(`SELECT COUNT(*) AS count FROM packages p WHERE ${where}`)
           .get() as { count: number })
   ).count;
 
@@ -109,7 +165,7 @@ export async function getPackagesPage(
     rows = db
       .prepare(
         `${PACKAGE_SELECT}
-         WHERE p.resident_id = ?
+         WHERE p.resident_id = ? AND ${where}
          ORDER BY p.id DESC
          LIMIT ? OFFSET ?`
       )
@@ -118,6 +174,7 @@ export async function getPackagesPage(
     rows = db
       .prepare(
         `${PACKAGE_SELECT}
+         WHERE ${where}
          ORDER BY p.id DESC
          LIMIT ? OFFSET ?`
       )

@@ -70,7 +70,7 @@ export function EditUserButton({ user }: Props) {
                 defaultValue={user.user_role}
                 options={[
                   { value: "lobbyist", label: "פקיד" },
-                  { value: "manager", label: "פקיד - הרשאות" },
+                  { value: "manager", label: "פקיד" },
                 ]}
               />
             </Field>

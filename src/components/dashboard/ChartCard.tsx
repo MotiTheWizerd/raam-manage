@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
+import Link from "next/link";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/cn";
 
@@ -16,6 +17,7 @@ const ACCENT_TEXT: Record<Accent, string> = {
 
 export function ChartCard({
   title,
+  titleHref,
   subtitle,
   value,
   accent = "red",
@@ -24,6 +26,7 @@ export function ChartCard({
   children,
 }: {
   title: string;
+  titleHref?: string;
   subtitle?: string;
   value?: ReactNode;
   accent?: Accent;
@@ -31,6 +34,16 @@ export function ChartCard({
   delay?: number;
   children?: ReactNode;
 }) {
+  const titleNode = titleHref ? (
+    <Link
+      href={titleHref}
+      className="text-sm font-medium opacity-80 hover:opacity-100 hover:underline underline-offset-4 decoration-current/40 transition-opacity"
+    >
+      {title}
+    </Link>
+  ) : (
+    <div className="text-sm font-medium opacity-80">{title}</div>
+  );
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
@@ -48,7 +61,7 @@ export function ChartCard({
           </div>
         ) : null}
         <div>
-          <div className="text-sm font-medium opacity-80">{title}</div>
+          {titleNode}
           {subtitle ? (
             <div className="text-xs opacity-50 mt-0.5">{subtitle}</div>
           ) : null}

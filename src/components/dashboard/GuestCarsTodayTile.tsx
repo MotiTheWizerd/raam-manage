@@ -1,7 +1,15 @@
 "use client";
 
-import { CarFront } from "lucide-react";
-import { ChartCard } from "./ChartCard";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import { ACCENTS, ChartCard } from "./ChartCard";
 import type { GuestCarsTodayData } from "@/lib/dashboard-queries";
 
 export function GuestCarsTodayTile({
@@ -11,55 +19,54 @@ export function GuestCarsTodayTile({
   data: GuestCarsTodayData;
   delay?: number;
 }) {
-  const hasEvents = data.recent.length > 0;
-
   return (
     <ChartCard
-      title="אורחים היום"
-      subtitle="מתחילת היום"
+      title="אורחים"
+      titleHref="/events?tab=vehicles"
+      subtitle="7 ימים אחרונים"
       value={data.count}
       accent="blue"
       delay={delay}
       className="h-56"
     >
-      {hasEvents ? (
-        <ul className="flex flex-col text-xs">
-          {data.recent.map((ev) => (
-            <li
-              key={ev.id}
-              className="flex items-center justify-between gap-2 py-1.5 border-b border-black/5 dark:border-white/5 last:border-b-0"
-            >
-              <span className="opacity-50 tabular-nums shrink-0 w-10">
-                {formatTime(ev.created_at)}
-              </span>
-              <span className="truncate flex-1 text-start">
-                {ev.guest_name || "—"}
-                {ev.apartment_number ? (
-                  <span className="opacity-50"> · דירה {ev.apartment_number}</span>
-                ) : null}
-              </span>
-              <span className="opacity-70 tabular-nums shrink-0 font-mono">
-                {ev.car_plate || "—"}
-              </span>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <div className="h-full flex items-center justify-center">
-          <CarFront
-            className="text-sky-500/20 dark:text-sky-400/15"
-            size={120}
-            strokeWidth={1.2}
+      <ResponsiveContainer width="100%" height={150}>
+        <BarChart data={data.series} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="currentColor" opacity={0.08} />
+          <XAxis
+            dataKey="label"
+            reversed
+            tick={{ fontSize: 11, fill: "currentColor", opacity: 0.6 }}
+            tickLine={false}
+            axisLine={false}
           />
-        </div>
-      )}
+          <YAxis
+            allowDecimals={false}
+            orientation="right"
+            tick={{ fontSize: 11, fill: "currentColor", opacity: 0.6 }}
+            tickLine={false}
+            axisLine={false}
+            width={28}
+          />
+          <Tooltip
+            contentStyle={{
+              fontSize: 12,
+              borderRadius: 8,
+              border: "1px solid rgba(0,0,0,0.1)",
+              background: "rgba(255,255,255,0.95)",
+              color: "#111",
+            }}
+            cursor={{ fill: "currentColor", opacity: 0.04 }}
+            labelStyle={{ direction: "rtl" }}
+          />
+          <Bar
+            dataKey="guests"
+            name="אורחים"
+            fill={ACCENTS.blue.fill}
+            radius={[3, 3, 0, 0]}
+            animationDuration={700}
+          />
+        </BarChart>
+      </ResponsiveContainer>
     </ChartCard>
   );
-}
-
-function formatTime(iso: string): string {
-  const utc = iso.includes("T") ? iso : iso.replace(" ", "T") + "Z";
-  const d = new Date(utc);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" });
 }

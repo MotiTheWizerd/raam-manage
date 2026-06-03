@@ -4,17 +4,15 @@ import { Moon, Sun } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 
-export function ThemeToggle() {
-  const [isDark, setIsDark] = useState(
-    () =>
-      typeof document !== "undefined" &&
-      document.documentElement.classList.contains("dark")
-  );
+export function ThemeToggle({ initialIsDark = false }: { initialIsDark?: boolean }) {
+  const [isDark, setIsDark] = useState(initialIsDark);
 
   function toggle() {
     const next = !isDark;
     document.documentElement.classList.toggle("dark", next);
-    localStorage.setItem("theme", next ? "dark" : "light");
+    const val = next ? "dark" : "light";
+    localStorage.setItem("theme", val);
+    document.cookie = `theme=${val}; path=/; max-age=31536000; SameSite=lax`;
     setIsDark(next);
   }
 

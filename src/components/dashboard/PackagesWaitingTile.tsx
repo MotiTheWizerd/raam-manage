@@ -22,6 +22,7 @@ export function PackagesWaitingTile({
   return (
     <ChartCard
       title="חבילות ממתינות לאיסוף"
+      titleHref="/events?tab=packages"
       subtitle="7 ימים אחרונים"
       value={data.pending}
       accent="red"

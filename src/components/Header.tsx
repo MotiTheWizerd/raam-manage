@@ -5,9 +5,10 @@ import { ThemeToggle } from "./ThemeToggle";
 
 type Props = {
   lobbyistName: string;
+  isDark: boolean;
 };
 
-export function Header({ lobbyistName }: Props) {
+export function Header({ lobbyistName, isDark }: Props) {
   return (
     <header className="h-14 shrink-0 border-b border-black/10 dark:border-white/10 flex items-center justify-between gap-4 px-4 bg-white dark:bg-black/40">
       <div className="flex items-center gap-2 shrink-0">
@@ -28,7 +29,7 @@ export function Header({ lobbyistName }: Props) {
         <SearchBar className="flex-1 max-w-sm" />
         <CurrentUserChip lobbyistName={lobbyistName} />
       </div>
-      <ThemeToggle />
+      <ThemeToggle initialIsDark={isDark} />
     </header>
   );
 }

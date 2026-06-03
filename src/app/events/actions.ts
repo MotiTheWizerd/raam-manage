@@ -94,15 +94,7 @@ export async function getRecentKeysHistory(
   return result.rows;
 }
 
-export async function getKeysHistoryPage(
-  apartmentId: number | null,
-  page: number = 1,
-  pageSize: number = DEFAULT_HISTORY_PAGE_SIZE
-): Promise<PaginatedKeyHistory> {
-  const safePageSize = Math.max(1, Math.min(100, Math.floor(pageSize)));
-  const requestedPage = Math.max(1, Math.floor(page));
-
-  const baseSelect = `SELECT
+const KEY_HISTORY_SELECT = `SELECT
        h.id,
        h.created_at,
        k.id        AS key_id,
@@ -120,6 +112,33 @@ export async function getKeysHistoryPage(
      JOIN apartment_keys k ON k.id = h.apartment_key_id
      JOIN apartments a ON a.id = k.apartment_id
      LEFT JOIN residents r ON r.id = h.resident_id`;
+
+export async function searchKeysHistory(
+  rawQuery: string,
+  limit: number = 50
+): Promise<KeyHistoryRow[]> {
+  const q = rawQuery.trim();
+  if (!q) return [];
+  const like = `%${q}%`;
+  return db
+    .prepare(
+      `${KEY_HISTORY_SELECT}
+       WHERE k.nickname LIKE ? OR a.number LIKE ?
+       ORDER BY h.id DESC
+       LIMIT ?`
+    )
+    .all(like, like, limit) as KeyHistoryRow[];
+}
+
+export async function getKeysHistoryPage(
+  apartmentId: number | null,
+  page: number = 1,
+  pageSize: number = DEFAULT_HISTORY_PAGE_SIZE
+): Promise<PaginatedKeyHistory> {
+  const safePageSize = Math.max(1, Math.min(100, Math.floor(pageSize)));
+  const requestedPage = Math.max(1, Math.floor(page));
+
+  const baseSelect = KEY_HISTORY_SELECT;
 
   const total = (
     apartmentId !== null

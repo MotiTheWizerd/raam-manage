@@ -15,7 +15,7 @@ type Lobbyist = { id: number; lobbyist_name: string; user_role: UserRole };
 
 const roleLabel: Record<UserRole, string> = {
   lobbyist: "פקיד",
-  manager: "פקיד - הרשאות",
+  manager: "פקיד",
 };
 
 type Props = {
@@ -54,11 +54,7 @@ export function LoginPicker({ lobbyists }: Props) {
             >
               <span className="text-base font-medium">{l.lobbyist_name}</span>
               <span
-                className={
-                  l.user_role === "manager"
-                    ? "inline-flex items-center rounded-full bg-red-500/10 px-2 py-0.5 text-[11px] font-medium text-red-700 dark:text-red-300"
-                    : "inline-flex items-center rounded-full bg-sky-500/10 px-2 py-0.5 text-[11px] font-medium text-sky-700 dark:text-sky-300"
-                }
+                className={"inline-flex items-center rounded-full bg-sky-500/10 px-2 py-0.5 text-[11px] font-medium text-sky-700 dark:text-sky-300" }
               >
                 {roleLabel[l.user_role]}
               </span>

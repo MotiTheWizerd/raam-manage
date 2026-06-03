@@ -1,19 +1,22 @@
 "use client";
 
-import { Home, Star } from "lucide-react";
+import { Home, Search, Star, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import {
   getApartmentKeysComment,
   getApartmentKeysForEvents,
   getApartmentResidents,
   getKeysHistoryPage,
+  searchKeysHistory,
   type ApartmentResidentOption,
   type EventsKeyRow,
   type KeyHistoryRow,
 } from "@/app/events/actions";
 import { Button } from "@/components/ui/Button";
 import { ResidentLink } from "@/components/entity-links";
+import { Input } from "@/components/ui/Input";
 import { Pagination } from "@/components/ui/Pagination";
+import { useDebouncedValue } from "@/lib/hooks/useDebouncedValue";
 import { cn } from "@/lib/cn";
 import { KeysHistoryList } from "./KeysHistoryList";
 import { LogKeyEventModal } from "./LogKeyEventModal";
@@ -34,12 +37,24 @@ export function KeysTab({ apartmentId }: Props) {
   const [residents, setResidents] = useState<ApartmentResidentOption[]>([]);
   const [refreshTick, setRefreshTick] = useState(0);
   const [activeKey, setActiveKey] = useState<EventsKeyRow | null>(null);
+  const [query, setQuery] = useState("");
+  const debouncedQuery = useDebouncedValue(query.trim(), 250);
+  const searching = debouncedQuery.length > 0;
 
   const refresh = useCallback(() => setRefreshTick((t) => t + 1), []);
   const handleCloseModal = useCallback(() => setActiveKey(null), []);
 
   useEffect(() => {
     let active = true;
+    if (searching) {
+      searchKeysHistory(debouncedQuery, 50).then((rows) => {
+        if (!active) return;
+        setHistory(rows);
+        setHistoryTotal(rows.length);
+        setHistoryTotalPages(1);
+      });
+      return () => { active = false; };
+    }
     if (apartmentId === null) {
       getKeysHistoryPage(null, historyPage, HISTORY_PAGE_SIZE).then((result) => {
         if (!active) return;
@@ -71,7 +86,7 @@ export function KeysTab({ apartmentId }: Props) {
     return () => {
       active = false;
     };
-  }, [apartmentId, refreshTick, historyPage]);
+  }, [apartmentId, refreshTick, historyPage, searching, debouncedQuery]);
 
   return (
     <div className="space-y-6">
@@ -89,19 +104,48 @@ export function KeysTab({ apartmentId }: Props) {
         </div>
       )}
 
-      <KeysHistoryList
-        rows={history}
-        showApartment={apartmentId === null}
-        onDeleted={refresh}
-      />
+      <section className="space-y-3">
+        <div className="relative max-w-sm">
+          <Search
+            size={14}
+            aria-hidden="true"
+            className="pointer-events-none absolute top-1/2 -translate-y-1/2 start-3 opacity-50"
+          />
+          <Input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="חיפוש לפי שם מפתח או מספר דירה"
+            className="ps-9 pe-9"
+          />
+          {query && (
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              aria-label="נקה חיפוש"
+              className="absolute top-1/2 -translate-y-1/2 end-2 inline-flex items-center justify-center h-6 w-6 rounded-full opacity-60 hover:opacity-100 hover:bg-black/[0.05] dark:hover:bg-white/[0.06] transition-colors"
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
 
-      <Pagination
-        page={historyPage}
-        totalPages={historyTotalPages}
-        pageSize={HISTORY_PAGE_SIZE}
-        total={historyTotal}
-        onPageChange={setHistoryPage}
-      />
+        <KeysHistoryList
+          rows={history}
+          showApartment={searching || apartmentId === null}
+          onDeleted={refresh}
+        />
+
+        {!searching && (
+          <Pagination
+            page={historyPage}
+            totalPages={historyTotalPages}
+            pageSize={HISTORY_PAGE_SIZE}
+            total={historyTotal}
+            onPageChange={setHistoryPage}
+          />
+        )}
+      </section>
 
       {activeKey && apartmentId !== null && (
         <LogKeyEventModal

@@ -354,3 +354,38 @@ export async function updateApartment(
   revalidatePath("/");
   return { submittedAt: Date.now() };
 }
+
+export async function updateApartmentKeys(
+  _prev: ApartmentFormState,
+  formData: FormData
+): Promise<ApartmentFormState> {
+  const idRaw = String(formData.get("id") ?? "").trim();
+  const id = parseInt(idRaw, 10);
+  if (Number.isNaN(id)) return fail("מזהה לא חוקי");
+
+  const keys = parseKeys(formData);
+  if ("error" in keys) return fail(keys.error);
+
+  const keys_comment =
+    String(formData.get("keys_comment") ?? "").trim() || null;
+
+  try {
+    const tx = db.transaction(() => {
+      db.prepare(
+        `UPDATE apartments SET keys_comment = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
+      ).run(keys_comment, id);
+      db.prepare(`DELETE FROM apartment_keys WHERE apartment_id = ?`).run(id);
+      insertKeys(id, keys);
+    });
+    tx();
+  } catch (e) {
+    if ((e as { code?: string }).code === "SQLITE_CONSTRAINT_FOREIGNKEY") {
+      return fail("דירה לא נמצאה");
+    }
+    throw e;
+  }
+
+  revalidatePath(`/apartments/${id}`);
+  revalidatePath("/events");
+  return { submittedAt: Date.now() };
+}

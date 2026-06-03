@@ -51,7 +51,7 @@ export function AddUserButton() {
               defaultValue="lobbyist"
               options={[
                 { value: "lobbyist", label: "פקיד" },
-                { value: "manager", label: "פקיד - הרשאות" },
+                { value: "manager", label: "פקיד" },
               ]}
             />
           </Field>

@@ -9,10 +9,12 @@ import { useIsManager } from "@/components/AuthProvider";
 import { ApartmentLink, ResidentLink } from "@/components/entity-links";
 import { cn } from "@/lib/cn";
 import { DeleteEventButton } from "./DeleteEventButton";
+import { MarkDeliveredButton } from "./MarkDeliveredButton";
 
 type Props = {
   rows: PackageRow[];
   onDeleted: () => void;
+  onMarkDelivered: () => void;
 };
 
 const TYPE_LABEL: Record<PackageRow["type"], string> = {
@@ -53,7 +55,7 @@ function recipientNode(r: PackageRow) {
   );
 }
 
-export function PackagesHistoryList({ rows, onDeleted }: Props) {
+export function PackagesHistoryList({ rows, onDeleted, onMarkDelivered }: Props) {
   const isManager = useIsManager();
   return (
     <section className="space-y-3">
@@ -137,8 +139,15 @@ export function PackagesHistoryList({ rows, onDeleted }: Props) {
                     <div className="mt-1 text-sm">{r.comment}</div>
                   )}
                 </div>
-                {isManager && (
-                  <div className="shrink-0 self-center">
+                <div className="shrink-0 self-center flex items-center gap-1">
+                  {!delivered && (
+                    <MarkDeliveredButton
+                      packageId={r.id}
+                      onSuccess={onMarkDelivered}
+                      compact
+                    />
+                  )}
+                  {isManager && (
                     <DeleteEventButton
                       id={r.id}
                       action={deletePackage}
@@ -148,8 +157,8 @@ export function PackagesHistoryList({ rows, onDeleted }: Props) {
                       ariaLabel="מחק חבילה"
                       onDeleted={onDeleted}
                     />
-                  </div>
-                )}
+                  )}
+                </div>
               </li>
             );
           })}

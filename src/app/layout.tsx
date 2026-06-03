@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Heebo } from "next/font/google";
+import { cookies } from "next/headers";
 import { Toaster } from "sonner";
 import { AuthProvider } from "@/components/AuthProvider";
 import { Header } from "@/components/Header";
@@ -20,34 +21,31 @@ export const metadata: Metadata = {
   description: "מערכת ניהול דיירים — רעם בטחון",
 };
 
-const themeScript = `(function(){try{var t=localStorage.getItem('theme');if(t==='dark'||(!t&&window.matchMedia('(prefers-color-scheme: dark)').matches))document.documentElement.classList.add('dark');}catch(e){}})();`;
-
 export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const [preferences, currentUser] = await Promise.all([
+  const [preferences, currentUser, cookieStore] = await Promise.all([
     getPreferences(),
     getCurrentUser(),
+    cookies(),
   ]);
+  const isDark = cookieStore.get("theme")?.value === "dark";
 
   return (
     <html
       lang="he"
       dir="rtl"
-      className={`${heebo.variable} h-full antialiased`}
+      className={`${heebo.variable} h-full antialiased${isDark ? " dark" : ""}`}
       suppressHydrationWarning
     >
-      <head>
-        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
-      </head>
       <body className="min-h-full flex flex-col">
         <AuthProvider user={currentUser}>
           <PreferencesProvider initial={preferences} currentUser={currentUser}>
             {currentUser ? (
               <>
-                <Header lobbyistName={currentUser.lobbyist_name} />
+                <Header lobbyistName={currentUser.lobbyist_name} isDark={isDark} />
                 <div className="flex-1 flex min-h-0">
                   <Sidebar />
                   <main className="flex-1 overflow-auto p-6">{children}</main>

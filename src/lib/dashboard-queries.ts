@@ -24,10 +24,10 @@ export type GuestCarEvent = {
 };
 export type GuestCarsTodayData = {
   count: number;
-  recent: GuestCarEvent[];
+  series: (DayPoint & { guests: number })[];
 };
 export type ActivityTimelineData = {
-  series: { hour: string; keys: number; packages: number; guests: number }[];
+  series: (DayPoint & { keys: number; packages: number; guests: number })[];
 };
 export type WhatsAppVolumeData = {
   total: number;
@@ -137,62 +137,58 @@ export function getKeysInLobby(): KeysInLobbyData {
 }
 
 export function getGuestCarsToday(): GuestCarsTodayData {
-  const n = (
+  const total = (
     db
       .prepare(
         `SELECT COUNT(*) as n FROM guest_parking
-         WHERE date(created_at, 'localtime') = date('now', 'localtime')`
+         WHERE date(created_at, 'localtime') >= date('now', '-6 days', 'localtime')`
       )
       .get() as { n: number }
   ).n;
 
-  const recent = db
+  const rows = db
     .prepare(
-      `SELECT
-         gp.id,
-         gp.car_plate,
-         gp.guest_name,
-         gp.created_at,
-         a.number as apartment_number
-       FROM guest_parking gp
-       LEFT JOIN residents r ON r.id = gp.resident_id
-       LEFT JOIN apartments a ON a.id = r.apartment_id
-       WHERE date(gp.created_at, 'localtime') = date('now', 'localtime')
-       ORDER BY gp.created_at DESC, gp.id DESC
-       LIMIT 5`
+      `SELECT date(created_at, 'localtime') as day, COUNT(*) as n
+       FROM guest_parking
+       WHERE date(created_at, 'localtime') >= date('now', '-6 days', 'localtime')
+       GROUP BY day`
     )
-    .all() as GuestCarEvent[];
+    .all() as { day: string; n: number }[];
 
-  return { count: n, recent };
+  const map = new Map(rows.map((r) => [r.day, r.n]));
+
+  return {
+    count: total,
+    series: lastNDays(7).map((d) => ({
+      ...d,
+      guests: map.get(d.day) ?? 0,
+    })),
+  };
 }
 
 export function getActivityTimeline(): ActivityTimelineData {
-  const today = `date(created_at, 'localtime') = date('now', 'localtime')`;
-  const fetchHourly = (table: string) =>
+  const fetchDaily = (table: string) =>
     db
       .prepare(
-        `SELECT strftime('%H', created_at, 'localtime') as h, COUNT(*) as n
+        `SELECT date(created_at, 'localtime') as day, COUNT(*) as n
          FROM ${table}
-         WHERE ${today}
-         GROUP BY h`
+         WHERE date(created_at, 'localtime') >= date('now', '-6 days', 'localtime')
+         GROUP BY day`
       )
-      .all() as { h: string; n: number }[];
+      .all() as { day: string; n: number }[];
 
-  const keysMap = new Map(fetchHourly("apartment_keys_history").map((r) => [r.h, r.n]));
-  const pkgsMap = new Map(fetchHourly("packages").map((r) => [r.h, r.n]));
-  const guestsMap = new Map(fetchHourly("guest_parking").map((r) => [r.h, r.n]));
+  const keysMap = new Map(fetchDaily("apartment_keys_history").map((r) => [r.day, r.n]));
+  const pkgsMap = new Map(fetchDaily("packages").map((r) => [r.day, r.n]));
+  const guestsMap = new Map(fetchDaily("guest_parking").map((r) => [r.day, r.n]));
 
-  const series = Array.from({ length: 24 }, (_, i) => {
-    const h = String(i).padStart(2, "0");
-    return {
-      hour: `${h}:00`,
-      keys: keysMap.get(h) ?? 0,
-      packages: pkgsMap.get(h) ?? 0,
-      guests: guestsMap.get(h) ?? 0,
-    };
-  });
-
-  return { series };
+  return {
+    series: lastNDays(7).map((d) => ({
+      ...d,
+      keys: keysMap.get(d.day) ?? 0,
+      packages: pkgsMap.get(d.day) ?? 0,
+      guests: guestsMap.get(d.day) ?? 0,
+    })),
+  };
 }
 
 export function getWhatsAppVolume(): WhatsAppVolumeData {

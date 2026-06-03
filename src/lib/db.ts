@@ -5,7 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 const DB_PATH = path.join(process.cwd(), "data", "raam.db");
-const SCHEMA_EVOLUTION_VERSION = 2;
+const SCHEMA_EVOLUTION_VERSION = 3;
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS zones (
@@ -196,6 +196,40 @@ CREATE INDEX IF NOT EXISTS idx_whatsapp_messages_resident
 CREATE INDEX IF NOT EXISTS idx_whatsapp_messages_wa_id
   ON whatsapp_messages(wa_message_id);
 
+CREATE TABLE IF NOT EXISTS apartment_owners (
+  id         INTEGER PRIMARY KEY,
+  first_name TEXT NOT NULL,
+  last_name  TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS owners_mobiles (
+  id         INTEGER PRIMARY KEY,
+  owner_id   INTEGER NOT NULL REFERENCES apartment_owners(id) ON DELETE CASCADE,
+  phone      TEXT NOT NULL,
+  comment    TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_owners_mobiles_owner ON owners_mobiles(owner_id);
+
+CREATE TABLE IF NOT EXISTS equipment_loans (
+  id              INTEGER PRIMARY KEY,
+  resident_id     INTEGER REFERENCES residents(id) ON DELETE SET NULL,
+  borrower_name   TEXT,
+  type            TEXT NOT NULL DEFAULT 'chairs'
+                    CHECK (type IN ('chairs', 'tables')),
+  quantity        INTEGER NOT NULL DEFAULT 1 CHECK (quantity > 0),
+  lobbyist_name   TEXT NOT NULL DEFAULT '',
+  is_returned     INTEGER NOT NULL DEFAULT 0,
+  returned_at     TEXT,
+  comment         TEXT,
+  created_at      TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_equipment_loans_resident ON equipment_loans(resident_id);
+CREATE INDEX IF NOT EXISTS idx_equipment_loans_open ON equipment_loans(resident_id) WHERE is_returned = 0;
+
 CREATE TABLE IF NOT EXISTS user_preferences (
   id         INTEGER PRIMARY KEY CHECK (id = 1),
   data       TEXT NOT NULL DEFAULT '{}',
@@ -233,8 +267,31 @@ function applySchemaEvolution(db: Database.Database) {
   ensureColumn(db, "packages", "delivered_to", "TEXT");
   ensureColumn(db, "guest_parking", "lobbyist_name", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "guest_parking", "guest_name", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "guest_parking", "comment", "TEXT");
   ensureColumn(db, "users", "password", "TEXT");
   ensureColumn(db, "users", "user_role", "TEXT NOT NULL DEFAULT 'lobbyist'");
+  ensureColumn(db, "apartment_owners", "apartment_id", "INTEGER REFERENCES apartments(id) ON DELETE SET NULL");
+  ensureColumn(db, "apartment_owners", "comments", "TEXT");
+
+  // Tables added after initial schema — repeated here so running dev servers
+  // pick them up without a restart (globalThis caches the db handle).
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS equipment_loans (
+      id              INTEGER PRIMARY KEY,
+      resident_id     INTEGER REFERENCES residents(id) ON DELETE SET NULL,
+      borrower_name   TEXT,
+      type            TEXT NOT NULL DEFAULT 'chairs'
+                        CHECK (type IN ('chairs', 'tables')),
+      quantity        INTEGER NOT NULL DEFAULT 1 CHECK (quantity > 0),
+      lobbyist_name   TEXT NOT NULL DEFAULT '',
+      is_returned     INTEGER NOT NULL DEFAULT 0,
+      returned_at     TEXT,
+      comment         TEXT,
+      created_at      TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_equipment_loans_resident ON equipment_loans(resident_id);
+    CREATE INDEX IF NOT EXISTS idx_equipment_loans_open ON equipment_loans(resident_id) WHERE is_returned = 0;
+  `);
 
   // Seed any pre-existing users (added before login was a feature) with a
   // default password so they can sign in. They can change it in the edit modal.

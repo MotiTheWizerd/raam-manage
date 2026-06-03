@@ -18,6 +18,7 @@ export type GuestParkingRow = {
   car_plate: string;
   guest_name: string;
   lobbyist_name: string;
+  comment: string | null;
   resident_id: number | null;
   resident_full_name: string | null;
   apartment_id: number | null;
@@ -41,6 +42,7 @@ const ROW_SELECT = `
     g.car_plate,
     g.guest_name,
     g.lobbyist_name,
+    g.comment,
     g.resident_id,
     CASE WHEN r.id IS NULL THEN NULL
          ELSE r.first_name || ' ' || r.last_name
@@ -147,11 +149,13 @@ export async function createGuestParking(
   const lobbyistName = String(formData.get("lobbyist_name") ?? "").trim();
   if (!lobbyistName) return fail("שם הפקיד נדרש");
 
+  const comment = String(formData.get("comment") ?? "").trim() || null;
+
   try {
     db.prepare(
-      `INSERT INTO guest_parking (resident_id, car_plate, guest_name, lobbyist_name)
-       VALUES (?, ?, ?, ?)`
-    ).run(residentId, carPlate, guestName, lobbyistName);
+      `INSERT INTO guest_parking (resident_id, car_plate, guest_name, lobbyist_name, comment)
+       VALUES (?, ?, ?, ?, ?)`
+    ).run(residentId, carPlate, guestName, lobbyistName, comment);
   } catch (e) {
     if ((e as { code?: string }).code === "SQLITE_CONSTRAINT_FOREIGNKEY") {
       return fail("דייר לא חוקי");

@@ -106,6 +106,9 @@ export function GuestParkingHistoryList({
                   {r.lobbyist_name && (
                     <span>· פקיד: {r.lobbyist_name}</span>
                   )}
+                  {r.comment && (
+                    <span className="opacity-90">· {r.comment}</span>
+                  )}
                 </div>
               </div>
               {isManager && (

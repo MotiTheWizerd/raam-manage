@@ -1,9 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { toast } from "sonner";
 import { ApartmentLink, ResidentLink } from "@/components/entity-links";
 import { useSelectedResident } from "@/components/PreferencesProvider";
 import { Tabs, type TabItem } from "@/components/ui/Tabs";
+import { CarsTab } from "./CarsTab";
+import { EquipmentTab } from "./EquipmentTab";
 import { KeysTab } from "./KeysTab";
 import { PackagesTab } from "./PackagesTab";
 import { VehiclesTab } from "./VehiclesTab";
@@ -12,11 +16,40 @@ const TABS: TabItem[] = [
   { value: "keys", label: "ניהול מפתחות" },
   { value: "packages", label: "ניהול חבילות" },
   { value: "vehicles", label: "ניהול אורחים" },
+  { value: "equipment", label: "השאלת ציוד" },
+  { value: "cars", label: "רכבים" },
 ];
+
+const TAB_VALUES = new Set(TABS.map((t) => t.value));
 
 export function EventsView() {
   const resident = useSelectedResident();
-  const [tab, setTab] = useState<string>("keys");
+  const searchParams = useSearchParams();
+  const [tab, setTab] = useState<string>(() => {
+    const initial = searchParams.get("tab");
+    return initial && TAB_VALUES.has(initial) ? initial : "keys";
+  });
+  const [guestPlatePrefill, setGuestPlatePrefill] = useState<{
+    plate: string;
+    nonce: number;
+  } | null>(null);
+
+  const handleUseCarForGuest = useCallback(
+    (plate: string) => {
+      const trimmed = plate.trim();
+      if (!trimmed) return;
+      if (!resident) {
+        toast.error("בחר דייר כדי לרשום חניית אורח");
+        return;
+      }
+      setGuestPlatePrefill((prev) => ({
+        plate: trimmed,
+        nonce: (prev?.nonce ?? 0) + 1,
+      }));
+      setTab("vehicles");
+    },
+    [resident]
+  );
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
@@ -86,8 +119,17 @@ export function EventsView() {
             key={resident?.id ?? "global"}
             apartmentId={resident?.apartment_id ?? null}
             residentId={resident?.id ?? null}
+            guestPlatePrefill={guestPlatePrefill}
           />
         )}
+        {tab === "equipment" && (
+          <EquipmentTab
+            key={resident?.id ?? "global"}
+            residentId={resident?.id ?? null}
+            apartmentId={resident?.apartment_id ?? null}
+          />
+        )}
+        {tab === "cars" && <CarsTab onUseForGuest={handleUseCarForGuest} />}
       </section>
     </div>
   );

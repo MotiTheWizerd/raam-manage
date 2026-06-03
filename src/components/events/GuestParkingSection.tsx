@@ -1,7 +1,9 @@
 "use client";
 
-import { Plus } from "lucide-react";
-import { useActionState, useEffect, useRef } from "react";
+import { Camera, Plus } from "lucide-react";
+import { useActionState, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
+import { getRecentCarEvents } from "@/app/events/cars-actions";
 import {
   createGuestParking,
   type GuestParkingFormState,
@@ -10,29 +12,61 @@ import { useActiveLobbyist } from "@/components/PreferencesProvider";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useFormToasts } from "@/lib/hooks/useFormToasts";
+import { Textarea } from "@/components/ui/Textarea";
 
 const initialState: GuestParkingFormState = {};
 
 type Props = {
   residentId: number;
   onCreated: () => void;
+  prefill?: { plate: string; nonce: number } | null;
 };
 
-export function GuestParkingSection({ residentId, onCreated }: Props) {
+export function GuestParkingSection({ residentId, onCreated, prefill }: Props) {
   const [state, action, pending] = useActionState(
     createGuestParking,
     initialState
   );
   const formRef = useRef<HTMLFormElement>(null);
+  const plateInputRef = useRef<HTMLInputElement>(null);
+  const [fetchingPlate, setFetchingPlate] = useState(false);
   const activeLobbyist = useActiveLobbyist();
 
   useFormToasts(state, "נוסף");
+
+  async function fillLastPlate() {
+    setFetchingPlate(true);
+    try {
+      const rows = await getRecentCarEvents(1);
+      const plate = rows[0]?.plate?.trim();
+      if (!plate) {
+        toast.error("לא נמצא רישום אחרון");
+        return;
+      }
+      if (plateInputRef.current) {
+        plateInputRef.current.value = plate;
+        plateInputRef.current.focus();
+      }
+    } catch {
+      toast.error("שליפת הרישוי האחרון נכשלה");
+    } finally {
+      setFetchingPlate(false);
+    }
+  }
 
   useEffect(() => {
     if (!state.submittedAt) return;
     formRef.current?.reset();
     Promise.resolve().then(onCreated);
   }, [state.submittedAt, onCreated]);
+
+  useEffect(() => {
+    const plate = prefill?.plate?.trim();
+    if (!plate || !plateInputRef.current) return;
+    plateInputRef.current.value = plate;
+    plateInputRef.current.focus();
+    plateInputRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [prefill?.nonce, prefill?.plate]);
 
   return (
     <section className="space-y-3">
@@ -61,11 +95,24 @@ export function GuestParkingSection({ residentId, onCreated }: Props) {
         <div className="flex flex-col gap-1">
           <label
             htmlFor="guest-plate"
-            className="text-xs opacity-70"
+            className="text-xs opacity-70 flex items-center gap-1.5"
           >
-            מספר רישוי <span className="opacity-60">(אופציונלי)</span>
+            <span>
+              מספר רישוי <span className="opacity-60">(אופציונלי)</span>
+            </span>
+            <button
+              type="button"
+              onClick={fillLastPlate}
+              disabled={fetchingPlate}
+              title="שליפת הרישוי האחרון מהמצלמה"
+              aria-label="שליפת הרישוי האחרון מהמצלמה"
+              className="inline-flex h-4 w-4 items-center justify-center rounded text-foreground/50 hover:text-red-600 dark:hover:text-red-400 disabled:opacity-40 transition-colors"
+            >
+              <Camera size={12} className={fetchingPlate ? "animate-pulse" : ""} />
+            </button>
           </label>
           <Input
+            ref={plateInputRef}
             id="guest-plate"
             name="car_plate"
             placeholder="123-45-678"
@@ -88,6 +135,19 @@ export function GuestParkingSection({ residentId, onCreated }: Props) {
             defaultValue={activeLobbyist?.lobbyist_name ?? ""}
             placeholder="שם הפקיד"
             className="w-44"
+          />
+        </div>
+
+        <div className="flex flex-col gap-1">
+          <label htmlFor="guest-comment" className="text-xs opacity-70">
+            הערה <span className="opacity-60">(אופציונלי)</span>
+          </label>
+          <Textarea
+            id="guest-comment"
+            name="comment"
+            placeholder="הערה חופשית..."
+            className="w-52 h-9 min-h-0 resize-none py-1.5 text-sm"
+            rows={1}
           />
         </div>
 

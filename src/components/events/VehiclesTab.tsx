@@ -22,9 +22,10 @@ const HISTORY_PAGE_SIZE = 10;
 type Props = {
   apartmentId: number | null;
   residentId: number | null;
+  guestPlatePrefill?: { plate: string; nonce: number } | null;
 };
 
-export function VehiclesTab({ apartmentId, residentId }: Props) {
+export function VehiclesTab({ apartmentId, residentId, guestPlatePrefill }: Props) {
   const [vehicles, setVehicles] = useState<ApartmentVehicleRow[] | null>(null);
   const [guestRows, setGuestRows] = useState<GuestParkingRow[]>([]);
   const [guestTotal, setGuestTotal] = useState(0);
@@ -127,7 +128,11 @@ export function VehiclesTab({ apartmentId, residentId }: Props) {
       )}
 
       {residentId !== null && (
-        <GuestParkingSection residentId={residentId} onCreated={refresh} />
+        <GuestParkingSection
+          residentId={residentId}
+          onCreated={refresh}
+          prefill={guestPlatePrefill}
+        />
       )}
 
       <section className="space-y-3">

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { getOpenSuggestionCount } from "@/app/settings/suggestions-actions";
 import { Tabs, type TabItem } from "@/components/ui/Tabs";
 import { onSuggestionsChanged } from "@/lib/suggestions-events";
+import { RegisteredCarsTab } from "./RegisteredCarsTab";
 import { SuggestionsTab } from "./SuggestionsTab";
 import { SystemMessagesTab } from "./SystemMessagesTab";
 import { ZonesTab } from "./ZonesTab";
@@ -37,6 +38,7 @@ export function SettingsView() {
     { value: "system-messages", label: "הודעות מערכת" },
     { value: "suggestions", label: "הצעות ייעול", badge: openCount },
     { value: "zones", label: "אזורים" },
+    { value: "registered-cars", label: "רכבים רשומים" },
   ];
 
   return (
@@ -51,6 +53,7 @@ export function SettingsView() {
         {tab === "system-messages" && <SystemMessagesTab />}
         {tab === "suggestions" && <SuggestionsTab />}
         {tab === "zones" && <ZonesTab />}
+        {tab === "registered-cars" && <RegisteredCarsTab />}
       </section>
     </div>
   );

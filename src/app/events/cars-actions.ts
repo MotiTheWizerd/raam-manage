@@ -23,6 +23,19 @@ export type RegisteredOwner = {
   apartment: string | null;
 };
 
+/**
+ * How familiar a plate is, derived purely from the SLPR `log` history. A
+ * decision-support signal for the lobbyist on unregistered cars — NOT a
+ * verdict. `visits` is deduped: the two entry cameras (1 & 3) fire for the
+ * same car within ~30s, so we collapse reads that fall in the same 2-minute
+ * bucket, otherwise every visit would count roughly double.
+ */
+export type PlateVisitStats = {
+  visits: number;
+  firstSeen: string;
+  lastSeen: string;
+};
+
 export type SlprCarEventRow = {
   id: number;
   plate: string;
@@ -34,6 +47,7 @@ export type SlprCarEventRow = {
   customerId: number | null;
   guest: RecognizedGuest | null;
   registeredOwner: RegisteredOwner | null;
+  visitStats: PlateVisitStats | null;
 };
 
 type ResidentGuestLookupRow = {
@@ -235,6 +249,55 @@ function parseNullableNumber(value: string | null): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+/** Escape a value into a safe single-quoted MySQL literal (querySlpr is raw SQL). */
+function sqlStr(value: string): string {
+  return `'${value.slice(0, 40).replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`;
+}
+
+type PlateStatsRow = {
+  LP: string | null;
+  visits: string | null;
+  firstSeen: string | null;
+  lastSeen: string | null;
+};
+
+/**
+ * Lifetime visit stats for the given plates, deduped by 2-minute window so the
+ * twin entry cameras don't double-count. One grouped query for the whole batch.
+ */
+async function getPlateVisitStats(
+  plates: string[]
+): Promise<Map<string, PlateVisitStats>> {
+  const unique = Array.from(
+    new Set(plates.map((p) => p.trim()).filter((p) => p.length > 0))
+  );
+  if (unique.length === 0) return new Map();
+
+  const inList = unique.map(sqlStr).join(", ");
+  const rows = await querySlpr<PlateStatsRow>(
+    `SELECT
+       LP,
+       COUNT(DISTINCT FLOOR(UNIX_TIMESTAMP(LOG_DATE) / 120)) AS visits,
+       MIN(LOG_DATE) AS firstSeen,
+       MAX(LOG_DATE) AS lastSeen
+     FROM \`log\`
+     WHERE LP IN (${inList})
+     GROUP BY LP`
+  );
+
+  const map = new Map<string, PlateVisitStats>();
+  for (const row of rows) {
+    const lp = (row.LP ?? "").trim();
+    if (!lp) continue;
+    map.set(lp, {
+      visits: parseNullableNumber(row.visits) ?? 0,
+      firstSeen: row.firstSeen ?? "",
+      lastSeen: row.lastSeen ?? "",
+    });
+  }
+  return map;
+}
+
 export async function getRecentCarEvents(
   limit: number = 100
 ): Promise<SlprCarEventRow[]> {
@@ -253,6 +316,7 @@ export async function getRecentCarEvents(
   );
 
   const knownGuests = matchKnownGuests(rows.map((row) => row.LP ?? ""));
+  const visitStats = await getPlateVisitStats(rows.map((row) => row.LP ?? ""));
 
   return rows.map((row) => {
     const plate = (row.LP ?? "").trim();
@@ -267,6 +331,7 @@ export async function getRecentCarEvents(
       customerId: parseNullableNumber(row.Customer_Id),
       guest: knownGuests.get(normalizePlate(plate)) ?? null,
       registeredOwner: toRegisteredOwner(row),
+      visitStats: visitStats.get(plate) ?? null,
     };
   });
 }

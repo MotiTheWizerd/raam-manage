@@ -148,6 +148,34 @@ function CarDetails({
         </div>
       )}
 
+      {row.visitStats && (
+        <div className="mb-3 rounded-md border border-black/10 px-3 py-2 text-xs dark:border-white/10">
+          <div className="mb-1.5 font-semibold opacity-80">היסטוריית כניסות</div>
+          <div className="grid grid-cols-[1fr_auto] gap-y-1">
+            <span className="opacity-60">סה״כ כניסות</span>
+            <span className="text-end font-medium tabular-nums">
+              {row.visitStats.visits}
+            </span>
+            {row.visitStats.firstSeen && (
+              <>
+                <span className="opacity-60">נראה לראשונה</span>
+                <span className="text-end" dir="ltr">
+                  {formatEventTime(row.visitStats.firstSeen)}
+                </span>
+              </>
+            )}
+            {row.visitStats.lastSeen && (
+              <>
+                <span className="opacity-60">נראה לאחרונה</span>
+                <span className="text-end" dir="ltr">
+                  {formatEventTime(row.visitStats.lastSeen)}
+                </span>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       {src ? (
         <div className="space-y-2">
           <div className="mx-auto h-8 max-w-40 overflow-hidden rounded border border-black/10 bg-black dark:border-white/10">
@@ -297,8 +325,24 @@ export function CarsTab({ onUseForGuest }: CarsTabProps) {
                           selected && "bg-red-50/60 dark:bg-red-950/20"
                         )}
                       >
-                        <td className="px-3 py-2.5 font-mono font-semibold" dir="ltr">
+                        <td className="px-3 py-2.5 font-mono font-semibold align-top" dir="ltr">
                           {row.plate || "-"}
+                          {row.visitStats && (
+                            <div
+                              dir="rtl"
+                              className={cn(
+                                "mt-0.5 font-sans text-[11px] font-normal",
+                                row.visitStats.visits <= 1
+                                  ? "text-amber-600 dark:text-amber-400"
+                                  : "opacity-55"
+                              )}
+                              title="מספר הכניסות שתועדו לרכב זה (לפי המצלמות)"
+                            >
+                              {row.visitStats.visits <= 1
+                                ? "כניסה ראשונה"
+                                : `${row.visitStats.visits} כניסות`}
+                            </div>
+                          )}
                         </td>
                         <td
                           className="whitespace-nowrap px-3 py-2.5"

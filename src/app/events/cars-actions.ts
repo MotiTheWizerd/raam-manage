@@ -13,6 +13,16 @@ export type RecognizedGuest = {
   apartmentNumber: string | null;
 };
 
+/**
+ * The car's registered owner as known to the SLPR parking system itself
+ * (the `customer` table). Used as a fallback name when we haven't learned the
+ * plate as a guest ourselves.
+ */
+export type RegisteredOwner = {
+  name: string;
+  apartment: string | null;
+};
+
 export type SlprCarEventRow = {
   id: number;
   plate: string;
@@ -23,6 +33,7 @@ export type SlprCarEventRow = {
   imagePath: string | null;
   customerId: number | null;
   guest: RecognizedGuest | null;
+  registeredOwner: RegisteredOwner | null;
 };
 
 type ResidentGuestLookupRow = {
@@ -202,7 +213,21 @@ type SlprRawLogRow = {
   DURATION: string | null;
   FILE: string | null;
   Customer_Id: string | null;
+  C_First: string | null;
+  C_Last: string | null;
+  C_Apartment: string | null;
 };
+
+/** Build the registered-owner name/apartment from the joined customer columns. */
+function toRegisteredOwner(row: SlprRawLogRow): RegisteredOwner | null {
+  const name = [row.C_First, row.C_Last]
+    .map((part) => (part ?? "").trim())
+    .filter(Boolean)
+    .join(" ")
+    .trim();
+  if (!name) return null;
+  return { name, apartment: (row.C_Apartment ?? "").trim() || null };
+}
 
 function parseNullableNumber(value: string | null): number | null {
   if (value === null || value.trim() === "") return null;
@@ -215,10 +240,15 @@ export async function getRecentCarEvents(
 ): Promise<SlprCarEventRow[]> {
   const safeLimit = Math.max(1, Math.min(200, Math.floor(limit)));
   const rows = await querySlpr<SlprRawLogRow>(
-    `SELECT ID, LP, LOG_DATE, STATUS, CAM_ID, DURATION, FILE, Customer_Id
-     FROM \`log\`
-     WHERE CAM_ID = 1
-     ORDER BY LOG_DATE DESC, ID DESC
+    `SELECT
+       l.ID, l.LP, l.LOG_DATE, l.STATUS, l.CAM_ID, l.DURATION, l.FILE, l.Customer_Id,
+       c.First_Name AS C_First,
+       c.Last_Name  AS C_Last,
+       c.Apartment  AS C_Apartment
+     FROM \`log\` l
+     LEFT JOIN customer c ON c.ID = l.Customer_Id AND l.Customer_Id > 0
+     WHERE l.CAM_ID = 1
+     ORDER BY l.LOG_DATE DESC, l.ID DESC
      LIMIT ${safeLimit}`
   );
 
@@ -236,6 +266,7 @@ export async function getRecentCarEvents(
       imagePath: row.FILE,
       customerId: parseNullableNumber(row.Customer_Id),
       guest: knownGuests.get(normalizePlate(plate)) ?? null,
+      registeredOwner: toRegisteredOwner(row),
     };
   });
 }

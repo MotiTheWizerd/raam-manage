@@ -135,6 +135,19 @@ function CarDetails({
         </div>
       )}
 
+      {!row.guest && row.registeredOwner && (
+        <div className="mb-3 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-xs dark:border-sky-900 dark:bg-sky-950/30">
+          <div className="font-semibold text-sky-700 dark:text-sky-300">
+            רכב רשום: {row.registeredOwner.name}
+          </div>
+          {row.registeredOwner.apartment && (
+            <div className="mt-0.5 opacity-70">
+              דירה {row.registeredOwner.apartment}
+            </div>
+          )}
+        </div>
+      )}
+
       {src ? (
         <div className="space-y-2">
           <div className="mx-auto h-8 max-w-40 overflow-hidden rounded border border-black/10 bg-black dark:border-white/10">
@@ -319,6 +332,18 @@ export function CarsTab({ onUseForGuest }: CarsTabProps) {
                                     : ""}
                                 </span>
                               )}
+                            </div>
+                          ) : row.registeredOwner ? (
+                            <div className="flex flex-col">
+                              <span className="font-medium text-sky-700 dark:text-sky-300">
+                                {row.registeredOwner.name}
+                              </span>
+                              <span className="text-[11px] opacity-60">
+                                רכב רשום
+                                {row.registeredOwner.apartment
+                                  ? ` · דירה ${row.registeredOwner.apartment}`
+                                  : ""}
+                              </span>
                             </div>
                           ) : (
                             <span className="opacity-40">-</span>

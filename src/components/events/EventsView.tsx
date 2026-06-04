@@ -9,6 +9,7 @@ import { Tabs, type TabItem } from "@/components/ui/Tabs";
 import { CarsTab } from "./CarsTab";
 import { EquipmentTab } from "./EquipmentTab";
 import { KeysTab } from "./KeysTab";
+import { KnownGuestsTab } from "./KnownGuestsTab";
 import { PackagesTab } from "./PackagesTab";
 import { VehiclesTab } from "./VehiclesTab";
 
@@ -18,6 +19,7 @@ const TABS: TabItem[] = [
   { value: "vehicles", label: "ניהול אורחים" },
   { value: "equipment", label: "השאלת ציוד" },
   { value: "cars", label: "רכבים" },
+  { value: "known-guests", label: "אורחים מוכרים" },
 ];
 
 const TAB_VALUES = new Set(TABS.map((t) => t.value));
@@ -132,6 +134,7 @@ export function EventsView() {
           />
         )}
         {tab === "cars" && <CarsTab onUseForGuest={handleUseCarForGuest} />}
+        {tab === "known-guests" && <KnownGuestsTab />}
       </section>
     </div>
   );

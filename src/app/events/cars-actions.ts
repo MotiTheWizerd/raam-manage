@@ -106,6 +106,93 @@ export async function forgetResidentGuest(
   return { submittedAt: Date.now() };
 }
 
+export type KnownGuestRow = {
+  id: number;
+  carPlate: string;
+  guestName: string | null;
+  residentId: number | null;
+  apartmentId: number | null;
+  residentName: string | null;
+  apartmentNumber: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PaginatedKnownGuests = {
+  rows: KnownGuestRow[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+};
+
+const KNOWN_GUESTS_SELECT = `
+  SELECT
+    rg.id,
+    rg.car_plate                          AS carPlate,
+    rg.guest_name                         AS guestName,
+    rg.resident_id                        AS residentId,
+    rg.apartment_id                       AS apartmentId,
+    CASE WHEN r.id IS NULL THEN NULL
+         ELSE r.first_name || ' ' || r.last_name
+    END                                   AS residentName,
+    a.number                              AS apartmentNumber,
+    rg.created_at                         AS createdAt,
+    rg.updated_at                         AS updatedAt
+  FROM resident_guests rg
+  LEFT JOIN residents r  ON r.id = rg.resident_id
+  LEFT JOIN apartments a ON a.id = rg.apartment_id
+`;
+
+const DEFAULT_KNOWN_GUESTS_PAGE_SIZE = 10;
+
+/** Paginated list of every guest plate we've learned (the "אורחים מוכרים" tab). */
+export async function getKnownGuestsPage(
+  page: number = 1,
+  pageSize: number = DEFAULT_KNOWN_GUESTS_PAGE_SIZE
+): Promise<PaginatedKnownGuests> {
+  const safePageSize = Math.max(1, Math.min(100, Math.floor(pageSize)));
+  const requestedPage = Math.max(1, Math.floor(page));
+
+  const total = (
+    db.prepare(`SELECT COUNT(*) AS count FROM resident_guests`).get() as {
+      count: number;
+    }
+  ).count;
+
+  const totalPages = Math.max(1, Math.ceil(total / safePageSize));
+  const safePage = Math.min(requestedPage, totalPages);
+  const offset = (safePage - 1) * safePageSize;
+
+  const rows = db
+    .prepare(
+      `${KNOWN_GUESTS_SELECT}
+       ORDER BY rg.updated_at DESC, rg.id DESC
+       LIMIT ? OFFSET ?`
+    )
+    .all(safePageSize, offset) as KnownGuestRow[];
+
+  return { rows, page: safePage, pageSize: safePageSize, total, totalPages };
+}
+
+/** Search learned guests by name or plate (mirrors searchGuestParking). */
+export async function searchKnownGuests(
+  rawQuery: string,
+  limit: number = 50
+): Promise<KnownGuestRow[]> {
+  const q = rawQuery.trim();
+  if (!q) return [];
+  const like = `%${q}%`;
+  return db
+    .prepare(
+      `${KNOWN_GUESTS_SELECT}
+       WHERE rg.guest_name LIKE ? OR rg.car_plate LIKE ?
+       ORDER BY rg.updated_at DESC, rg.id DESC
+       LIMIT ?`
+    )
+    .all(like, like, limit) as KnownGuestRow[];
+}
+
 type SlprRawLogRow = {
   ID: string | null;
   LP: string | null;

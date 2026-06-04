@@ -1,8 +1,11 @@
 {
   "project": "Raam-manage",
-  "session_count": 12,
+  "session_count": 13,
   "last_session_at": "2026-06-04",
-  "previous_session_at": "2026-05-31",
+  "previous_session_at": "2026-06-04",
+
+  "session_13_in_progress": "Session 13 started 2026-06-04. Opened with greeting; Moti to set the agenda. Same workplace machine — semantix tools NOT installed (native Grep/Glob/Read + file memory). Working tree clean at start, HEAD 51dbda0. Carry-over still open: WhatsApp logout-hang fix (deferred 4x), bootstrap manager auto-promote (un-done), inbound WhatsApp smoke-test, auto-triggered WhatsApp sends. New candidates from session 12: backfill resident_guests from existing guest_parking history, auto-select known guest's resident on register.",
+
   "session_9_summary": "Session 9 (2026-05-23). Search added to keys history (by key nickname or apartment number) and packages history (by resident name, apartment number, or recipient name) — both follow the same debounced search / paginated fallback pattern as VehiclesTab. New 'בעלי דירות' section built from scratch: apartment_owners table (id, first_name, last_name, apartment_id FK SET NULL, comments, created_at) + owners_mobiles table (id, owner_id FK CASCADE, phone, comment, created_at). Sidebar entry added with Crown icon. /owners page: list with search (client-side filter by name or apt number), add owner modal (name + apt dropdown + phones inline + comments textarea), edit owner modal (same fields pre-filled), add phone inline per owner, delete phone per owner (manager-only for write ops). layout.tsx script tag fixed with suppressHydrationWarning for React 19 compatibility.",
   "previous_handoff_at": "2026-05-14",
 

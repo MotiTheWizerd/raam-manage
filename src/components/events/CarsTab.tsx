@@ -2,7 +2,7 @@
 
 import { ImageIcon, RefreshCw, UserRound, UserRoundPlus } from "lucide-react";
 import NextImage from "next/image";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   forgetResidentGuest,
   getRecentCarEvents,
@@ -42,6 +42,18 @@ function formatEventTime(raw: string): string {
   if (!match) return raw;
   const [, , month, day, hour, minute] = match;
   return `${day}/${month} ${hour}:${minute}`;
+}
+
+/**
+ * Like formatEventTime but keeps the year — used only in the visit-history
+ * panel, where "first seen" can be more than a year ago and the bare
+ * "DD/MM" would be ambiguous.
+ */
+function formatEventTimeWithYear(raw: string): string {
+  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/);
+  if (!match) return raw;
+  const [, year, month, day, hour, minute] = match;
+  return `${day}/${month}/${year} ${hour}:${minute}`;
 }
 
 function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
@@ -160,7 +172,7 @@ function CarDetails({
               <>
                 <span className="opacity-60">נראה לראשונה</span>
                 <span className="text-end" dir="ltr">
-                  {formatEventTime(row.visitStats.firstSeen)}
+                  {formatEventTimeWithYear(row.visitStats.firstSeen)}
                 </span>
               </>
             )}
@@ -168,7 +180,7 @@ function CarDetails({
               <>
                 <span className="opacity-60">נראה לאחרונה</span>
                 <span className="text-end" dir="ltr">
-                  {formatEventTime(row.visitStats.lastSeen)}
+                  {formatEventTimeWithYear(row.visitStats.lastSeen)}
                 </span>
               </>
             )}
@@ -221,6 +233,9 @@ export function CarsTab({ onUseForGuest }: CarsTabProps) {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Tracks the newest row id we've seen so we can auto-follow new arrivals
+  // without overriding a manual selection between them.
+  const lastTopIdRef = useRef<number | null>(null);
 
   const selectedRow = useMemo(
     () => rows.find((row) => row.id === selectedId) ?? rows[0] ?? null,
@@ -232,9 +247,15 @@ export function CarsTab({ onUseForGuest }: CarsTabProps) {
       setError(null);
       const result = await getRecentCarEvents(100);
       setRows(result);
+      const newestId = result[0]?.id ?? null;
+      const isNewCar = newestId !== null && newestId !== lastTopIdRef.current;
+      lastTopIdRef.current = newestId;
       setSelectedId((current) => {
+        // A new car just entered -> auto-jump the details to it (live feed).
+        if (isNewCar) return newestId;
+        // Otherwise keep the manual selection as long as it's still present.
         if (current && result.some((row) => row.id === current)) return current;
-        return result[0]?.id ?? null;
+        return newestId;
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : "טעינת הרכבים נכשלה");

@@ -108,9 +108,9 @@ function CarDetails({
       </div>
 
       {row.guest && (
-        <div className="mb-3 flex items-start justify-between gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs dark:border-emerald-900 dark:bg-emerald-950/30">
+        <div className="mb-3 flex items-start justify-between gap-2 rounded-md border border-orange-200 bg-orange-50 px-3 py-2 text-xs dark:border-orange-900 dark:bg-orange-950/30">
           <div>
-            <div className="font-semibold text-emerald-700 dark:text-emerald-300">
+            <div className="font-semibold text-orange-700 dark:text-orange-300">
               אורח מזוהה: {row.guest.guestName || "אורח ידוע"}
             </div>
             {(row.guest.apartmentNumber || row.guest.residentName) && (
@@ -365,7 +365,7 @@ export function CarsTab({ onUseForGuest }: CarsTabProps) {
                         <td className="px-3 py-2.5">
                           {row.guest ? (
                             <div className="flex flex-col">
-                              <span className="font-medium text-emerald-700 dark:text-emerald-300">
+                              <span className="font-medium text-orange-700 dark:text-orange-300">
                                 {row.guest.guestName || "אורח ידוע"}
                               </span>
                               {row.guest.apartmentNumber && (

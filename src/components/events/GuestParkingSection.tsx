@@ -3,7 +3,7 @@
 import { Camera, Plus } from "lucide-react";
 import { useActionState, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { getRecentCarEvents } from "@/app/events/cars-actions";
+import { getLastCarPlate } from "@/app/events/cars-actions";
 import {
   createGuestParking,
   type GuestParkingFormState,
@@ -38,8 +38,7 @@ export function GuestParkingSection({ residentId, onCreated, prefill }: Props) {
   async function fillLastPlate() {
     setFetchingPlate(true);
     try {
-      const rows = await getRecentCarEvents(1);
-      const plate = rows[0]?.plate?.trim();
+      const plate = await getLastCarPlate();
       if (!plate) {
         toast.error("לא נמצא רישום אחרון");
         return;

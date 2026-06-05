@@ -10,9 +10,11 @@ import {
 } from "@/app/events/cars-actions";
 import { Button } from "@/components/ui/Button";
 import { DeleteEventButton } from "@/components/events/DeleteEventButton";
+import { Pagination } from "@/components/ui/Pagination";
 import { cn } from "@/lib/cn";
 
 const AUTO_REFRESH_MS = 10000;
+const PAGE_SIZE = 10;
 
 function formatCamera(cameraId: number | null): string {
   if (cameraId === null) return "-";
@@ -233,26 +235,45 @@ export function CarsTab({ onUseForGuest }: CarsTabProps) {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
   // Tracks the newest row id we've seen so we can auto-follow new arrivals
   // without overriding a manual selection between them.
   const lastTopIdRef = useRef<number | null>(null);
+  // Mirrors `page` so the live-refresh callback can read it without becoming
+  // a dependency (which would tear down and rebuild the refresh interval).
+  const pageRef = useRef(1);
+  useEffect(() => {
+    pageRef.current = page;
+  }, [page]);
 
   const selectedRow = useMemo(
     () => rows.find((row) => row.id === selectedId) ?? rows[0] ?? null,
     [rows, selectedId]
   );
 
+  const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const pagedRows = useMemo(
+    () => rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [rows, page]
+  );
+
+  // Keep the current page in range as the feed shrinks (old rows fall off).
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
+
   const load = useCallback(async () => {
     try {
       setError(null);
-      const result = await getRecentCarEvents(100);
+      const result = await getRecentCarEvents(3);
       setRows(result);
       const newestId = result[0]?.id ?? null;
       const isNewCar = newestId !== null && newestId !== lastTopIdRef.current;
       lastTopIdRef.current = newestId;
       setSelectedId((current) => {
-        // A new car just entered -> auto-jump the details to it (live feed).
-        if (isNewCar) return newestId;
+        // A new car entered -> auto-jump the details to it, but only while
+        // viewing the live (first) page so we don't yank a user browsing history.
+        if (isNewCar && pageRef.current === 1) return newestId;
         // Otherwise keep the manual selection as long as it's still present.
         if (current && result.some((row) => row.id === current)) return current;
         return newestId;
@@ -286,7 +307,7 @@ export function CarsTab({ onUseForGuest }: CarsTabProps) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-sm font-medium opacity-80">רכבים אחרונים</h2>
-          <p className="text-xs opacity-60">מתעדכן אוטומטית כל 10 שניות</p>
+          <p className="text-xs opacity-60">3 הימים האחרונים · מתעדכן אוטומטית כל 10 שניות</p>
         </div>
         <Button
           variant="outline"
@@ -309,6 +330,7 @@ export function CarsTab({ onUseForGuest }: CarsTabProps) {
       )}
 
       <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_18rem] 2xl:grid-cols-[minmax(0,1fr)_20rem]">
+        <div className="space-y-3">
         <div className="overflow-hidden rounded-lg border border-black/10 dark:border-white/10">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[680px] text-xs">
@@ -336,7 +358,7 @@ export function CarsTab({ onUseForGuest }: CarsTabProps) {
                     </td>
                   </tr>
                 ) : (
-                  rows.map((row) => {
+                  pagedRows.map((row) => {
                     const selected = row.id === selectedRow?.id;
                     return (
                       <tr
@@ -450,6 +472,17 @@ export function CarsTab({ onUseForGuest }: CarsTabProps) {
               </tbody>
             </table>
           </div>
+        </div>
+
+          {rows.length > 0 && (
+            <Pagination
+              page={page}
+              totalPages={totalPages}
+              pageSize={PAGE_SIZE}
+              total={rows.length}
+              onPageChange={setPage}
+            />
+          )}
         </div>
 
         <CarDetails row={selectedRow} onForgetGuest={load} />

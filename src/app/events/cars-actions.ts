@@ -298,10 +298,22 @@ async function getPlateVisitStats(
   return map;
 }
 
-export async function getRecentCarEvents(
-  limit: number = 100
-): Promise<SlprCarEventRow[]> {
-  const safeLimit = Math.max(1, Math.min(200, Math.floor(limit)));
+/**
+ * The single newest entry-camera event, enriched with a recognized-guest or
+ * registered-owner name. Powers the lightweight 5s "new car" poller — cheap
+ * enough to run globally on every page.
+ */
+export type LatestCarEvent = {
+  id: number;
+  plate: string;
+  status: string;
+  eventTime: string;
+  guestName: string | null;
+  ownerName: string | null;
+  apartmentNumber: string | null;
+};
+
+export async function getLatestCarEvent(): Promise<LatestCarEvent | null> {
   const rows = await querySlpr<SlprRawLogRow>(
     `SELECT
        l.ID, l.LP, l.LOG_DATE, l.STATUS, l.CAM_ID, l.DURATION, l.FILE, l.Customer_Id,
@@ -312,7 +324,53 @@ export async function getRecentCarEvents(
      LEFT JOIN customer c ON c.ID = l.Customer_Id AND l.Customer_Id > 0
      WHERE l.CAM_ID = 1
      ORDER BY l.LOG_DATE DESC, l.ID DESC
-     LIMIT ${safeLimit}`
+     LIMIT 1`
+  );
+  const row = rows[0];
+  if (!row) return null;
+
+  const plate = (row.LP ?? "").trim();
+  const guest = matchKnownGuests([plate]).get(normalizePlate(plate)) ?? null;
+  const owner = toRegisteredOwner(row);
+
+  return {
+    id: parseNullableNumber(row.ID) ?? 0,
+    plate,
+    status: row.STATUS ?? "",
+    eventTime: row.LOG_DATE ?? "",
+    guestName: guest?.guestName ?? null,
+    ownerName: guest ? null : owner?.name ?? null,
+    apartmentNumber: guest?.apartmentNumber ?? owner?.apartment ?? null,
+  };
+}
+
+/** The single most recent plate seen at the entry camera (autofill helper). */
+export async function getLastCarPlate(): Promise<string | null> {
+  const rows = await querySlpr<{ LP: string | null }>(
+    `SELECT LP FROM \`log\`
+     WHERE CAM_ID = 1
+     ORDER BY LOG_DATE DESC, ID DESC
+     LIMIT 1`
+  );
+  return rows[0]?.LP?.trim() || null;
+}
+
+export async function getRecentCarEvents(
+  days: number = 3
+): Promise<SlprCarEventRow[]> {
+  const safeDays = Math.max(1, Math.min(30, Math.floor(days)));
+  const rows = await querySlpr<SlprRawLogRow>(
+    `SELECT
+       l.ID, l.LP, l.LOG_DATE, l.STATUS, l.CAM_ID, l.DURATION, l.FILE, l.Customer_Id,
+       c.First_Name AS C_First,
+       c.Last_Name  AS C_Last,
+       c.Apartment  AS C_Apartment
+     FROM \`log\` l
+     LEFT JOIN customer c ON c.ID = l.Customer_Id AND l.Customer_Id > 0
+     WHERE l.CAM_ID = 1
+       AND l.LOG_DATE >= (NOW() - INTERVAL ${safeDays} DAY)
+     ORDER BY l.LOG_DATE DESC, l.ID DESC
+     LIMIT 5000`
   );
 
   const knownGuests = matchKnownGuests(rows.map((row) => row.LP ?? ""));

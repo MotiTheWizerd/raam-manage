@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import { Heebo } from "next/font/google";
 import { cookies } from "next/headers";
+import { Suspense } from "react";
 import { Toaster } from "sonner";
 import { AuthProvider } from "@/components/AuthProvider";
 import { Header } from "@/components/Header";
+import { NewCarNotifier } from "@/components/NewCarNotifier";
 import { PreferencesProvider } from "@/components/PreferencesProvider";
 import { Sidebar } from "@/components/Sidebar";
 import { StickyMessages } from "@/components/StickyMessages";
@@ -51,6 +53,9 @@ export default async function RootLayout({
                   <main className="flex-1 overflow-auto p-6">{children}</main>
                 </div>
                 <StickyMessages />
+                <Suspense fallback={null}>
+                  <NewCarNotifier />
+                </Suspense>
               </>
             ) : (
               children

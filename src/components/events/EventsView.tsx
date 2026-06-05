@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { ApartmentLink, ResidentLink } from "@/components/entity-links";
 import { useSelectedResident } from "@/components/PreferencesProvider";
@@ -26,11 +26,33 @@ const TAB_VALUES = new Set(TABS.map((t) => t.value));
 
 export function EventsView() {
   const resident = useSelectedResident();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const [tab, setTab] = useState<string>(() => {
     const initial = searchParams.get("tab");
     return initial && TAB_VALUES.has(initial) ? initial : "keys";
   });
+
+  // Keep the active tab mirrored in the URL so it's addressable: the global
+  // car notifier reads ?tab to suppress itself on the cars tab, and clicking a
+  // popup navigates here with ?tab=cars.
+  const selectTab = useCallback(
+    (value: string) => {
+      setTab(value);
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("tab", value);
+      router.replace(`/events?${params.toString()}`, { scroll: false });
+    },
+    [router, searchParams]
+  );
+
+  // React to external URL changes (e.g. a notification click while already on
+  // /events) so the tab follows the address bar.
+  useEffect(() => {
+    const urlTab = searchParams.get("tab");
+    if (urlTab && TAB_VALUES.has(urlTab) && urlTab !== tab) setTab(urlTab);
+  }, [searchParams, tab]);
+
   const [guestPlatePrefill, setGuestPlatePrefill] = useState<{
     plate: string;
     guestName?: string | null;
@@ -50,9 +72,9 @@ export function EventsView() {
         guestName: guestName?.trim() || null,
         nonce: (prev?.nonce ?? 0) + 1,
       }));
-      setTab("vehicles");
+      selectTab("vehicles");
     },
-    [resident]
+    [resident, selectTab]
   );
 
   return (
@@ -102,7 +124,7 @@ export function EventsView() {
         )}
       </header>
 
-      <Tabs tabs={TABS} value={tab} onChange={setTab} />
+      <Tabs tabs={TABS} value={tab} onChange={selectTab} />
 
       <section>
         {tab === "keys" && (

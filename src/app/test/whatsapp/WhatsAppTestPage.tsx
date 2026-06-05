@@ -342,13 +342,22 @@ export function WhatsAppTestPage() {
 }
 
 function toPhoneDropdownOptions(phones: ResidentPhoneOption[]): DropdownOption[] {
-  return phones.map((p) => {
+  // The same number can be stored more than once (different label/comment, own
+  // id). The dropdown selects a number to message, so collapse duplicates —
+  // keeps option values unique (React keys + unambiguous selection by value).
+  const seen = new Set<string>();
+  const options: DropdownOption[] = [];
+  for (const p of phones) {
+    const number = p.number.trim();
+    if (!number || seen.has(number)) continue;
+    seen.add(number);
     const details = [p.comment, p.label].filter(Boolean).join(" · ");
-    return {
-      value: p.number,
-      label: details ? `${p.number} · ${details}` : p.number,
-    };
-  });
+    options.push({
+      value: number,
+      label: details ? `${number} · ${details}` : number,
+    });
+  }
+  return options;
 }
 
 type ConversationSidebarProps = {

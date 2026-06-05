@@ -276,10 +276,24 @@ type PlateStatsRow = {
 };
 
 /**
+ * Per-plate stats cache. Computing lifetime stats for every plate on screen
+ * (~770 over 3 days) is a near-full scan of the 65k-row `log` (~1.7s), and the
+ * feed re-fetches every 10s — but a plate's stats barely move between refreshes.
+ * So we cache each plate for STATS_TTL_MS and only query the DB for plates we've
+ * never seen or whose entry has expired. After the first load almost every plate
+ * is a cache hit, so a refresh only costs a tiny query for the new arrivals.
+ *
+ * Trade-off: a plate's building tag / visit count can be up to STATS_TTL_MS
+ * stale — fine for a lobby view (the instant gate notifier is the live signal).
+ */
+const STATS_TTL_MS = 5 * 60_000;
+const statsCache = new Map<string, { agg: PlateAggregate; at: number }>();
+
+/**
  * Lifetime visit stats for the given plates, deduped by 2-minute window so the
  * twin entry cameras don't double-count. Also tallies cam-3 reads so the caller
  * can tell our-lane ("boutique") cars from the neighbour lane ("manhattan").
- * One grouped query for the whole batch.
+ * Cached per plate; only uncached/expired plates hit the DB (one grouped query).
  */
 async function getPlateVisitStats(
   plates: string[]
@@ -289,30 +303,52 @@ async function getPlateVisitStats(
   );
   if (unique.length === 0) return new Map();
 
-  const inList = unique.map(sqlStr).join(", ");
-  const rows = await querySlpr<PlateStatsRow>(
-    `SELECT
-       LP,
-       COUNT(DISTINCT FLOOR(UNIX_TIMESTAMP(LOG_DATE) / 120)) AS visits,
-       MIN(LOG_DATE) AS firstSeen,
-       MAX(LOG_DATE) AS lastSeen,
-       SUM(CAM_ID = 3) AS cam3
-     FROM \`log\`
-     WHERE LP IN (${inList})
-     GROUP BY LP`
-  );
-
+  const now = Date.now();
   const map = new Map<string, PlateAggregate>();
-  for (const row of rows) {
-    const lp = (row.LP ?? "").trim();
-    if (!lp) continue;
-    map.set(lp, {
-      visits: parseNullableNumber(row.visits) ?? 0,
-      firstSeen: row.firstSeen ?? "",
-      lastSeen: row.lastSeen ?? "",
-      cam3Reads: parseNullableNumber(row.cam3) ?? 0,
-    });
+  const stale: string[] = [];
+  for (const lp of unique) {
+    const hit = statsCache.get(lp);
+    if (hit && now - hit.at < STATS_TTL_MS) map.set(lp, hit.agg);
+    else stale.push(lp);
   }
+
+  if (stale.length > 0) {
+    const inList = stale.map(sqlStr).join(", ");
+    const rows = await querySlpr<PlateStatsRow>(
+      `SELECT
+         LP,
+         COUNT(DISTINCT FLOOR(UNIX_TIMESTAMP(LOG_DATE) / 120)) AS visits,
+         MIN(LOG_DATE) AS firstSeen,
+         MAX(LOG_DATE) AS lastSeen,
+         SUM(CAM_ID = 3) AS cam3
+       FROM \`log\`
+       WHERE LP IN (${inList})
+       GROUP BY LP`
+    );
+
+    const fetched = new Map<string, PlateAggregate>();
+    for (const row of rows) {
+      const lp = (row.LP ?? "").trim();
+      if (!lp) continue;
+      fetched.set(lp, {
+        visits: parseNullableNumber(row.visits) ?? 0,
+        firstSeen: row.firstSeen ?? "",
+        lastSeen: row.lastSeen ?? "",
+        cam3Reads: parseNullableNumber(row.cam3) ?? 0,
+      });
+    }
+
+    // Cache every requested plate (even ones with no row, so we don't re-query
+    // them) and add them to the result.
+    for (const lp of stale) {
+      const agg =
+        fetched.get(lp) ??
+        { visits: 0, firstSeen: "", lastSeen: "", cam3Reads: 0 };
+      statsCache.set(lp, { agg, at: now });
+      map.set(lp, agg);
+    }
+  }
+
   return map;
 }
 

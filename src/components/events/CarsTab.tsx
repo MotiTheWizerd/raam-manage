@@ -1,6 +1,6 @@
 "use client";
 
-import { ImageIcon, RefreshCw, UserRound, UserRoundPlus } from "lucide-react";
+import { Building2, ImageIcon, RefreshCw, UserRound, UserRoundPlus } from "lucide-react";
 import NextImage from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -270,6 +270,10 @@ export function CarsTab({ onUseForGuest }: CarsTabProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
+  // When on, show only cars that actually entered our building (בוטיק) and drop
+  // the now-redundant building column. Default ON — the lobby cares about our
+  // own cars; press the toggle to reveal the neighbour (מנהטן) lane too.
+  const [boutiqueOnly, setBoutiqueOnly] = useState(true);
   // Tracks the newest row id we've seen so we can auto-follow new arrivals
   // without overriding a manual selection between them.
   const lastTopIdRef = useRef<number | null>(null);
@@ -280,15 +284,22 @@ export function CarsTab({ onUseForGuest }: CarsTabProps) {
     pageRef.current = page;
   }, [page]);
 
-  const selectedRow = useMemo(
-    () => rows.find((row) => row.id === selectedId) ?? rows[0] ?? null,
-    [rows, selectedId]
+  // The rows actually rendered — filtered to בוטיק when the toggle is on.
+  const visibleRows = useMemo(
+    () => (boutiqueOnly ? rows.filter((row) => row.building === "boutique") : rows),
+    [rows, boutiqueOnly]
   );
 
-  const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const selectedRow = useMemo(
+    () =>
+      visibleRows.find((row) => row.id === selectedId) ?? visibleRows[0] ?? null,
+    [visibleRows, selectedId]
+  );
+
+  const totalPages = Math.max(1, Math.ceil(visibleRows.length / PAGE_SIZE));
   const pagedRows = useMemo(
-    () => rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
-    [rows, page]
+    () => visibleRows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [visibleRows, page]
   );
 
   // Keep the current page in range as the feed shrinks (old rows fall off).
@@ -343,18 +354,33 @@ export function CarsTab({ onUseForGuest }: CarsTabProps) {
           <h2 className="text-sm font-medium opacity-80">רכבים אחרונים</h2>
           <p className="text-xs opacity-60">3 הימים האחרונים · מתעדכן אוטומטית כל 10 שניות</p>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => {
-            setLoading(true);
-            load();
-          }}
-          disabled={loading}
-        >
-          <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
-          רענון
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant={boutiqueOnly ? "primary" : "outline"}
+            size="sm"
+            onClick={() => {
+              setBoutiqueOnly((on) => !on);
+              setPage(1);
+            }}
+            aria-pressed={boutiqueOnly}
+            title="הצג רק רכבים שנכנסו לבניין שלנו (הסתר מנהטן)"
+          >
+            <Building2 size={14} />
+            רק בוטיק
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setLoading(true);
+              load();
+            }}
+            disabled={loading}
+          >
+            <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
+            רענון
+          </Button>
+        </div>
       </div>
 
       {error && (
@@ -373,7 +399,9 @@ export function CarsTab({ onUseForGuest }: CarsTabProps) {
                   <th className="px-3 py-2 font-medium text-start">מספר רישוי</th>
                   <th className="px-3 py-2 font-medium text-start">תאריך</th>
                   <th className="px-3 py-2 font-medium text-start">סטטוס</th>
-                  <th className="px-3 py-2 font-medium text-start">בניין</th>
+                  {!boutiqueOnly && (
+                    <th className="px-3 py-2 font-medium text-start">בניין</th>
+                  )}
                   <th className="px-3 py-2 font-medium text-start">אורח מזוהה</th>
                   <th className="px-3 py-2 font-medium text-center">רישום אורח</th>
                   <th className="px-3 py-2 font-medium text-center">פרטים</th>
@@ -382,14 +410,22 @@ export function CarsTab({ onUseForGuest }: CarsTabProps) {
               <tbody className="divide-y divide-black/5 dark:divide-white/5">
                 {loading && rows.length === 0 ? (
                   <tr>
-                    <td className="px-3 py-7 text-center opacity-60" colSpan={7}>
+                    <td
+                      className="px-3 py-7 text-center opacity-60"
+                      colSpan={boutiqueOnly ? 6 : 7}
+                    >
                       טוען רכבים...
                     </td>
                   </tr>
-                ) : rows.length === 0 ? (
+                ) : visibleRows.length === 0 ? (
                   <tr>
-                    <td className="px-3 py-7 text-center opacity-60" colSpan={7}>
-                      אין אירועי רכבים להצגה
+                    <td
+                      className="px-3 py-7 text-center opacity-60"
+                      colSpan={boutiqueOnly ? 6 : 7}
+                    >
+                      {boutiqueOnly
+                        ? "אין רכבים שנכנסו לבניין להצגה"
+                        : "אין אירועי רכבים להצגה"}
                     </td>
                   </tr>
                 ) : (
@@ -443,21 +479,23 @@ export function CarsTab({ onUseForGuest }: CarsTabProps) {
                            {row.status && row.status.toUpperCase() != "INVALID" ?  "מאושר" : "לא מאושר"}
                           </span>
                         </td>
-                        <td className="px-3 py-2.5">
-                          {(() => {
-                            const tag = buildingTag(row.building);
-                            return (
-                              <span
-                                className={cn(
-                                  "inline-flex h-5 items-center rounded-full px-2 text-[11px] font-medium",
-                                  tag.className
-                                )}
-                              >
-                                {tag.text}
-                              </span>
-                            );
-                          })()}
-                        </td>
+                        {!boutiqueOnly && (
+                          <td className="px-3 py-2.5">
+                            {(() => {
+                              const tag = buildingTag(row.building);
+                              return (
+                                <span
+                                  className={cn(
+                                    "inline-flex h-5 items-center rounded-full px-2 text-[11px] font-medium",
+                                    tag.className
+                                  )}
+                                >
+                                  {tag.text}
+                                </span>
+                              );
+                            })()}
+                          </td>
+                        )}
                         <td className="px-3 py-2.5">
                           {row.guest ? (
                             <div className="flex flex-col">
@@ -527,12 +565,12 @@ export function CarsTab({ onUseForGuest }: CarsTabProps) {
           </div>
         </div>
 
-          {rows.length > 0 && (
+          {visibleRows.length > 0 && (
             <Pagination
               page={page}
               totalPages={totalPages}
               pageSize={PAGE_SIZE}
-              total={rows.length}
+              total={visibleRows.length}
               onPageChange={setPage}
             />
           )}

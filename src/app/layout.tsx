@@ -52,10 +52,15 @@ export default async function RootLayout({
                   <Sidebar />
                   <main className="flex-1 overflow-auto p-6">{children}</main>
                 </div>
-                <StickyMessages />
-                <Suspense fallback={null}>
-                  <NewCarNotifier />
-                </Suspense>
+                {/* Top-left stack: system messages on top, the car notifier
+                    below. StickyMessages renders null when empty, so the
+                    notifier rises to the top with no gap. */}
+                <div className="pointer-events-none fixed top-20 left-4 z-50 flex w-80 max-w-[calc(100vw-2rem)] flex-col gap-2">
+                  <StickyMessages />
+                  <Suspense fallback={null}>
+                    <NewCarNotifier />
+                  </Suspense>
+                </div>
               </>
             ) : (
               children

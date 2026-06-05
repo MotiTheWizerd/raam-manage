@@ -158,7 +158,7 @@ export function NewCarNotifier() {
   }, [dismiss]);
 
   return (
-    <div className="pointer-events-none fixed top-20 right-4 z-50 flex w-80 max-w-[calc(100vw-2rem)] flex-col gap-2.5">
+    <div className="pointer-events-none flex w-full flex-col gap-2.5">
         <AnimatePresence initial={false}>
           {items.map((n) => {
             const approved = isApproved(n.status);
@@ -166,9 +166,9 @@ export function NewCarNotifier() {
               <motion.div
                 key={n.key}
                 layout
-                initial={{ opacity: 0, x: 28, scale: 0.94 }}
+                initial={{ opacity: 0, x: -28, scale: 0.94 }}
                 animate={{ opacity: 1, x: 0, scale: 1 }}
-                exit={{ opacity: 0, x: 28, scale: 0.94 }}
+                exit={{ opacity: 0, x: -28, scale: 0.94 }}
                 transition={{ type: "spring", stiffness: 380, damping: 26 }}
                 className="pointer-events-auto overflow-hidden rounded-2xl border border-red-500/40 bg-white shadow-2xl shadow-red-900/20 ring-1 ring-red-500/20 dark:border-red-500/40 dark:bg-zinc-900"
                 role="status"

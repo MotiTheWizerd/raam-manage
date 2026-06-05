@@ -44,7 +44,7 @@ export function StickyMessages() {
   if (messages.length === 0) return null;
 
   return (
-    <div className="pointer-events-none fixed top-20 left-4 z-40 w-72 space-y-2">
+    <div className="pointer-events-none w-full space-y-2">
       <AnimatePresence initial={false}>
         {messages.slice(0, 3).map((m) => (
           <motion.div

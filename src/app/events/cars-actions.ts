@@ -36,6 +36,18 @@ export type PlateVisitStats = {
   lastSeen: string;
 };
 
+/**
+ * Which lane / building a plate belongs to, decided by camera 3 — the camera
+ * mounted INSIDE our entrance ramp. Cam 3 only ever sees a car that actually
+ * drove down into our garage, so any cam-3 history means it's ours
+ * ("boutique"). Plates seen only by the outdoor gate camera (cam 1, which also
+ * overlooks the adjacent lot's lane) are the neighbour building ("manhattan").
+ */
+export type CarBuilding = "boutique" | "manhattan";
+
+/** Visit stats plus the cam-3 read count used to classify the building. */
+type PlateAggregate = PlateVisitStats & { cam3Reads: number };
+
 export type SlprCarEventRow = {
   id: number;
   plate: string;
@@ -48,6 +60,7 @@ export type SlprCarEventRow = {
   guest: RecognizedGuest | null;
   registeredOwner: RegisteredOwner | null;
   visitStats: PlateVisitStats | null;
+  building: CarBuilding;
 };
 
 type ResidentGuestLookupRow = {
@@ -259,15 +272,18 @@ type PlateStatsRow = {
   visits: string | null;
   firstSeen: string | null;
   lastSeen: string | null;
+  cam3: string | null;
 };
 
 /**
  * Lifetime visit stats for the given plates, deduped by 2-minute window so the
- * twin entry cameras don't double-count. One grouped query for the whole batch.
+ * twin entry cameras don't double-count. Also tallies cam-3 reads so the caller
+ * can tell our-lane ("boutique") cars from the neighbour lane ("manhattan").
+ * One grouped query for the whole batch.
  */
 async function getPlateVisitStats(
   plates: string[]
-): Promise<Map<string, PlateVisitStats>> {
+): Promise<Map<string, PlateAggregate>> {
   const unique = Array.from(
     new Set(plates.map((p) => p.trim()).filter((p) => p.length > 0))
   );
@@ -279,13 +295,14 @@ async function getPlateVisitStats(
        LP,
        COUNT(DISTINCT FLOOR(UNIX_TIMESTAMP(LOG_DATE) / 120)) AS visits,
        MIN(LOG_DATE) AS firstSeen,
-       MAX(LOG_DATE) AS lastSeen
+       MAX(LOG_DATE) AS lastSeen,
+       SUM(CAM_ID = 3) AS cam3
      FROM \`log\`
      WHERE LP IN (${inList})
      GROUP BY LP`
   );
 
-  const map = new Map<string, PlateVisitStats>();
+  const map = new Map<string, PlateAggregate>();
   for (const row of rows) {
     const lp = (row.LP ?? "").trim();
     if (!lp) continue;
@@ -293,15 +310,21 @@ async function getPlateVisitStats(
       visits: parseNullableNumber(row.visits) ?? 0,
       firstSeen: row.firstSeen ?? "",
       lastSeen: row.lastSeen ?? "",
+      cam3Reads: parseNullableNumber(row.cam3) ?? 0,
     });
   }
   return map;
 }
 
 /**
- * The single newest entry-camera event, enriched with a recognized-guest or
+ * The single newest CONFIRMED-entry event, enriched with a recognized-guest or
  * registered-owner name. Powers the lightweight 5s "new car" poller — cheap
  * enough to run globally on every page.
+ *
+ * Reads from camera 3 (the in-ramp camera) only: a car appears there exactly
+ * when it has actually driven down into our garage, so the notifier never fires
+ * for the neighbour lane ("manhattan"). The trade-off is ~30s latency vs the
+ * outdoor gate camera — worth it for a zero-false-positive alert.
  */
 export type LatestCarEvent = {
   id: number;
@@ -322,7 +345,7 @@ export async function getLatestCarEvent(): Promise<LatestCarEvent | null> {
        c.Apartment  AS C_Apartment
      FROM \`log\` l
      LEFT JOIN customer c ON c.ID = l.Customer_Id AND l.Customer_Id > 0
-     WHERE l.CAM_ID = 1
+     WHERE l.CAM_ID = 3
      ORDER BY l.LOG_DATE DESC, l.ID DESC
      LIMIT 1`
   );
@@ -378,6 +401,7 @@ export async function getRecentCarEvents(
 
   return rows.map((row) => {
     const plate = (row.LP ?? "").trim();
+    const agg = visitStats.get(plate) ?? null;
     return {
       id: parseNullableNumber(row.ID) ?? 0,
       plate,
@@ -389,7 +413,8 @@ export async function getRecentCarEvents(
       customerId: parseNullableNumber(row.Customer_Id),
       guest: knownGuests.get(normalizePlate(plate)) ?? null,
       registeredOwner: toRegisteredOwner(row),
-      visitStats: visitStats.get(plate) ?? null,
+      visitStats: agg,
+      building: agg && agg.cam3Reads > 0 ? "boutique" : "manhattan",
     };
   });
 }

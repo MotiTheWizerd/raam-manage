@@ -157,102 +157,106 @@ export function NewCarNotifier() {
     };
   }, [dismiss]);
 
-  if (items.length === 0) return null;
-
   return (
-    <div className="pointer-events-none fixed top-20 right-4 z-50 flex w-80 max-w-[calc(100vw-2rem)] flex-col gap-2">
-      <AnimatePresence initial={false}>
-        {items.map((n) => {
-          const approved = isApproved(n.status);
-          return (
-            <motion.div
-              key={n.key}
-              layout
-              initial={{ opacity: 0, x: 24, scale: 0.96 }}
-              animate={{ opacity: 1, x: 0, scale: 1 }}
-              exit={{ opacity: 0, x: 24, scale: 0.96 }}
-              transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-              className="pointer-events-auto overflow-hidden rounded-xl border border-black/10 bg-background shadow-lg dark:border-white/10"
-              role="status"
-            >
-              <div className="flex items-start gap-2 p-3">
-                <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-300">
-                  <Car size={18} />
+    <div className="pointer-events-none fixed top-20 right-4 z-50 flex w-80 max-w-[calc(100vw-2rem)] flex-col gap-2.5">
+        <AnimatePresence initial={false}>
+          {items.map((n) => {
+            const approved = isApproved(n.status);
+            return (
+              <motion.div
+                key={n.key}
+                layout
+                initial={{ opacity: 0, x: 28, scale: 0.94 }}
+                animate={{ opacity: 1, x: 0, scale: 1 }}
+                exit={{ opacity: 0, x: 28, scale: 0.94 }}
+                transition={{ type: "spring", stiffness: 380, damping: 26 }}
+                className="pointer-events-auto overflow-hidden rounded-2xl border border-red-500/40 bg-white shadow-2xl shadow-red-900/20 ring-1 ring-red-500/20 dark:border-red-500/40 dark:bg-zinc-900"
+                role="status"
+              >
+                {/* Bold brand-red header so the alert reads instantly. */}
+                <div className="flex items-center justify-between gap-2 bg-gradient-to-l from-red-600 to-rose-500 px-3 py-2 text-white">
+                  <span className="flex items-center gap-1.5 text-[13px] font-bold tracking-wide">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white/20">
+                      <Car size={15} />
+                    </span>
+                    רכב חדש בכניסה
+                  </span>
+                  <div className="flex items-center gap-0.5">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleSound();
+                      }}
+                      aria-label={soundOn ? "כבה צליל התראה" : "הפעל צליל התראה"}
+                      title={
+                        soundOn ? "צליל פעיל — לחץ להשתקה" : "מושתק — לחץ להפעלה"
+                      }
+                      className={cn(
+                        "inline-flex h-6 w-6 items-center justify-center rounded-md text-white transition-colors hover:bg-white/20",
+                        !soundOn && "opacity-60"
+                      )}
+                    >
+                      {soundOn ? <Bell size={14} /> : <BellOff size={14} />}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        dismiss(n.key);
+                      }}
+                      aria-label="סגור"
+                      className="inline-flex h-6 w-6 items-center justify-center rounded-md text-white transition-colors hover:bg-white/20"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
                 </div>
 
+                {/* Clickable body -> opens the cars tab. */}
                 <button
                   type="button"
                   onClick={() => openCarsTab(n.key)}
-                  className="min-w-0 flex-1 text-start"
+                  className="block w-full px-3 py-2.5 text-start transition-colors hover:bg-red-50/70 dark:hover:bg-red-950/20"
                   title="פתח את לשונית הרכבים"
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs font-semibold opacity-70">
-                      רכב חדש בכניסה
+                    <span
+                      className="font-mono text-xl font-extrabold leading-none"
+                      dir="ltr"
+                    >
+                      {n.plate || "—"}
                     </span>
                     <span
                       className={cn(
-                        "inline-flex h-5 items-center rounded-full px-2 text-[11px] font-medium",
+                        "inline-flex h-5 items-center rounded-full px-2 text-[11px] font-semibold",
                         approved
-                          ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300"
-                          : "bg-zinc-100 text-zinc-700 dark:bg-zinc-900 dark:text-zinc-300"
+                          ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
+                          : "bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
                       )}
                     >
                       {approved ? "מאושר" : "לא מאושר"}
                     </span>
                   </div>
-                  <div
-                    className="mt-1 font-mono text-lg font-bold leading-tight"
-                    dir="ltr"
-                  >
-                    {n.plate || "—"}
-                  </div>
                   {n.guestName ? (
-                    <div className="mt-0.5 text-xs font-medium text-orange-700 dark:text-orange-300">
+                    <div className="mt-1.5 text-xs font-semibold text-orange-700 dark:text-orange-300">
                       אורח מזוהה: {n.guestName}
                       {n.apartmentNumber ? ` · דירה ${n.apartmentNumber}` : ""}
                     </div>
                   ) : n.ownerName ? (
-                    <div className="mt-0.5 text-xs font-medium text-sky-700 dark:text-sky-300">
+                    <div className="mt-1.5 text-xs font-semibold text-sky-700 dark:text-sky-300">
                       רכב רשום: {n.ownerName}
                       {n.apartmentNumber ? ` · דירה ${n.apartmentNumber}` : ""}
                     </div>
                   ) : null}
+                  <div className="mt-1.5 text-[11px] opacity-50">
+                    לחץ לפתיחת לשונית הרכבים ←
+                  </div>
                 </button>
-
-                <div className="flex shrink-0 flex-col items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      dismiss(n.key);
-                    }}
-                    aria-label="סגור"
-                    className="inline-flex h-6 w-6 items-center justify-center rounded-md opacity-60 transition-colors hover:bg-black/[0.06] hover:opacity-100 dark:hover:bg-white/[0.08]"
-                  >
-                    <X size={14} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleSound();
-                    }}
-                    aria-label={soundOn ? "כבה צליל התראה" : "הפעל צליל התראה"}
-                    title={soundOn ? "צליל פעיל — לחץ להשתקה" : "מושתק — לחץ להפעלה"}
-                    className={cn(
-                      "inline-flex h-6 w-6 items-center justify-center rounded-md transition-colors hover:bg-black/[0.06] dark:hover:bg-white/[0.08]",
-                      soundOn ? "text-red-600 dark:text-red-300" : "opacity-50"
-                    )}
-                  >
-                    {soundOn ? <Bell size={14} /> : <BellOff size={14} />}
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          );
-        })}
-      </AnimatePresence>
+              </motion.div>
+            );
+          })}
+        </AnimatePresence>
     </div>
   );
 }

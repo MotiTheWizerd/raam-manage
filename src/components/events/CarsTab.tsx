@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   forgetResidentGuest,
   getRecentCarEvents,
+  type CarBuilding,
   type SlprCarEventRow,
 } from "@/app/events/cars-actions";
 import { Button } from "@/components/ui/Button";
@@ -27,6 +28,24 @@ function statusClassName(status: string): string {
   return status.toUpperCase() === "VALID"
     ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300"
     : "bg-zinc-100 text-zinc-700 dark:bg-zinc-900 dark:text-zinc-300";
+}
+
+/**
+ * Label + colour for the building tag. "boutique" is our lane (cam-3 confirmed);
+ * "manhattan" is the neighbour lane that only the outdoor gate camera sees.
+ */
+function buildingTag(building: CarBuilding): { text: string; className: string } {
+  return building === "boutique"
+    ? {
+        text: "בוטיק",
+        className:
+          "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300",
+      }
+    : {
+        text: "מנהטן",
+        className:
+          "bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300",
+      };
 }
 
 function imageUrl(path: string | null): string | null {
@@ -95,15 +114,30 @@ function CarDetails({
             #{row.id}
           </p>
         </div>
-        <span
-          className={cn(
-            "inline-flex h-7 items-center rounded-full px-3 text-xs font-semibold",
-            statusClassName(row.status)
-          )}
-          dir="ltr"
-        >
-          {row.status && row.status.toUpperCase() != "INVALID" ?  "מאושר" : "לא מאושר"} 
-        </span>
+        <div className="flex items-center gap-2">
+          {(() => {
+            const tag = buildingTag(row.building);
+            return (
+              <span
+                className={cn(
+                  "inline-flex h-7 items-center rounded-full px-3 text-xs font-semibold",
+                  tag.className
+                )}
+              >
+                {tag.text}
+              </span>
+            );
+          })()}
+          <span
+            className={cn(
+              "inline-flex h-7 items-center rounded-full px-3 text-xs font-semibold",
+              statusClassName(row.status)
+            )}
+            dir="ltr"
+          >
+            {row.status && row.status.toUpperCase() != "INVALID" ?  "מאושר" : "לא מאושר"}
+          </span>
+        </div>
       </div>
 
       <div className="mb-3 grid grid-cols-[1fr_4.5rem] gap-2">
@@ -339,6 +373,7 @@ export function CarsTab({ onUseForGuest }: CarsTabProps) {
                   <th className="px-3 py-2 font-medium text-start">מספר רישוי</th>
                   <th className="px-3 py-2 font-medium text-start">תאריך</th>
                   <th className="px-3 py-2 font-medium text-start">סטטוס</th>
+                  <th className="px-3 py-2 font-medium text-start">בניין</th>
                   <th className="px-3 py-2 font-medium text-start">אורח מזוהה</th>
                   <th className="px-3 py-2 font-medium text-center">רישום אורח</th>
                   <th className="px-3 py-2 font-medium text-center">פרטים</th>
@@ -347,13 +382,13 @@ export function CarsTab({ onUseForGuest }: CarsTabProps) {
               <tbody className="divide-y divide-black/5 dark:divide-white/5">
                 {loading && rows.length === 0 ? (
                   <tr>
-                    <td className="px-3 py-7 text-center opacity-60" colSpan={6}>
+                    <td className="px-3 py-7 text-center opacity-60" colSpan={7}>
                       טוען רכבים...
                     </td>
                   </tr>
                 ) : rows.length === 0 ? (
                   <tr>
-                    <td className="px-3 py-7 text-center opacity-60" colSpan={6}>
+                    <td className="px-3 py-7 text-center opacity-60" colSpan={7}>
                       אין אירועי רכבים להצגה
                     </td>
                   </tr>
@@ -365,7 +400,10 @@ export function CarsTab({ onUseForGuest }: CarsTabProps) {
                         key={row.id}
                         className={cn(
                           "transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.03]",
-                          selected && "bg-red-50/60 dark:bg-red-950/20"
+                          selected && "bg-red-50/60 dark:bg-red-950/20",
+                          // Fade the neighbour-lane (מנהטן) rows so the lobby
+                          // display reads as "our cars" at a glance.
+                          row.building === "manhattan" && !selected && "opacity-45"
                         )}
                       >
                         <td className="px-3 py-2.5 font-mono font-semibold align-top" dir="ltr">
@@ -402,8 +440,23 @@ export function CarsTab({ onUseForGuest }: CarsTabProps) {
                             )}
                             dir="ltr"
                           >
-                           {row.status && row.status.toUpperCase() != "INVALID" ?  "מאושר" : "לא מאושר"} 
+                           {row.status && row.status.toUpperCase() != "INVALID" ?  "מאושר" : "לא מאושר"}
                           </span>
+                        </td>
+                        <td className="px-3 py-2.5">
+                          {(() => {
+                            const tag = buildingTag(row.building);
+                            return (
+                              <span
+                                className={cn(
+                                  "inline-flex h-5 items-center rounded-full px-2 text-[11px] font-medium",
+                                  tag.className
+                                )}
+                              >
+                                {tag.text}
+                              </span>
+                            );
+                          })()}
                         </td>
                         <td className="px-3 py-2.5">
                           {row.guest ? (

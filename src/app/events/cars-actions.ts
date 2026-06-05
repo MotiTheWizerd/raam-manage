@@ -317,14 +317,14 @@ async function getPlateVisitStats(
 }
 
 /**
- * The single newest CONFIRMED-entry event, enriched with a recognized-guest or
+ * The single newest gate event, enriched with a recognized-guest or
  * registered-owner name. Powers the lightweight 5s "new car" poller — cheap
  * enough to run globally on every page.
  *
- * Reads from camera 3 (the in-ramp camera) only: a car appears there exactly
- * when it has actually driven down into our garage, so the notifier never fires
- * for the neighbour lane ("manhattan"). The trade-off is ~30s latency vs the
- * outdoor gate camera — worth it for a zero-false-positive alert.
+ * Reads from camera 1 (the outdoor gate) so the pop-up fires the instant a car
+ * reaches the entrance — including the neighbour lane ("manhattan"). Moti's
+ * call: an immediate heads-up beats a filtered-but-late one; the cars feed
+ * still tags/filters בוטיק vs מנהטן for the considered view.
  */
 export type LatestCarEvent = {
   id: number;
@@ -345,7 +345,7 @@ export async function getLatestCarEvent(): Promise<LatestCarEvent | null> {
        c.Apartment  AS C_Apartment
      FROM \`log\` l
      LEFT JOIN customer c ON c.ID = l.Customer_Id AND l.Customer_Id > 0
-     WHERE l.CAM_ID = 3
+     WHERE l.CAM_ID = 1
      ORDER BY l.LOG_DATE DESC, l.ID DESC
      LIMIT 1`
   );

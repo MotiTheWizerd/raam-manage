@@ -4,6 +4,7 @@ import { useIsManager } from "@/components/AuthProvider";
 import { updateResident } from "../actions";
 import { ResidentForm, type ApartmentOption } from "../ResidentForm";
 import { type PhoneInit } from "../PhoneFields";
+import { ResidentCars } from "./ResidentCars";
 
 type Phone = {
   id: number;
@@ -68,6 +69,8 @@ export function ResidentDetail({
           submitLabel="שמור שינויים"
         />
       </fieldset>
+
+      <ResidentCars apartmentNumber={resident.apartment_number} />
     </div>
   );
 }

@@ -93,6 +93,19 @@ function trimOrNull(value: string | null): string | null {
   return t.length > 0 ? t : null;
 }
 
+function toRegisteredCarRow(row: CustomerRawRow): RegisteredCarRow {
+  return {
+    id: toNumber(row.ID),
+    plate: (row.LP ?? "").trim(),
+    firstName: trimOrNull(row.First_Name),
+    lastName: trimOrNull(row.Last_Name),
+    apartment: trimOrNull(row.Apartment),
+    phone: trimOrNull(row.Phone),
+    isEmployee: row.isEmployee === "1",
+    additionalPlates: trimOrNull(row.additional_lps),
+  };
+}
+
 export async function getRegisteredCarsSummary(): Promise<RegisteredCarsSummary> {
   const rows = await querySlpr<{
     residentCars: string | null;
@@ -160,19 +173,28 @@ export async function getRegisteredCarsPage(
   );
 
   return {
-    rows: rows.map((row) => ({
-      id: toNumber(row.ID),
-      plate: (row.LP ?? "").trim(),
-      firstName: trimOrNull(row.First_Name),
-      lastName: trimOrNull(row.Last_Name),
-      apartment: trimOrNull(row.Apartment),
-      phone: trimOrNull(row.Phone),
-      isEmployee: row.isEmployee === "1",
-      additionalPlates: trimOrNull(row.additional_lps),
-    })),
+    rows: rows.map(toRegisteredCarRow),
     page: safePage,
     pageSize: safePageSize,
     total,
     totalPages,
   };
+}
+
+// Registered cars for a single apartment (residents only) — used read-only on
+// the resident detail page. Matches our apartments.number to SLPR Apartment.
+export async function getRegisteredCarsForApartment(
+  apartment: string
+): Promise<RegisteredCarRow[]> {
+  const apt = (apartment ?? "").trim();
+  if (!apt) return [];
+
+  const rows = await querySlpr<CustomerRawRow>(
+    `SELECT ID, LP, First_Name, Last_Name, Apartment, Phone, isEmployee, additional_lps
+       FROM customer
+      WHERE ${RESIDENT_FILTER} AND Apartment = ${sqlString(apt)}
+      ORDER BY Last_Name, First_Name`
+  );
+
+  return rows.map(toRegisteredCarRow);
 }

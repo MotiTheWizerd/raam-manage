@@ -131,12 +131,16 @@ export function VehiclesTab({ apartmentId, residentId, guestPlatePrefill }: Prop
         </section>
       )}
 
-      {residentId !== null && (
+      {residentId !== null ? (
         <GuestParkingSection
           residentId={residentId}
           onCreated={refresh}
           prefill={guestPlatePrefill}
         />
+      ) : (
+        <p className="text-sm text-center opacity-50 py-4">
+          בחר דייר כדי לרשום חניית אורח
+        </p>
       )}
 
       <section className="space-y-3">

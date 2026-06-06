@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { toast } from "sonner";
 import { ApartmentLink, ResidentLink } from "@/components/entity-links";
 import { useSelectedResident } from "@/components/PreferencesProvider";
 import { Tabs, type TabItem } from "@/components/ui/Tabs";
@@ -63,10 +62,6 @@ export function EventsView() {
     (plate: string, guestName?: string | null) => {
       const trimmed = plate.trim();
       if (!trimmed) return;
-      if (!resident) {
-        toast.error("בחר דייר כדי לרשום חניית אורח");
-        return;
-      }
       setGuestPlatePrefill((prev) => ({
         plate: trimmed,
         guestName: guestName?.trim() || null,
@@ -74,7 +69,7 @@ export function EventsView() {
       }));
       selectTab("vehicles");
     },
-    [resident, selectTab]
+    [selectTab]
   );
 
   return (

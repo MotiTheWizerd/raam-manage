@@ -17,7 +17,7 @@ import { Textarea } from "@/components/ui/Textarea";
 const initialState: GuestParkingFormState = {};
 
 type Props = {
-  residentId: number;
+  residentId: number | null;
   onCreated: () => void;
   prefill?: { plate: string; guestName?: string | null; nonce: number } | null;
 };
@@ -86,7 +86,9 @@ export function GuestParkingSection({ residentId, onCreated, prefill }: Props) {
         action={action}
         className="flex flex-wrap items-end gap-2"
       >
-        <input type="hidden" name="resident_id" value={residentId} />
+        {residentId !== null && (
+          <input type="hidden" name="resident_id" value={residentId} />
+        )}
 
         <div className="flex flex-col gap-1">
           <label htmlFor="guest-name" className="text-xs opacity-70">
@@ -161,10 +163,15 @@ export function GuestParkingSection({ residentId, onCreated, prefill }: Props) {
           />
         </div>
 
-        <Button type="submit" size="sm" disabled={pending}>
-          <Plus size={14} />
-          {pending ? "שומר..." : "הוסף"}
-        </Button>
+        <div className="flex flex-col gap-1">
+          <Button type="submit" size="sm" disabled={pending || residentId === null}>
+            <Plus size={14} />
+            {pending ? "שומר..." : "הוסף"}
+          </Button>
+          {residentId === null && (
+            <span className="text-xs opacity-50">בחר דייר לרישום</span>
+          )}
+        </div>
       </form>
     </section>
   );

@@ -8,11 +8,12 @@ const AUTO_CLOSE_MS = 12000; // roughly the gate open/close cycle
 const REFRESH_MS = 400;
 
 type Props = {
-  gate: { id: string; name: string };
+  camId: string;
+  title: string;
   onClose: () => void;
 };
 
-export function GateLiveView({ gate, onClose }: Props) {
+export function GateLiveView({ camId, title, onClose }: Props) {
   const [src, setSrc] = useState<string | null>(null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
@@ -24,7 +25,7 @@ export function GateLiveView({ gate, onClose }: Props) {
     // Load each frame into an offscreen Image and only swap it in once it has
     // decoded — no blank flicker between refreshes.
     const loadNext = () => {
-      const next = `/api/gate-cam?gate=${gate.id}&t=${Date.now()}`;
+      const next = `/api/gate-cam?cam=${camId}&t=${Date.now()}`;
       const img = new Image();
       img.onload = () => {
         if (!active) return;
@@ -46,7 +47,7 @@ export function GateLiveView({ gate, onClose }: Props) {
       clearTimeout(timer);
       clearTimeout(autoClose);
     };
-  }, [gate.id]);
+  }, [camId]);
 
   return (
     <motion.div
@@ -60,7 +61,7 @@ export function GateLiveView({ gate, onClose }: Props) {
         <div className="flex items-center gap-2">
           <span className="size-2 animate-pulse rounded-full bg-red-500" />
           <span className="text-sm font-semibold text-white">
-            {gate.name} — שידור חי
+            {title} — שידור חי
           </span>
         </div>
         <button
@@ -78,7 +79,7 @@ export function GateLiveView({ gate, onClose }: Props) {
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={src}
-            alt={`מצלמת ${gate.name}`}
+            alt={`מצלמת ${title}`}
             className="block h-full w-full object-cover"
           />
         ) : (

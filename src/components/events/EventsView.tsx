@@ -14,11 +14,11 @@ import { PackagesTab } from "./PackagesTab";
 import { VehiclesTab } from "./VehiclesTab";
 
 const TABS: TabItem[] = [
-  { value: "keys", label: "ניהול מפתחות" },
-  { value: "packages", label: "ניהול חבילות" },
   { value: "vehicles", label: "ניהול אורחים" },
-  { value: "equipment", label: "השאלת ציוד" },
   { value: "cars", label: "רכבים" },
+  { value: "packages", label: "ניהול חבילות" },
+  { value: "keys", label: "ניהול מפתחות" },
+  { value: "equipment", label: "השאלת ציוד" },
   { value: "known-guests", label: "אורחים מוכרים" },
 ];
 
@@ -30,7 +30,7 @@ export function EventsView() {
   const searchParams = useSearchParams();
   const [tab, setTab] = useState<string>(() => {
     const initial = searchParams.get("tab");
-    return initial && TAB_VALUES.has(initial) ? initial : "keys";
+    return initial && TAB_VALUES.has(initial) ? initial : "vehicles";
   });
 
   // Keep the active tab mirrored in the URL so it's addressable: the global

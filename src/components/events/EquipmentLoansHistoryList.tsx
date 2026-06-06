@@ -1,6 +1,6 @@
 "use client";
 
-import { Armchair, Table2 } from "lucide-react";
+import { Armchair, ShoppingCart, Table2 } from "lucide-react";
 import {
   deleteEquipmentLoan,
   type EquipmentLoanRow,
@@ -20,10 +20,12 @@ type Props = {
 const TYPE_ICON: Record<EquipmentLoanRow["type"], typeof Armchair> = {
   chairs: Armchair,
   tables: Table2,
+  cart: ShoppingCart,
 };
 
 function typeLabel(type: EquipmentLoanRow["type"], qty: number): string {
   if (type === "chairs") return qty === 1 ? "כיסא" : "כיסאות";
+  if (type === "cart") return qty === 1 ? "עגלת משא" : "עגלות משא";
   return qty === 1 ? "שולחן" : "שולחנות";
 }
 

@@ -13,7 +13,7 @@ function fail(error: string): EquipmentLoanFormState {
   return { error, errorAt: Date.now() };
 }
 
-export type EquipmentType = "chairs" | "tables";
+export type EquipmentType = "chairs" | "tables" | "cart";
 
 export type EquipmentLoanRow = {
   id: number;
@@ -205,7 +205,7 @@ export async function createEquipmentLoan(
   }
 
   const type = String(formData.get("type") ?? "chairs").trim();
-  if (type !== "chairs" && type !== "tables") {
+  if (type !== "chairs" && type !== "tables" && type !== "cart") {
     return fail("סוג לא חוקי");
   }
 

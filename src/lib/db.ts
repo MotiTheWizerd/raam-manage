@@ -5,7 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 const DB_PATH = path.join(process.cwd(), "data", "raam.db");
-const SCHEMA_EVOLUTION_VERSION = 6;
+const SCHEMA_EVOLUTION_VERSION = 7;
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS zones (
@@ -218,7 +218,7 @@ CREATE TABLE IF NOT EXISTS equipment_loans (
   resident_id     INTEGER REFERENCES residents(id) ON DELETE SET NULL,
   borrower_name   TEXT,
   type            TEXT NOT NULL DEFAULT 'chairs'
-                    CHECK (type IN ('chairs', 'tables')),
+                    CHECK (type IN ('chairs', 'tables', 'cart')),
   quantity        INTEGER NOT NULL DEFAULT 1 CHECK (quantity > 0),
   lobbyist_name   TEXT NOT NULL DEFAULT '',
   is_returned     INTEGER NOT NULL DEFAULT 0,
@@ -306,7 +306,7 @@ function applySchemaEvolution(db: Database.Database) {
       resident_id     INTEGER REFERENCES residents(id) ON DELETE SET NULL,
       borrower_name   TEXT,
       type            TEXT NOT NULL DEFAULT 'chairs'
-                        CHECK (type IN ('chairs', 'tables')),
+                        CHECK (type IN ('chairs', 'tables', 'cart')),
       quantity        INTEGER NOT NULL DEFAULT 1 CHECK (quantity > 0),
       lobbyist_name   TEXT NOT NULL DEFAULT '',
       is_returned     INTEGER NOT NULL DEFAULT 0,
@@ -345,6 +345,33 @@ function applySchemaEvolution(db: Database.Database) {
   ensureColumn(db, "resident_guests", "auto_open", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "gate_events", "source", "TEXT NOT NULL DEFAULT 'manual'");
   ensureColumn(db, "gate_events", "plate", "TEXT");
+
+  // Migration v7: widen equipment_loans.type CHECK to include 'cart'
+  const loansSql = (db.prepare(
+    `SELECT sql FROM sqlite_master WHERE type='table' AND name='equipment_loans'`
+  ).get() as { sql: string } | undefined)?.sql ?? '';
+  if (loansSql && !loansSql.includes("'cart'")) {
+    db.exec(`
+      CREATE TABLE equipment_loans_new (
+        id              INTEGER PRIMARY KEY,
+        resident_id     INTEGER REFERENCES residents(id) ON DELETE SET NULL,
+        borrower_name   TEXT,
+        type            TEXT NOT NULL DEFAULT 'chairs'
+                          CHECK (type IN ('chairs', 'tables', 'cart')),
+        quantity        INTEGER NOT NULL DEFAULT 1 CHECK (quantity > 0),
+        lobbyist_name   TEXT NOT NULL DEFAULT '',
+        is_returned     INTEGER NOT NULL DEFAULT 0,
+        returned_at     TEXT,
+        comment         TEXT,
+        created_at      TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+      INSERT INTO equipment_loans_new SELECT * FROM equipment_loans;
+      DROP TABLE equipment_loans;
+      ALTER TABLE equipment_loans_new RENAME TO equipment_loans;
+      CREATE INDEX IF NOT EXISTS idx_equipment_loans_resident ON equipment_loans(resident_id);
+      CREATE INDEX IF NOT EXISTS idx_equipment_loans_open ON equipment_loans(resident_id) WHERE is_returned = 0;
+    `);
+  }
 
   // Seed any pre-existing users (added before login was a feature) with a
   // default password so they can sign in. They can change it in the edit modal.

@@ -14,10 +14,16 @@ const PORT = 9080;
 
 export type GateId = "upper" | "lower";
 
+// A Hikvision camera + its credentials, used for the live-view popup
+// (ISAPI snapshot over digest auth — see camera.ts). The CCTV overview cams
+// use admin/Sami0207; the LPR gate cams use admin/topline123.
+export type CameraCreds = { host: string; user: string; pass: string };
+
 export type GateDef = {
   id: GateId;
   name: string;
   url: string;
+  cam: CameraCreds;
 };
 
 export const GATES: readonly GateDef[] = [
@@ -25,11 +31,15 @@ export const GATES: readonly GateDef[] = [
     id: "upper",
     name: "שער עליון",
     url: `http://${HOST}:${PORT}/HOSTLINK/WVD00010001*`,
+    // "Main Cars Gate" — the wide overview camera of the main vehicle entrance.
+    cam: { host: "10.0.0.107", user: "admin", pass: "Sami0207" },
   },
   {
     id: "lower",
     name: "שער תחתון",
     url: `http://${HOST}:${PORT}/HOSTLINK/WVD00030001*`,
+    // Unlabeled HD cam (.112) overlooking the inner electric gate (שער חשמלי).
+    cam: { host: "10.0.0.112", user: "admin", pass: "Sami0207" },
   },
 ];
 

@@ -1,9 +1,11 @@
 "use client";
 
+import { AnimatePresence } from "framer-motion";
 import { DoorOpen } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { openGate } from "@/app/gates/actions";
+import { GateLiveView } from "@/components/GateLiveView";
 import { cn } from "@/lib/cn";
 
 type Gate = { id: "upper" | "lower"; name: string; short: string };
@@ -17,18 +19,35 @@ const GATES: Gate[] = [
 export function GateControl() {
   // Per-gate in-flight lock — blocks an accidental double-tap from double-firing.
   const [busy, setBusy] = useState<Gate["id"] | null>(null);
+  // The gate whose live camera view is currently popped (null = none).
+  const [liveGate, setLiveGate] = useState<Gate | null>(null);
 
   async function fire(gate: Gate) {
     if (busy) return;
     setBusy(gate.id);
     const result = await openGate(gate.id);
     setBusy(null);
-    if (result.ok) toast.success(`${gate.name} נפתח`);
-    else toast.error(result.error ?? "פתיחת השער נכשלה");
+    if (result.ok) {
+      toast.success(`${gate.name} נפתח`);
+      setLiveGate(gate); // pop the live camera view of the gate we just opened
+    } else {
+      toast.error(result.error ?? "פתיחת השער נכשלה");
+    }
   }
 
   return (
-    <div className="fixed bottom-0 left-1/2 z-50 -translate-x-1/2">
+    <>
+      <AnimatePresence>
+        {liveGate && (
+          <GateLiveView
+            key={liveGate.id}
+            gate={liveGate}
+            onClose={() => setLiveGate(null)}
+          />
+        )}
+      </AnimatePresence>
+
+      <div className="fixed bottom-0 left-1/2 z-50 -translate-x-1/2">
       {/* Peeking drawer: rests half-tucked below the edge at 50% opacity,
           glides fully into view on hover/focus. */}
       <div
@@ -69,5 +88,6 @@ export function GateControl() {
         </div>
       </div>
     </div>
+    </>
   );
 }

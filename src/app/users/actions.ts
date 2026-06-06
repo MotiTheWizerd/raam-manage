@@ -2,7 +2,7 @@
 
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
-import type { UserRole } from "@/lib/auth";
+import { getCurrentUser, type UserRole } from "@/lib/auth";
 
 export type UserFormState = {
   error?: string;
@@ -71,6 +71,36 @@ export async function resetUserPassword(
     .run(password, id);
 
   if (result.changes === 0) return fail("הפקיד לא נמצא");
+
+  revalidatePath("/users");
+  return { submittedAt: Date.now() };
+}
+
+export async function deleteUser(
+  _prev: UserFormState,
+  formData: FormData
+): Promise<UserFormState> {
+  const id = parseInt(String(formData.get("id") ?? "").trim(), 10);
+  if (Number.isNaN(id)) return fail("מזהה לא חוקי");
+
+  // Guard against locking yourself out: never delete the signed-in user…
+  const current = await getCurrentUser();
+  if (current?.id === id) return fail("לא ניתן למחוק את המשתמש שמחובר כעת");
+
+  const target = db
+    .prepare(`SELECT user_role FROM users WHERE id = ?`)
+    .get(id) as { user_role: UserRole } | undefined;
+  if (!target) return fail("הפקיד לא נמצא");
+
+  // …and never delete the last manager (no manager left = nobody can manage).
+  if (target.user_role === "manager") {
+    const { c } = db
+      .prepare(`SELECT COUNT(*) AS c FROM users WHERE user_role = 'manager'`)
+      .get() as { c: number };
+    if (c <= 1) return fail("לא ניתן למחוק את המנהל האחרון");
+  }
+
+  db.prepare(`DELETE FROM users WHERE id = ?`).run(id);
 
   revalidatePath("/users");
   return { submittedAt: Date.now() };

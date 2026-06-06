@@ -1,8 +1,11 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
+import { DeleteEventButton } from "@/components/events/DeleteEventButton";
 import { Dropdown } from "@/components/ui/Dropdown";
 import type { UserRole } from "@/lib/auth";
+import { deleteUser } from "./actions";
 import { EditUserButton } from "./EditUserButton";
 import { PasswordResetInput } from "./PasswordResetInput";
 
@@ -18,9 +21,11 @@ type StatusFilter = "all" | "active" | "inactive";
 
 type Props = {
   users: UsersListUser[];
+  currentUserId: number;
 };
 
-export function UsersList({ users }: Props) {
+export function UsersList({ users, currentUserId }: Props) {
+  const router = useRouter();
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("active");
 
   const filtered = useMemo(() => {
@@ -96,8 +101,21 @@ export function UsersList({ users }: Props) {
                       userRole={u.user_role}
                     />
                   </td>
-                  <td className="px-4 py-2.5 text-end">
-                    <EditUserButton user={u} />
+                  <td className="px-4 py-2.5">
+                    <div className="flex items-center justify-end gap-1">
+                      <EditUserButton user={u} />
+                      {u.id !== currentUserId && (
+                        <DeleteEventButton
+                          id={u.id}
+                          action={deleteUser}
+                          successMessage="הפקיד נמחק"
+                          confirmTitle="מחיקת פקיד"
+                          confirmDescription={`למחוק את ${u.lobbyist_name}? פעולה זו אינה הפיכה.`}
+                          ariaLabel={`מחק ${u.lobbyist_name}`}
+                          onDeleted={() => router.refresh()}
+                        />
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}

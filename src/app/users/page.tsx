@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { isManager } from "@/lib/auth";
+import { getCurrentUser, isManager } from "@/lib/auth";
 import { AddUserButton } from "./AddUserButton";
 import { UsersList, type UsersListUser } from "./UsersList";
 
@@ -8,6 +8,8 @@ export const dynamic = "force-dynamic";
 
 export default async function UsersPage() {
   if (!(await isManager())) redirect("/");
+
+  const currentUser = await getCurrentUser();
 
   const users = db
     .prepare(
@@ -27,7 +29,7 @@ export default async function UsersPage() {
       {users.length === 0 ? (
         <p className="text-sm opacity-70">אין פקידי לובי עדיין. הוסף את הראשון.</p>
       ) : (
-        <UsersList users={users} />
+        <UsersList users={users} currentUserId={currentUser?.id ?? -1} />
       )}
     </div>
   );

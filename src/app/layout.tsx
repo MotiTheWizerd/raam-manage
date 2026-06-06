@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { Suspense } from "react";
 import { Toaster } from "sonner";
 import { AuthProvider } from "@/components/AuthProvider";
+import { GateControl } from "@/components/GateControl";
 import { Header } from "@/components/Header";
 import { NewCarNotifier } from "@/components/NewCarNotifier";
 import { PreferencesProvider } from "@/components/PreferencesProvider";
@@ -61,6 +62,7 @@ export default async function RootLayout({
                     <NewCarNotifier />
                   </Suspense>
                 </div>
+                <GateControl />
               </>
             ) : (
               children

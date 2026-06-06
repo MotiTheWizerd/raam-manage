@@ -5,7 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 const DB_PATH = path.join(process.cwd(), "data", "raam.db");
-const SCHEMA_EVOLUTION_VERSION = 4;
+const SCHEMA_EVOLUTION_VERSION = 5;
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS zones (
@@ -241,6 +241,17 @@ CREATE TABLE IF NOT EXISTS resident_guests (
   updated_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS gate_events (
+  id            INTEGER PRIMARY KEY,
+  gate_id       TEXT NOT NULL,
+  gate_name     TEXT NOT NULL,
+  lobbyist_name TEXT NOT NULL DEFAULT '',
+  ok            INTEGER NOT NULL DEFAULT 1,
+  created_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_gate_events_created ON gate_events(created_at);
+
 CREATE TABLE IF NOT EXISTS user_preferences (
   id         INTEGER PRIMARY KEY CHECK (id = 1),
   data       TEXT NOT NULL DEFAULT '{}',
@@ -313,6 +324,16 @@ function applySchemaEvolution(db: Database.Database) {
       created_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS gate_events (
+      id            INTEGER PRIMARY KEY,
+      gate_id       TEXT NOT NULL,
+      gate_name     TEXT NOT NULL,
+      lobbyist_name TEXT NOT NULL DEFAULT '',
+      ok            INTEGER NOT NULL DEFAULT 1,
+      created_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_gate_events_created ON gate_events(created_at);
   `);
 
   // Seed any pre-existing users (added before login was a feature) with a

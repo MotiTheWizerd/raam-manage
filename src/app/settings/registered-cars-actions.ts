@@ -20,11 +20,18 @@ export type RegisteredCarRow = {
 };
 
 export type RegisteredCarsSummary = {
-  total: number;
-  employees: number;
-  residents: number;
-  withApartment: number;
+  residentCars: number; // registered cars belonging to residents
+  apartments: number; // distinct apartments that have at least one resident car
+  withoutApartment: number; // resident cars not linked to an apartment
 };
+
+export type ApartmentCarCount = {
+  apartment: string;
+  cars: number;
+};
+
+// Employees are excluded everywhere in this tab — we only report residents.
+const RESIDENT_FILTER = "(isEmployee = 0 OR isEmployee IS NULL)";
 
 export type PaginatedRegisteredCars = {
   rows: RegisteredCarRow[];
@@ -47,18 +54,22 @@ function sqlString(value: string): string {
   return `'${escaped}'`;
 }
 
-function searchClause(rawQuery: string): string {
+// Always restrict to residents; AND the search terms on top when present.
+function buildWhere(rawQuery: string): string {
+  const conditions = [RESIDENT_FILTER];
   const q = rawQuery.trim();
-  if (!q) return "";
-  const like = sqlString(`%${q}%`);
-  return `WHERE (
-    LP LIKE ${like}
-    OR First_Name LIKE ${like}
-    OR Last_Name LIKE ${like}
-    OR Apartment LIKE ${like}
-    OR Phone LIKE ${like}
-    OR additional_lps LIKE ${like}
-  )`;
+  if (q) {
+    const like = sqlString(`%${q}%`);
+    conditions.push(`(
+      LP LIKE ${like}
+      OR First_Name LIKE ${like}
+      OR Last_Name LIKE ${like}
+      OR Apartment LIKE ${like}
+      OR Phone LIKE ${like}
+      OR additional_lps LIKE ${like}
+    )`);
+  }
+  return `WHERE ${conditions.join(" AND ")}`;
 }
 
 type CustomerRawRow = {
@@ -84,26 +95,42 @@ function trimOrNull(value: string | null): string | null {
 
 export async function getRegisteredCarsSummary(): Promise<RegisteredCarsSummary> {
   const rows = await querySlpr<{
-    total: string | null;
-    employees: string | null;
-    residents: string | null;
-    withApartment: string | null;
+    residentCars: string | null;
+    apartments: string | null;
+    withoutApartment: string | null;
   }>(
     `SELECT
-       COUNT(*)                                                AS total,
-       SUM(isEmployee = 1)                                     AS employees,
-       SUM(isEmployee = 0 OR isEmployee IS NULL)               AS residents,
-       SUM(Apartment IS NOT NULL AND Apartment <> '')          AS withApartment
-     FROM customer`
+       COUNT(*)                                                       AS residentCars,
+       COUNT(DISTINCT CASE WHEN Apartment IS NOT NULL
+                            AND TRIM(Apartment) <> '' THEN Apartment END) AS apartments,
+       SUM(Apartment IS NULL OR TRIM(Apartment) = '')                AS withoutApartment
+     FROM customer
+     WHERE ${RESIDENT_FILTER}`
   );
 
   const r = rows[0];
   return {
-    total: toNumber(r?.total ?? null),
-    employees: toNumber(r?.employees ?? null),
-    residents: toNumber(r?.residents ?? null),
-    withApartment: toNumber(r?.withApartment ?? null),
+    residentCars: toNumber(r?.residentCars ?? null),
+    apartments: toNumber(r?.apartments ?? null),
+    withoutApartment: toNumber(r?.withoutApartment ?? null),
   };
+}
+
+// Cars registered per apartment (residents only), naturally sorted by apartment
+// number so "603B" comes before "1101A". This is the key per-apartment breakdown.
+export async function getCarsPerApartment(): Promise<ApartmentCarCount[]> {
+  const rows = await querySlpr<{ apt: string | null; cars: string | null }>(
+    `SELECT Apartment AS apt, COUNT(*) AS cars
+       FROM customer
+      WHERE ${RESIDENT_FILTER}
+        AND Apartment IS NOT NULL AND TRIM(Apartment) <> ''
+      GROUP BY Apartment`
+  );
+
+  return rows
+    .map((r) => ({ apartment: (r.apt ?? "").trim(), cars: toNumber(r.cars) }))
+    .filter((r) => r.apartment.length > 0)
+    .sort((a, b) => a.apartment.localeCompare(b.apartment, "he", { numeric: true }));
 }
 
 export async function getRegisteredCarsPage(
@@ -113,7 +140,7 @@ export async function getRegisteredCarsPage(
 ): Promise<PaginatedRegisteredCars> {
   const safePageSize = Math.max(1, Math.min(100, Math.floor(pageSize)));
   const requestedPage = Math.max(1, Math.floor(page));
-  const where = searchClause(query);
+  const where = buildWhere(query);
 
   const countRows = await querySlpr<{ n: string | null }>(
     `SELECT COUNT(*) AS n FROM customer ${where}`

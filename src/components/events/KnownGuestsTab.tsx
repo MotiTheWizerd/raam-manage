@@ -1,18 +1,63 @@
 "use client";
 
-import { Search, UserRoundCheck, X } from "lucide-react";
+import { DoorOpen, Minus, Search, UserRoundCheck, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
 import {
   forgetResidentGuest,
   getKnownGuestsPage,
   searchKnownGuests,
+  setGuestAutoOpen,
   type KnownGuestRow,
 } from "@/app/events/cars-actions";
 import { ApartmentLink, ResidentLink } from "@/components/entity-links";
+import { useIsManager } from "@/components/AuthProvider";
 import { Input } from "@/components/ui/Input";
 import { Pagination } from "@/components/ui/Pagination";
+import { cn } from "@/lib/cn";
 import { useDebouncedValue } from "@/lib/hooks/useDebouncedValue";
 import { DeleteEventButton } from "./DeleteEventButton";
+
+/** Manager-only toggle: does this approved guest's car auto-open the gate? */
+function AutoOpenToggle({ id, value }: { id: number; value: boolean }) {
+  const [on, setOn] = useState(value);
+  const [pending, setPending] = useState(false);
+
+  useEffect(() => setOn(value), [value]);
+
+  async function toggle() {
+    const next = !on;
+    setPending(true);
+    setOn(next); // optimistic
+    const result = await setGuestAutoOpen(id, next);
+    setPending(false);
+    if (!result.ok) {
+      setOn(!next);
+      toast.error(result.error ?? "שגיאה בעדכון");
+    } else {
+      toast.success(next ? "פתיחה אוטומטית הופעלה" : "פתיחה אוטומטית בוטלה");
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={toggle}
+      disabled={pending}
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors",
+        on
+          ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/25"
+          : "bg-black/[0.04] text-zinc-500 hover:bg-black/[0.08] dark:bg-white/[0.06] dark:text-zinc-400 dark:hover:bg-white/[0.1]",
+        pending && "opacity-60"
+      )}
+      aria-pressed={on}
+    >
+      {on ? <DoorOpen size={13} aria-hidden="true" /> : <Minus size={13} aria-hidden="true" />}
+      {on ? "פעיל" : "כבוי"}
+    </button>
+  );
+}
 
 const PAGE_SIZE = 10;
 
@@ -29,6 +74,7 @@ function formatTimestamp(raw: string) {
 }
 
 export function KnownGuestsTab() {
+  const isManager = useIsManager();
   const [rows, setRows] = useState<KnownGuestRow[]>([]);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
@@ -112,6 +158,9 @@ export function KnownGuestsTab() {
                   <th className="px-4 py-2.5 font-medium text-start">דירה</th>
                   <th className="px-4 py-2.5 font-medium text-start">דייר מארח</th>
                   <th className="px-4 py-2.5 font-medium text-start">נלמד בתאריך</th>
+                  {isManager && (
+                    <th className="px-4 py-2.5 font-medium text-center">פתיחה אוטומטית</th>
+                  )}
                   <th className="px-4 py-2.5 font-medium text-center">הסרה</th>
                 </tr>
               </thead>
@@ -159,6 +208,11 @@ export function KnownGuestsTab() {
                     <td className="px-4 py-3 whitespace-nowrap text-xs opacity-70">
                       {formatTimestamp(r.createdAt)}
                     </td>
+                    {isManager && (
+                      <td className="px-4 py-3 text-center">
+                        <AutoOpenToggle id={r.id} value={r.autoOpen === 1} />
+                      </td>
+                    )}
                     <td className="px-4 py-3 text-center">
                       <DeleteEventButton
                         id={r.id}

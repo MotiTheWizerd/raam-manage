@@ -1,5 +1,6 @@
 "use server";
 
+import { isManager } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { normalizePlate } from "@/lib/plate";
 import { querySlpr } from "@/lib/slpr-mysql";
@@ -152,6 +153,7 @@ export type KnownGuestRow = {
   apartmentId: number | null;
   residentName: string | null;
   apartmentNumber: string | null;
+  autoOpen: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -175,6 +177,7 @@ const KNOWN_GUESTS_SELECT = `
          ELSE r.first_name || ' ' || r.last_name
     END                                   AS residentName,
     a.number                              AS apartmentNumber,
+    rg.auto_open                          AS autoOpen,
     rg.created_at                         AS createdAt,
     rg.updated_at                         AS updatedAt
   FROM resident_guests rg
@@ -211,6 +214,28 @@ export async function getKnownGuestsPage(
     .all(safePageSize, offset) as KnownGuestRow[];
 
   return { rows, page: safePage, pageSize: safePageSize, total, totalPages };
+}
+
+/**
+ * Toggle whether an approved guest's car auto-opens the gate on arrival.
+ * Manager-only — it grants a plate hands-free entry to the building.
+ */
+export async function setGuestAutoOpen(
+  id: number,
+  value: boolean
+): Promise<{ ok: boolean; error?: string }> {
+  if (!(await isManager())) return { ok: false, error: "אין הרשאה" };
+
+  const result = db
+    .prepare(
+      `UPDATE resident_guests
+       SET auto_open = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`
+    )
+    .run(value ? 1 : 0, id);
+
+  if (result.changes === 0) return { ok: false, error: "הרישום לא נמצא" };
+  return { ok: true };
 }
 
 /** Search learned guests by name or plate (mirrors searchGuestParking). */

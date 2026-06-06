@@ -5,7 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 const DB_PATH = path.join(process.cwd(), "data", "raam.db");
-const SCHEMA_EVOLUTION_VERSION = 5;
+const SCHEMA_EVOLUTION_VERSION = 6;
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS zones (
@@ -237,6 +237,7 @@ CREATE TABLE IF NOT EXISTS resident_guests (
   guest_name   TEXT NOT NULL DEFAULT '',
   resident_id  INTEGER REFERENCES residents(id) ON DELETE SET NULL,
   apartment_id INTEGER REFERENCES apartments(id) ON DELETE SET NULL,
+  auto_open    INTEGER NOT NULL DEFAULT 0,
   created_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -247,6 +248,8 @@ CREATE TABLE IF NOT EXISTS gate_events (
   gate_name     TEXT NOT NULL,
   lobbyist_name TEXT NOT NULL DEFAULT '',
   ok            INTEGER NOT NULL DEFAULT 1,
+  source        TEXT NOT NULL DEFAULT 'manual',
+  plate         TEXT,
   created_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -321,6 +324,7 @@ function applySchemaEvolution(db: Database.Database) {
       guest_name   TEXT NOT NULL DEFAULT '',
       resident_id  INTEGER REFERENCES residents(id) ON DELETE SET NULL,
       apartment_id INTEGER REFERENCES apartments(id) ON DELETE SET NULL,
+      auto_open    INTEGER NOT NULL DEFAULT 0,
       created_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
@@ -331,10 +335,16 @@ function applySchemaEvolution(db: Database.Database) {
       gate_name     TEXT NOT NULL,
       lobbyist_name TEXT NOT NULL DEFAULT '',
       ok            INTEGER NOT NULL DEFAULT 1,
+      source        TEXT NOT NULL DEFAULT 'manual',
+      plate         TEXT,
       created_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
     CREATE INDEX IF NOT EXISTS idx_gate_events_created ON gate_events(created_at);
   `);
+
+  ensureColumn(db, "resident_guests", "auto_open", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(db, "gate_events", "source", "TEXT NOT NULL DEFAULT 'manual'");
+  ensureColumn(db, "gate_events", "plate", "TEXT");
 
   // Seed any pre-existing users (added before login was a feature) with a
   // default password so they can sign in. They can change it in the edit modal.

@@ -35,10 +35,10 @@ from detect import CAMERAS, rtsp_url
 
 # --- config (set from CLI in main) -----------------------------------------
 MODEL = "yolo11n.pt"
-STREAM = "sub"
+STREAM = "main"   # HD 1080p. ~17 fps on the CPU lobby PC; localhost = free bandwidth.
 CONF = 0.35
 IDLE_STOP_SECONDS = 8.0   # stop a worker this long after its last viewer leaves
-JPEG_QUALITY = 80
+JPEG_QUALITY = 90
 BOUNDARY = "frame"
 
 

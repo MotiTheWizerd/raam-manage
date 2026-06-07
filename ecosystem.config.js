@@ -27,7 +27,11 @@ module.exports = {
       // (no CPU) until a camera's detection stream is actually being viewed.
       name: "raam-vision",
       script: "server.py",
-      interpreter: path.join(__dirname, "vision", ".venv", "Scripts", "python.exe"),
+      // pythonw.exe (not python.exe) = the windowless Python — no console window
+      // pops on the lobby desktop. -u keeps stdout/stderr unbuffered so logs
+      // still flush promptly to the pm2 log files.
+      interpreter: path.join(__dirname, "vision", ".venv", "Scripts", "pythonw.exe"),
+      interpreter_args: "-u",
       args: "--port 8089",
       cwd: path.join(__dirname, "vision"),
       exec_mode: "fork",

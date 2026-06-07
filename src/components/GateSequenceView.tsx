@@ -9,38 +9,44 @@ import type { CameraId } from "@/lib/gates";
 import { cn } from "@/lib/cn";
 import { useFullscreen } from "@/lib/hooks/useFullscreen";
 
-// "Escort the car" — one button press plays the whole arrival as a 5-shot cut
-// and drives the gates automatically:
+// "Escort the car" — one button press plays the whole arrival as a multi-shot
+// cut and drives the gates automatically:
 //
 //   cold open (.60 street) -> upper gate (.107) -> ramp (.61)
-//     -> road (cam 29 שביל כניסה) -> lower (.112)
+//     -> road (cam 29 שביל כניסה) -> lower gate (.112) -> open
 //
 // The upper gate fires the instant the lobbyist presses (the real car is
-// waiting — never delay it for the cinematics). After the descent we open the
-// lower gate and SILENTLY re-pulse it so it stays open while the car passes —
-// the gates auto-close ~5s, so re-firing a touch faster keeps it solidly open.
+// waiting — never delay it for the cinematics). A countdown to the door opening
+// runs through the descent; the road/lower cuts are timed by how many seconds
+// remain on it. When it hits 0 we open the lower gate (flashing "פותח דלת") and
+// SILENTLY re-pulse it so it stays open while the car passes — the gates
+// auto-close ~5s, so re-firing a touch faster keeps it solidly open.
 //
-// TUNE THESE after watching real cars (durations in ms):
+// TUNE THESE after watching real cars:
 const SEQ = {
   coldOpenMs: 3000, // .60 street — car approaching
   upperMs: 7000, // .107 upper gate — car enters
-  rampMs: 15000, // .61 ramp — the descent into the garage
-  roadMs: 12000, // cam 29 שביל — the driveway between the ramp and the lower gate
-  lowerHoldMs: 30000, // .112 lower — how long we hold the lower gate open
+  rampMs: 3000, // .61 ramp — brief in-ramp shot at the top of the descent
+  roadAtSecLeft: 24, // cut to the road cam (cam 29 שביל) when this many seconds remain
+  lowerAtSecLeft: 15, // cut to the lower-gate cam (.112) when this many seconds remain
+  lowerHoldMs: 30000, // .112 lower — how long we hold the lower gate open after it opens
   pulseEveryMs: 4000, // re-fire cadence (< the ~5s auto-close, so no visible judder)
   closeWatchMs: 7000, // after the last pulse, keep watching until the gate auto-closes (~5s) + margin
+  dooringMs: 3000, // how long the big "פותח דלת" flashes when the gate opens
 };
 
 const REFRESH_MS = 400; // live-frame refresh
 
-// Phase boundaries, measured from button press (T=0).
+// Phase boundaries, measured from button press (T=0). The road/lower cuts are
+// derived from the countdown (roadAtSecLeft / lowerAtSecLeft seconds remaining).
 const T_UPPER = SEQ.coldOpenMs;
 const T_RAMP = T_UPPER + SEQ.upperMs;
-const T_ROAD = T_RAMP + SEQ.rampMs;
-const T_LOWER = T_ROAD + SEQ.roadMs; // lower gate opens here
-const T_END = T_LOWER + SEQ.lowerHoldMs;
+const T_ROAD = T_RAMP + SEQ.rampMs; // road cam on; countdown reads roadAtSecLeft
+const T_OPEN = T_ROAD + SEQ.roadAtSecLeft * 1000; // lower gate opens here (countdown 0)
+const T_LOWER_CAM = T_OPEN - SEQ.lowerAtSecLeft * 1000; // lower cam on; countdown reads lowerAtSecLeft
+const T_END = T_OPEN + SEQ.lowerHoldMs;
 
-type Phase = "cold" | "upper" | "ramp" | "road" | "lower" | "done";
+type Phase = "cold" | "upper" | "ramp" | "road" | "lower" | "open" | "done";
 
 // Client-side mirror of the camera labels (the real creds/IPs live server-side
 // in gates.ts, which is import "server-only").
@@ -58,7 +64,8 @@ export function GateSequenceView({ onClose }: Props) {
   const [phase, setPhase] = useState<Phase>("cold");
   const [cam, setCam] = useState<CameraId>("street");
   const [src, setSrc] = useState<string | null>(null);
-  const [secsToLower, setSecsToLower] = useState(Math.ceil(T_LOWER / 1000));
+  const [secsToLower, setSecsToLower] = useState(Math.ceil(T_OPEN / 1000));
+  const [dooring, setDooring] = useState(false); // the big "פותח דלת" flash
 
   const rootRef = useRef<HTMLDivElement>(null);
   const { isFullscreen, toggle: toggleFullscreen } = useFullscreen(rootRef);
@@ -101,9 +108,15 @@ export function GateSequenceView({ onClose }: Props) {
       setCam("road");
       setPhase("road");
     });
-    at(T_LOWER, () => {
+    at(T_LOWER_CAM, () => {
+      // Cut to the final shot — the lower-gate cam — while the countdown keeps
+      // ticking. The gate is NOT opened yet; the car is still approaching.
       setCam("lower");
       setPhase("lower");
+    });
+    at(T_OPEN, () => {
+      setPhase("open");
+      setDooring(true); // flash the big "פותח דלת"
       // Open the lower gate, then re-pulse silently to hold it open.
       openGate("lower", { source: "sequence" });
       intervals.current.push(
@@ -112,6 +125,7 @@ export function GateSequenceView({ onClose }: Props) {
         }, SEQ.pulseEveryMs)
       );
     });
+    at(T_OPEN + SEQ.dooringMs, () => setDooring(false));
     at(T_END, () => {
       setPhase("done");
       intervals.current.forEach(clearInterval);
@@ -121,10 +135,10 @@ export function GateSequenceView({ onClose }: Props) {
     // gate actually shut before the popup disappears.
     at(T_END + SEQ.closeWatchMs, () => onCloseRef.current());
 
-    // Descent countdown tick.
+    // Countdown to the door opening.
     intervals.current.push(
       setInterval(() => {
-        setSecsToLower(Math.max(0, Math.ceil((T_LOWER - (Date.now() - startedAt)) / 1000)));
+        setSecsToLower(Math.max(0, Math.ceil((T_OPEN - (Date.now() - startedAt)) / 1000)));
       }, 250)
     );
 
@@ -175,7 +189,8 @@ export function GateSequenceView({ onClose }: Props) {
     upper: "השער העליון נפתח — היכון",
     ramp: `הרכב יורד ברמפה · שער תחתון בעוד ${secsToLower}`,
     road: `הרכב בשביל הכניסה · שער תחתון בעוד ${secsToLower}`,
-    lower: "שער תחתון פתוח · נסיעה טובה",
+    lower: `מתקרב לשער התחתון · נפתח בעוד ${secsToLower}`,
+    open: "שער תחתון פתוח · נסיעה טובה",
     done: "השער נסגר · הרצף הושלם",
   };
 
@@ -251,9 +266,10 @@ export function GateSequenceView({ onClose }: Props) {
           </motion.div>
         </AnimatePresence>
 
-        {/* big descent countdown — runs from the upper shot through the ramp
-            and the driveway, all the way down to the lower gate opening */}
-        {(phase === "upper" || phase === "ramp" || phase === "road") && (
+        {/* big countdown — runs from the upper shot through the ramp, the
+            driveway, and the lower-gate approach, staying visible until the
+            door opens */}
+        {(phase === "upper" || phase === "ramp" || phase === "road" || phase === "lower") && (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
             <motion.span
               key={secsToLower}
@@ -263,6 +279,21 @@ export function GateSequenceView({ onClose }: Props) {
               className="text-7xl font-black text-white tabular-nums [text-shadow:0_2px_16px_rgba(0,0,0,0.9)]"
             >
               {secsToLower}
+            </motion.span>
+          </div>
+        )}
+
+        {/* "פותח דלת" — flashes big-centered (same font as the countdown) the
+            moment the lower gate opens, then fades after dooringMs */}
+        {dooring && (
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <motion.span
+              initial={{ scale: 0.6, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ duration: 0.18 }}
+              className="px-4 text-center text-7xl font-black text-white [text-shadow:0_2px_16px_rgba(0,0,0,0.9)]"
+            >
+              פותח דלת
             </motion.span>
           </div>
         )}

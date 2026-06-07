@@ -60,5 +60,9 @@ next-env.d.ts
 
 # computer-vision lab (throwaway: venv + model weights, not part of the app)
 /vision/.venv/
-/vision/*.pt
-/vision/*.onnx
+__pycache__/
+*.pyc
+# YOLO model weights — auto-downloaded, never committed (can land at repo root
+# or in vision/ depending on the run CWD)
+*.pt
+*.onnx

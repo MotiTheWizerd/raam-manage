@@ -1,0 +1,9 @@
+# Vision lab dependencies. Build the env with Python 3.11 (NOT 3.14 — the ML
+# wheels don't support it yet):
+#   py -3.11 -m venv .venv
+#   .venv/Scripts/python -m pip install -r requirements.txt
+#
+# Tested versions (session 22, CPU-only lobby PC, no GPU):
+#   ultralytics 8.4.60, opencv-python 4.13.0, torch 2.12.0+cpu
+ultralytics
+opencv-python

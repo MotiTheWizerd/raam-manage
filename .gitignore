@@ -57,3 +57,8 @@ next-env.d.ts
 /semantix-connector
 /semantix-indexer
 /semantix.config.json
+
+# computer-vision lab (throwaway: venv + model weights, not part of the app)
+/vision/.venv/
+/vision/*.pt
+/vision/*.onnx

@@ -21,6 +21,14 @@ Run:
 
 from __future__ import annotations
 
+import os
+
+# Quiet ffmpeg's per-frame H.264 decode chatter ("error while decoding MB ...")
+# — those are harmless recoverable glitches on imperfect RTSP frames, and they
+# otherwise flood the pm2 error log and bury real problems. Must be set before
+# cv2 loads its ffmpeg backend.
+os.environ.setdefault("OPENCV_FFMPEG_LOGLEVEL", "-8")  # AV_LOG_QUIET
+
 import argparse
 import json
 import threading

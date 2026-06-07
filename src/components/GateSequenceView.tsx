@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { Clapperboard, Maximize2, Minimize2, X } from "lucide-react";
+import { Clapperboard, Maximize2, Minimize2, ScanEye, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { openGate } from "@/app/gates/actions";
@@ -35,7 +35,12 @@ const SEQ = {
   dooringMs: 3000, // how long the big "פותח דלת" flashes when the gate opens
 };
 
-const REFRESH_MS = 400; // live-frame refresh
+const REFRESH_MS = 400; // live-frame refresh (raw snapshot mode)
+
+// The local vision service (vision/server.py) that serves annotated MJPEG
+// detection feeds — same one GateLiveView's scan-eye uses. With detection on,
+// the escort shows boxes on the car as it moves through the flow.
+const VISION_URL = process.env.NEXT_PUBLIC_VISION_URL ?? "http://127.0.0.1:8089";
 
 // Phase boundaries, measured from button press (T=0). The road/lower cuts are
 // derived from the countdown (roadAtSecLeft / lowerAtSecLeft seconds remaining).
@@ -66,6 +71,11 @@ export function GateSequenceView({ onClose }: Props) {
   const [src, setSrc] = useState<string | null>(null);
   const [secsToLower, setSecsToLower] = useState(Math.ceil(T_OPEN / 1000));
   const [dooring, setDooring] = useState(false); // the big "פותח דלת" flash
+  // Default OFF for now: detection following the car through the escort has a
+  // speed problem (to fix next shift). The scan-eye toggle still turns it on.
+  const [detect, setDetect] = useState(false);
+  const [detectError, setDetectError] = useState(false); // vision service down -> raw fallback
+  const [detectStream, setDetectStream] = useState<string | null>(null);
 
   const rootRef = useRef<HTMLDivElement>(null);
   const { isFullscreen, toggle: toggleFullscreen } = useFullscreen(rootRef);
@@ -151,8 +161,24 @@ export function GateSequenceView({ onClose }: Props) {
     };
   }, []);
 
-  // ---- Live frame loader (re-runs on each camera cut) ----
+  // ---- Detection stream (re-runs on each camera cut / toggle) ----
+  // Point an MJPEG <img> at the vision service's annotated stream for the active
+  // camera. The cache-bust token forces a fresh connection per cut so an
+  // idled-out worker revives. Reset the error each cut so every shot retries
+  // detection even if a previous one failed.
   useEffect(() => {
+    if (detect) {
+      setDetectError(false);
+      setDetectStream(`${VISION_URL}/stream/${cam}?t=${Date.now()}`);
+    } else {
+      setDetectStream(null);
+    }
+  }, [detect, cam]);
+
+  // ---- Raw snapshot loader (fallback / detection-off, re-runs on each cut) ----
+  useEffect(() => {
+    // Detection stream is carrying the picture — don't also poll snapshots.
+    if (detect && !detectError) return;
     let active = true;
     let timer: ReturnType<typeof setTimeout>;
     setSrc(null);
@@ -175,7 +201,7 @@ export function GateSequenceView({ onClose }: Props) {
       active = false;
       clearTimeout(timer);
     };
-  }, [cam]);
+  }, [cam, detect, detectError]);
 
   function abort() {
     aborted.current = true;
@@ -219,6 +245,20 @@ export function GateSequenceView({ onClose }: Props) {
         <div className="flex items-center gap-1">
           <button
             type="button"
+            onClick={() => setDetect((d) => !d)}
+            aria-label={detect ? "כבה זיהוי אובייקטים" : "הפעל זיהוי אובייקטים"}
+            title={detect ? "כבה זיהוי אובייקטים" : "הפעל זיהוי אובייקטים"}
+            className={cn(
+              "rounded-md p-1 transition-colors hover:bg-white/10",
+              detect
+                ? "bg-emerald-500/20 text-emerald-300 hover:text-emerald-200"
+                : "text-zinc-400 hover:text-white"
+            )}
+          >
+            <ScanEye className="size-4" />
+          </button>
+          <button
+            type="button"
             onClick={toggleFullscreen}
             aria-label={isFullscreen ? "צא ממסך מלא" : "מסך מלא"}
             className="rounded-md p-1 text-zinc-400 transition-colors hover:bg-white/10 hover:text-white"
@@ -255,7 +295,15 @@ export function GateSequenceView({ onClose }: Props) {
             transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
             className="absolute inset-0"
           >
-            {src ? (
+            {detect && detectStream && !detectError ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={detectStream}
+                alt="זיהוי אובייקטים — שידור חי"
+                onError={() => setDetectError(true)}
+                className="block h-full w-full object-cover"
+              />
+            ) : src ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={src} alt="שידור חי" className="block h-full w-full object-cover" />
             ) : (
@@ -307,7 +355,12 @@ export function GateSequenceView({ onClose }: Props) {
 
         {/* live dot */}
         <div className="absolute top-2 right-2 flex items-center gap-1.5 rounded-full bg-black/50 px-2 py-0.5">
-          <span className="size-2 animate-pulse rounded-full bg-red-500" />
+          <span
+            className={cn(
+              "size-2 animate-pulse rounded-full",
+              detect && !detectError ? "bg-emerald-400" : "bg-red-500"
+            )}
+          />
           <span className="text-xs font-medium text-white">{SHOTS[activeIndex]?.label}</span>
         </div>
       </div>

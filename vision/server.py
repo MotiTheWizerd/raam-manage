@@ -10,6 +10,9 @@ nobody is watching.
 Endpoints (all localhost-only):
     GET /stream/<cam>     annotated MJPEG (multipart/x-mixed-replace) — for <img>
     GET /snapshot/<cam>   single annotated JPEG (latest frame)
+    GET /detections/<cam> latest frame's detections as JSON (class, conf,
+                          track-id, box, per-class counts) — the data feed the
+                          Next app reads to know what a camera actually sees
     GET /healthz          liveness + which workers are running
 
 <cam> is any name from the registry in detect.py (lobby, upper, ramp, ...).
@@ -65,6 +68,8 @@ class CameraWorker:
         self.model: YOLO | None = None
         self.cond = threading.Condition()
         self.latest_jpeg: bytes | None = None
+        self.latest_detections: list[dict] = []
+        self.frame_wh = (0, 0)  # (width, height) of the source frame
         self.frame_seq = 0
         self.last_view_at = 0.0
         self.thread: threading.Thread | None = None
@@ -108,7 +113,9 @@ class CameraWorker:
                 results = self.model.track(
                     frame, conf=CONF, persist=True, tracker="bytetrack.yaml", verbose=False
                 )
-                annotated = results[0].plot()
+                result = results[0]
+                annotated = result.plot()
+                detections = self._extract(result)
                 ok, buf = cv2.imencode(
                     ".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY]
                 )
@@ -116,11 +123,41 @@ class CameraWorker:
                     continue
                 with self.cond:
                     self.latest_jpeg = buf.tobytes()
+                    self.latest_detections = detections
+                    self.frame_wh = (frame.shape[1], frame.shape[0])
                     self.frame_seq += 1
                     self.cond.notify_all()
         finally:
             cap.release()
             print(f"[{self.cam_id}] worker stopped (idle)")
+
+    def _extract(self, result) -> list[dict]:
+        """Pull structured detections out of one YOLO result.
+
+        Each object: class name + id, confidence, ByteTrack track-id (None when
+        tracking hasn't locked on yet), and the pixel box [x1,y1,x2,y2]. This is
+        what the /detections endpoint serves — the data the app reasons over.
+        """
+        boxes = getattr(result, "boxes", None)
+        if boxes is None or len(boxes) == 0:
+            return []
+        names = self.model.names if self.model else {}
+        xyxy = boxes.xyxy.cpu().numpy()
+        confs = boxes.conf.cpu().numpy()
+        clss = boxes.cls.cpu().numpy()
+        ids = boxes.id.cpu().numpy() if boxes.id is not None else None
+        out: list[dict] = []
+        for i in range(len(xyxy)):
+            cls_id = int(clss[i])
+            x1, y1, x2, y2 = xyxy[i]
+            out.append({
+                "cls": names.get(cls_id, str(cls_id)),
+                "cls_id": cls_id,
+                "conf": round(float(confs[i]), 3),
+                "id": int(ids[i]) if ids is not None else None,
+                "box": [round(float(x1)), round(float(y1)), round(float(x2)), round(float(y2))],
+            })
+        return out
 
     def wait_for_frame(self, last_seq: int, timeout: float = 5.0):
         """Block until a frame newer than last_seq exists (or timeout).
@@ -193,6 +230,14 @@ class Handler(BaseHTTPRequestHandler):
             self._serve_stream(cam)
             return
 
+        if path.startswith("/detections/"):
+            cam = self._cam_from_path("/detections/")
+            if not cam:
+                self._send_json(404, {"error": "unknown camera"})
+                return
+            self._serve_detections(cam)
+            return
+
         self._send_json(404, {"error": "not found"})
 
     def _serve_snapshot(self, cam: str):
@@ -241,6 +286,34 @@ class Handler(BaseHTTPRequestHandler):
                 self.wfile.write(b"\r\n")
         except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
             pass  # viewer closed the tab — normal
+
+    def _serve_detections(self, cam: str):
+        worker = get_worker(cam)
+        worker.touch()
+        worker.ensure_running()
+        # Wait for a real frame so detections exist (cold start = model load +
+        # RTSP open). Like /snapshot, this also keeps the worker alive — so
+        # polling /detections is enough to drive a camera, no <img> needed.
+        jpeg, seq = worker.wait_for_frame(-1, timeout=15.0)
+        if jpeg is None:
+            self._send_json(503, {"error": "no frame yet"})
+            return
+        with worker.cond:
+            objects = list(worker.latest_detections)
+            width, height = worker.frame_wh
+        counts: dict[str, int] = {}
+        for o in objects:
+            counts[o["cls"]] = counts.get(o["cls"], 0) + 1
+        self._send_json(200, {
+            "cam": cam,
+            "ts": time.time(),
+            "frame_seq": seq,
+            "width": width,
+            "height": height,
+            "count": len(objects),
+            "counts": counts,
+            "objects": objects,
+        })
 
     def _send_json(self, code: int, obj: dict):
         body = json.dumps(obj).encode()

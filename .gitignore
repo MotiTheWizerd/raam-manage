@@ -66,3 +66,7 @@ __pycache__/
 # or in vision/ depending on the run CWD)
 *.pt
 *.onnx
+# enrolled face templates — residents' biometric data, runtime not source
+vision/faces_db.json
+# throwaway debug snapshots
+vision/_*.jpg

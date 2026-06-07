@@ -16,8 +16,10 @@ export type GateId = "upper" | "lower";
 
 // A Hikvision camera + its credentials, used for the live-view popup
 // (ISAPI snapshot over digest auth — see camera.ts). The CCTV overview cams
-// use admin/Sami0207; the LPR gate cams use admin/topline123.
-export type CameraCreds = { host: string; user: string; pass: string };
+// use admin/Sami0207; the LPR gate cams use admin/topline123. `path` overrides
+// the default main-stream snapshot path for DVR-backed channels (e.g. cam 29
+// is channel 29 on the .137 DVR → /ISAPI/Streaming/channels/2901/picture).
+export type CameraCreds = { host: string; user: string; pass: string; path?: string };
 
 export type GateDef = {
   id: GateId;
@@ -50,14 +52,16 @@ export function getGate(id: string): GateDef | undefined {
 // ---------------------------------------------------------------------------
 // Named cameras for the "escort the car" sequence (GateSequenceView).
 //
-// The car-arrival choreography plays as a 4-shot cut:
-//   street (.60)  -> upper gate (.107) -> ramp (.61) -> lower gate (.112)
+// The car-arrival choreography plays as a 5-shot cut:
+//   street (.60) -> upper gate (.107) -> ramp (.61) -> road (cam 29) -> lower (.112)
 // .61 "Entry1" is the LPR cam mounted INSIDE the ramp tunnel (our lane-filtering
-// ground truth from session 15) — it watches cars descend, so it's the hero
-// shot. Note .60/.61 use the LPR creds (topline123); .107/.112 use Sami0207.
+// ground truth from session 15) — it watches cars descend. "road" (cam 29
+// "שביל כניסה רכבים") is the curved driveway between the ramp and the lower
+// gate — channel 29 on the .137 DVR. Note .60/.61 use the LPR creds
+// (topline123); .107/.112/.137 use Sami0207.
 // ---------------------------------------------------------------------------
 
-export type CameraId = "street" | "upper" | "ramp" | "lower" | "lobby";
+export type CameraId = "street" | "upper" | "ramp" | "road" | "lower" | "lobby";
 
 export type CameraDef = CameraCreds & { id: CameraId; name: string };
 
@@ -65,6 +69,15 @@ export const CAMERAS: readonly CameraDef[] = [
   { id: "street", name: "כניסה (חוץ)", host: "10.0.0.60", user: "admin", pass: "topline123" },
   { id: "upper", name: "שער עליון", host: "10.0.0.107", user: "admin", pass: "Sami0207" },
   { id: "ramp", name: "רמפה", host: "10.0.0.61", user: "admin", pass: "topline123" },
+  // cam 29 "שביל כניסה רכבים" — channel 29 on the .137 DVR (the vehicle driveway).
+  {
+    id: "road",
+    name: "שביל כניסה",
+    host: "10.0.0.137",
+    user: "admin",
+    pass: "Sami0207",
+    path: "/ISAPI/Streaming/channels/2901/picture",
+  },
   { id: "lower", name: "שער תחתון", host: "10.0.0.112", user: "admin", pass: "Sami0207" },
   // "Outdoor Loby" (.119) — the outdoor lobby entrance: the glass lobby doors +
   // the approach floor. Also our face-recognition approach cam (sci-fi build).

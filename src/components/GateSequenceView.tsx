@@ -8,10 +8,11 @@ import { openGate } from "@/app/gates/actions";
 import type { CameraId } from "@/lib/gates";
 import { cn } from "@/lib/cn";
 
-// "Escort the car" — one button press plays the whole arrival as a 4-shot cut
+// "Escort the car" — one button press plays the whole arrival as a 5-shot cut
 // and drives the gates automatically:
 //
-//   cold open (.60 street) -> upper gate (.107) -> ramp (.61) -> lower (.112)
+//   cold open (.60 street) -> upper gate (.107) -> ramp (.61)
+//     -> road (cam 29 שביל כניסה) -> lower (.112)
 //
 // The upper gate fires the instant the lobbyist presses (the real car is
 // waiting — never delay it for the cinematics). After the descent we open the
@@ -22,7 +23,8 @@ import { cn } from "@/lib/cn";
 const SEQ = {
   coldOpenMs: 3000, // .60 street — car approaching
   upperMs: 7000, // .107 upper gate — car enters
-  rampMs: 15000, // .61 ramp — the descent (countdown to the lower gate plays here)
+  rampMs: 15000, // .61 ramp — the descent into the garage
+  roadMs: 12000, // cam 29 שביל — the driveway between the ramp and the lower gate
   lowerHoldMs: 30000, // .112 lower — how long we hold the lower gate open
   pulseEveryMs: 4000, // re-fire cadence (< the ~5s auto-close, so no visible judder)
   closeWatchMs: 7000, // after the last pulse, keep watching until the gate auto-closes (~5s) + margin
@@ -33,10 +35,11 @@ const REFRESH_MS = 400; // live-frame refresh
 // Phase boundaries, measured from button press (T=0).
 const T_UPPER = SEQ.coldOpenMs;
 const T_RAMP = T_UPPER + SEQ.upperMs;
-const T_LOWER = T_RAMP + SEQ.rampMs; // lower gate opens here
+const T_ROAD = T_RAMP + SEQ.rampMs;
+const T_LOWER = T_ROAD + SEQ.roadMs; // lower gate opens here
 const T_END = T_LOWER + SEQ.lowerHoldMs;
 
-type Phase = "cold" | "upper" | "ramp" | "lower" | "done";
+type Phase = "cold" | "upper" | "ramp" | "road" | "lower" | "done";
 
 // Client-side mirror of the camera labels (the real creds/IPs live server-side
 // in gates.ts, which is import "server-only").
@@ -44,6 +47,7 @@ const SHOTS: { phase: Phase; cam: CameraId; label: string }[] = [
   { phase: "cold", cam: "street", label: "כניסה" },
   { phase: "upper", cam: "upper", label: "שער עליון" },
   { phase: "ramp", cam: "ramp", label: "רמפה" },
+  { phase: "road", cam: "road", label: "שביל כניסה" },
   { phase: "lower", cam: "lower", label: "שער תחתון" },
 ];
 
@@ -89,6 +93,10 @@ export function GateSequenceView({ onClose }: Props) {
     at(T_RAMP, () => {
       setCam("ramp");
       setPhase("ramp");
+    });
+    at(T_ROAD, () => {
+      setCam("road");
+      setPhase("road");
     });
     at(T_LOWER, () => {
       setCam("lower");
@@ -163,6 +171,7 @@ export function GateSequenceView({ onClose }: Props) {
     cold: "רכב מתקרב לכניסה…",
     upper: "השער העליון נפתח — היכון",
     ramp: `הרכב יורד ברמפה · שער תחתון בעוד ${secsToLower}`,
+    road: `הרכב בשביל הכניסה · שער תחתון בעוד ${secsToLower}`,
     lower: "שער תחתון פתוח · נסיעה טובה",
     done: "השער נסגר · הרצף הושלם",
   };
@@ -204,9 +213,9 @@ export function GateSequenceView({ onClose }: Props) {
           </div>
         )}
 
-        {/* big descent countdown — runs from the upper shot through the ramp,
-            all the way down to the lower gate opening */}
-        {(phase === "upper" || phase === "ramp") && (
+        {/* big descent countdown — runs from the upper shot through the ramp
+            and the driveway, all the way down to the lower gate opening */}
+        {(phase === "upper" || phase === "ramp" || phase === "road") && (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
             <motion.span
               key={secsToLower}

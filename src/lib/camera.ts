@@ -24,24 +24,27 @@ function parseAuthHeader(header: string): Record<string, string> {
   return out;
 }
 
-function buildDigest(challenge: string, user: string, pass: string): string {
+function buildDigest(challenge: string, path: string, user: string, pass: string): string {
   const d = parseAuthHeader(challenge);
   const nc = "00000001";
   const cnonce = crypto.randomBytes(8).toString("hex");
   const ha1 = md5(`${user}:${d.realm}:${pass}`);
-  const ha2 = md5(`GET:${SNAPSHOT_PATH}`);
+  const ha2 = md5(`GET:${path}`);
   const response = md5(`${ha1}:${d.nonce}:${nc}:${cnonce}:${d.qop}:${ha2}`);
   return (
     `Digest username="${user}", realm="${d.realm}", nonce="${d.nonce}", ` +
-    `uri="${SNAPSHOT_PATH}", qop=${d.qop}, nc=${nc}, cnonce="${cnonce}", ` +
+    `uri="${path}", qop=${d.qop}, nc=${nc}, cnonce="${cnonce}", ` +
     `response="${response}"` +
     (d.opaque ? `, opaque="${d.opaque}"` : "")
   );
 }
 
-// Returns a single JPEG frame from the camera, or null if unavailable.
+// Returns a single JPEG frame from the camera, or null if unavailable. Most
+// cams use the default main-stream path; a DVR-backed channel (e.g. cam 29 on
+// the .137 DVR) overrides it via cam.path (/ISAPI/Streaming/channels/2901/...).
 export async function fetchCameraSnapshot(cam: CameraCreds): Promise<ArrayBuffer | null> {
-  const url = `http://${cam.host}${SNAPSHOT_PATH}`;
+  const path = cam.path ?? SNAPSHOT_PATH;
+  const url = `http://${cam.host}${path}`;
 
   const challenge = await fetch(url, {
     cache: "no-store",
@@ -57,7 +60,7 @@ export async function fetchCameraSnapshot(cam: CameraCreds): Promise<ArrayBuffer
 
   const authed = await fetch(url, {
     cache: "no-store",
-    headers: { Authorization: buildDigest(wwwAuth, cam.user, cam.pass) },
+    headers: { Authorization: buildDigest(wwwAuth, path, cam.user, cam.pass) },
     signal: AbortSignal.timeout(4000),
   });
 

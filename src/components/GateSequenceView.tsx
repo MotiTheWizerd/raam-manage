@@ -1,12 +1,13 @@
 "use client";
 
-import { motion } from "framer-motion";
-import { Clapperboard, X } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
+import { Clapperboard, Maximize2, Minimize2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { openGate } from "@/app/gates/actions";
 import type { CameraId } from "@/lib/gates";
 import { cn } from "@/lib/cn";
+import { useFullscreen } from "@/lib/hooks/useFullscreen";
 
 // "Escort the car" — one button press plays the whole arrival as a 5-shot cut
 // and drives the gates automatically:
@@ -59,6 +60,8 @@ export function GateSequenceView({ onClose }: Props) {
   const [src, setSrc] = useState<string | null>(null);
   const [secsToLower, setSecsToLower] = useState(Math.ceil(T_LOWER / 1000));
 
+  const rootRef = useRef<HTMLDivElement>(null);
+  const { isFullscreen, toggle: toggleFullscreen } = useFullscreen(rootRef);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -184,7 +187,13 @@ export function GateSequenceView({ onClose }: Props) {
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: 24, scale: 0.95 }}
       transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-      className="fixed bottom-28 left-1/2 z-50 w-[460px] max-w-[calc(100vw-2rem)] -translate-x-1/2 overflow-hidden rounded-2xl border border-zinc-700 bg-zinc-900 shadow-2xl"
+      ref={rootRef}
+      className={cn(
+        "z-50 overflow-hidden border border-zinc-700 bg-zinc-900 shadow-2xl",
+        isFullscreen
+          ? "flex h-screen w-screen flex-col rounded-none border-0"
+          : "fixed bottom-28 left-1/2 w-[460px] max-w-[calc(100vw-2rem)] -translate-x-1/2 rounded-2xl"
+      )}
     >
       {/* header */}
       <div className="flex items-center justify-between bg-zinc-900 px-3 py-2">
@@ -192,26 +201,55 @@ export function GateSequenceView({ onClose }: Props) {
           <Clapperboard className="size-4 text-red-500" />
           <span className="text-sm font-semibold text-white">ליווי רכב — שידור חי</span>
         </div>
-        <button
-          type="button"
-          onClick={abort}
-          aria-label="עצור"
-          className="rounded-md p-1 text-zinc-400 transition-colors hover:bg-white/10 hover:text-white"
-        >
-          <X className="size-4" />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={toggleFullscreen}
+            aria-label={isFullscreen ? "צא ממסך מלא" : "מסך מלא"}
+            className="rounded-md p-1 text-zinc-400 transition-colors hover:bg-white/10 hover:text-white"
+          >
+            {isFullscreen ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+          </button>
+          <button
+            type="button"
+            onClick={abort}
+            aria-label="עצור"
+            className="rounded-md p-1 text-zinc-400 transition-colors hover:bg-white/10 hover:text-white"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
       </div>
 
       {/* video */}
-      <div className="relative aspect-video w-full bg-black">
-        {src ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={src} alt="שידור חי" className="block h-full w-full object-cover" />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center text-sm text-zinc-500">
-            מתחבר למצלמה…
-          </div>
+      <div
+        className={cn(
+          "relative w-full overflow-hidden bg-black",
+          isFullscreen ? "flex-1" : "aspect-video"
         )}
+      >
+        {/* Film cut between shots: each camera change crossfades + gently
+            pushes in. Keyed by `cam` so the every-400ms live refresh within a
+            shot doesn't re-trigger it. */}
+        <AnimatePresence>
+          <motion.div
+            key={cam}
+            initial={{ opacity: 0, scale: 1.06 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+            className="absolute inset-0"
+          >
+            {src ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={src} alt="שידור חי" className="block h-full w-full object-cover" />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center text-sm text-zinc-500">
+                מתחבר למצלמה…
+              </div>
+            )}
+          </motion.div>
+        </AnimatePresence>
 
         {/* big descent countdown — runs from the upper shot through the ramp
             and the driveway, all the way down to the lower gate opening */}

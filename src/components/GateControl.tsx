@@ -18,6 +18,11 @@ const GATES: Gate[] = [
   { id: "lower", name: "שער תחתון", short: "תחתון" },
 ];
 
+// Hide the "דלתות" doors menu for now (keep the code). The menu is only
+// reachable through the toggle button, so the door list below stays dormant
+// while this is false. Flip to true to bring it back.
+const SHOW_DOORS_MENU = false;
+
 // Mirror of src/lib/doors.ts (labels only) — the GeoVision doors other than the
 // lobby, which has its own button. Names beyond "lobby" are the raw GeoVision
 // labels for now; Moti will rename them to real-world doors later.
@@ -186,21 +191,24 @@ export function GateControl() {
             לובי
           </button>
 
-          {/* Toggle the rest of the building doors. */}
-          <button
-            type="button"
-            onClick={() => setDoorsOpen((v) => !v)}
-            aria-expanded={doorsOpen}
-            className={cn(BUTTON_CLASS, "px-5")}
-          >
-            <ChevronUp
-              className={cn(
-                "size-5 transition-transform duration-200 ease-out",
-                doorsOpen && "rotate-180"
-              )}
-            />
-            דלתות
-          </button>
+          {/* Toggle the rest of the building doors. Hidden for now via
+              SHOW_DOORS_MENU (code kept). */}
+          {SHOW_DOORS_MENU && (
+            <button
+              type="button"
+              onClick={() => setDoorsOpen((v) => !v)}
+              aria-expanded={doorsOpen}
+              className={cn(BUTTON_CLASS, "px-5")}
+            >
+              <ChevronUp
+                className={cn(
+                  "size-5 transition-transform duration-200 ease-out",
+                  doorsOpen && "rotate-180"
+                )}
+              />
+              דלתות
+            </button>
+          )}
         </div>
       </div>
     </div>

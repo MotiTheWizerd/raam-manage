@@ -5,7 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 const DB_PATH = path.join(process.cwd(), "data", "raam.db");
-const SCHEMA_EVOLUTION_VERSION = 7;
+const SCHEMA_EVOLUTION_VERSION = 8;
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS zones (
@@ -255,6 +255,18 @@ CREATE TABLE IF NOT EXISTS gate_events (
 
 CREATE INDEX IF NOT EXISTS idx_gate_events_created ON gate_events(created_at);
 
+CREATE TABLE IF NOT EXISTS door_events (
+  id            INTEGER PRIMARY KEY,
+  door_id       TEXT NOT NULL,
+  door_name     TEXT NOT NULL,
+  lobbyist_name TEXT NOT NULL DEFAULT '',
+  ok            INTEGER NOT NULL DEFAULT 1,
+  source        TEXT NOT NULL DEFAULT 'manual',
+  created_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_door_events_created ON door_events(created_at);
+
 CREATE TABLE IF NOT EXISTS user_preferences (
   id         INTEGER PRIMARY KEY CHECK (id = 1),
   data       TEXT NOT NULL DEFAULT '{}',
@@ -340,6 +352,17 @@ function applySchemaEvolution(db: Database.Database) {
       created_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
     CREATE INDEX IF NOT EXISTS idx_gate_events_created ON gate_events(created_at);
+
+    CREATE TABLE IF NOT EXISTS door_events (
+      id            INTEGER PRIMARY KEY,
+      door_id       TEXT NOT NULL,
+      door_name     TEXT NOT NULL,
+      lobbyist_name TEXT NOT NULL DEFAULT '',
+      ok            INTEGER NOT NULL DEFAULT 1,
+      source        TEXT NOT NULL DEFAULT 'manual',
+      created_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_door_events_created ON door_events(created_at);
   `);
 
   ensureColumn(db, "resident_guests", "auto_open", "INTEGER NOT NULL DEFAULT 0");

@@ -1,9 +1,10 @@
 "use client";
 
-import { AnimatePresence } from "framer-motion";
-import { DoorOpen } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
+import { ChevronUp, DoorOpen } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { openDoor } from "@/app/doors/actions";
 import { openGate } from "@/app/gates/actions";
 import { GateLiveView } from "@/components/GateLiveView";
 import { GateSequenceView } from "@/components/GateSequenceView";
@@ -17,6 +18,18 @@ const GATES: Gate[] = [
   { id: "lower", name: "שער תחתון", short: "תחתון" },
 ];
 
+// Mirror of src/lib/doors.ts (labels only) — the GeoVision doors other than the
+// lobby, which has its own button. Names beyond "lobby" are the raw GeoVision
+// labels for now; Moti will rename them to real-world doors later.
+const DOORS: { id: string; name: string }[] = [
+  { id: "north", name: "דלת צפונית" },
+  { id: "carpark2", name: "חניון 2 ראשית" },
+  { id: "parking-guests-door", name: "דלת אורחים" },
+  { id: "parking-main", name: "דלת חניון ראשית" },
+  { id: "parking-suppliers", name: "חניון ספקים" },
+  { id: "parking-guests", name: "חניון אורחים" },
+];
+
 const BUTTON_CLASS = cn(
   "group/gate flex items-center justify-center gap-2 rounded-full px-7 py-3 whitespace-nowrap",
   "bg-linear-to-b from-red-500 to-red-700 font-semibold text-white",
@@ -28,13 +41,28 @@ const BUTTON_CLASS = cn(
   "disabled:opacity-60 disabled:hover:translate-y-0"
 );
 
+// Slimmer secondary pill for the rows inside the expandable doors list.
+const DOOR_ROW_CLASS = cn(
+  "group/door flex w-full items-center justify-center gap-2 rounded-full px-5 py-2 text-sm whitespace-nowrap",
+  "border border-zinc-200/80 bg-white/70 font-medium text-zinc-700",
+  "transition-all duration-200 ease-out",
+  "hover:-translate-y-0.5 hover:border-red-300 hover:text-red-700 hover:shadow-md",
+  "active:translate-y-0 active:scale-[0.97]",
+  "disabled:opacity-60 disabled:hover:translate-y-0",
+  "dark:border-zinc-700/80 dark:bg-zinc-800/70 dark:text-zinc-200 dark:hover:text-red-300"
+);
+
 export function GateControl() {
   // Per-gate in-flight lock — blocks an accidental double-tap from double-firing.
   const [busy, setBusy] = useState<Gate["id"] | null>(null);
+  // Per-door in-flight lock (door id currently opening, null = none).
+  const [doorBusy, setDoorBusy] = useState<string | null>(null);
   // The camera whose live view is currently popped (null = none).
   const [liveView, setLiveView] = useState<{ camId: string; title: string } | null>(null);
   // The "escort the car" 4-shot sequence (launched by the upper button).
   const [sequenceOpen, setSequenceOpen] = useState(false);
+  // The expandable list of (non-lobby) doors.
+  const [doorsOpen, setDoorsOpen] = useState(false);
 
   async function fire(gate: Gate) {
     if (busy) return;
@@ -46,6 +74,21 @@ export function GateControl() {
       setLiveView({ camId: gate.id, title: gate.name }); // pop the gate's live view
     } else {
       toast.error(result.error ?? "פתיחת השער נכשלה");
+    }
+  }
+
+  // Unlock a GeoVision door. camId pops a live view on success (the lobby door
+  // has the "Outdoor Loby" cam; the others have none).
+  async function fireDoor(id: string, name: string, camId?: string) {
+    if (doorBusy) return;
+    setDoorBusy(id);
+    const result = await openDoor(id);
+    setDoorBusy(null);
+    if (result.ok) {
+      toast.success(`${name} נפתחה`);
+      if (camId) setLiveView({ camId, title: name });
+    } else {
+      toast.error(result.error ?? "פתיחת הדלת נכשלה");
     }
   }
 
@@ -91,6 +134,32 @@ export function GateControl() {
         {/* grip handle — signals the drawer pulls up */}
         <div className="h-1.5 w-10 rounded-full bg-zinc-300 dark:bg-zinc-700" />
 
+        {/* Expandable list of the other building doors (GeoVision). */}
+        <AnimatePresence initial={false}>
+          {doorsOpen && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.2, ease: "easeOut" }}
+              className="flex w-full flex-col gap-1.5 overflow-hidden"
+            >
+              {DOORS.map((door) => (
+                <button
+                  key={door.id}
+                  type="button"
+                  onClick={() => fireDoor(door.id, door.name)}
+                  disabled={doorBusy === door.id}
+                  className={DOOR_ROW_CLASS}
+                >
+                  <DoorOpen className="size-4 transition-transform duration-200 ease-out group-hover/door:scale-110" />
+                  {door.name}
+                </button>
+              ))}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         <div className="flex flex-row gap-2">
           {GATES.map((gate) => (
             <button
@@ -105,15 +174,32 @@ export function GateControl() {
             </button>
           ))}
 
-          {/* Lobby — opens the "Outdoor Loby" live view. Door-open command not
-              wired yet (different system from the gates); view-only for now. */}
+          {/* Lobby — unlocks the lobby door (GeoVision, ctrl 4) + pops its
+              "Outdoor Loby" live view. */}
           <button
             type="button"
-            onClick={() => setLiveView({ camId: "lobby", title: "לובי" })}
+            onClick={() => fireDoor("lobby", "לובי", "lobby")}
+            disabled={doorBusy === "lobby"}
             className={BUTTON_CLASS}
           >
             <DoorOpen className="size-5 transition-transform duration-200 ease-out group-hover/gate:scale-110" />
             לובי
+          </button>
+
+          {/* Toggle the rest of the building doors. */}
+          <button
+            type="button"
+            onClick={() => setDoorsOpen((v) => !v)}
+            aria-expanded={doorsOpen}
+            className={cn(BUTTON_CLASS, "px-5")}
+          >
+            <ChevronUp
+              className={cn(
+                "size-5 transition-transform duration-200 ease-out",
+                doorsOpen && "rotate-180"
+              )}
+            />
+            דלתות
           </button>
         </div>
       </div>

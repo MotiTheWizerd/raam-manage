@@ -5,7 +5,7 @@ import { getOpenSuggestionCount } from "@/app/settings/suggestions-actions";
 import { Tabs, type TabItem } from "@/components/ui/Tabs";
 import { onSuggestionsChanged } from "@/lib/suggestions-events";
 import { BackupTab } from "./BackupTab";
-import { FaceRecTab } from "./FaceRecTab";
+import { FaceRecTab } from "./face-rec";
 import { RegisteredCarsTab } from "./RegisteredCarsTab";
 import { SuggestionsTab } from "./SuggestionsTab";
 import { SystemMessagesTab } from "./SystemMessagesTab";

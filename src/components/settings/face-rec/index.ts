@@ -1,0 +1,1 @@
+export { FaceRecTab } from "./FaceRecTab";

@@ -14,6 +14,7 @@ export type RentersListResident = {
   type: "owner" | "renter";
   po_box: string | null;
   apartment_number: string | null;
+  apartment_comment: string | null;
   zone_name: string | null;
   primary_phone: string | null;
 };
@@ -25,7 +26,14 @@ const TYPE_LABEL: Record<RentersListResident["type"], string> = {
 
 type TypeFilter = "all" | "owner" | "renter";
 
-type SortKey = "name" | "apartment" | "zone" | "type" | "phone" | "po_box";
+type SortKey =
+  | "name"
+  | "apartment"
+  | "apartment_comment"
+  | "zone"
+  | "type"
+  | "phone"
+  | "po_box";
 type SortDir = "asc" | "desc";
 
 function sortValue(r: RentersListResident, key: SortKey): string | null {
@@ -34,6 +42,8 @@ function sortValue(r: RentersListResident, key: SortKey): string | null {
       return `${r.first_name} ${r.last_name}`;
     case "apartment":
       return r.apartment_number;
+    case "apartment_comment":
+      return r.apartment_comment;
     case "zone":
       return r.zone_name;
     case "type":
@@ -52,7 +62,7 @@ type Props = {
 export function RentersList({ residents }: Props) {
   const [query, setQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
-  const [sortKey, setSortKey] = useState<SortKey>("name");
+  const [sortKey, setSortKey] = useState<SortKey>("apartment");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
 
   function toggleSort(key: SortKey) {
@@ -138,6 +148,7 @@ export function RentersList({ residents }: Props) {
               <tr className="border-b border-black/10 dark:border-white/10 opacity-70">
                 <SortHeader label="שם"   k="name"      sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} />
                 <SortHeader label="דירה"  k="apartment" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} />
+                <SortHeader label="הערת דירה" k="apartment_comment" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} />
                 <SortHeader label="אזור"  k="zone"      sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} />
                 <SortHeader label="סוג"   k="type"      sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} />
                 <SortHeader label="טלפון" k="phone"     sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} />
@@ -160,6 +171,9 @@ export function RentersList({ residents }: Props) {
                   </td>
                   <td className="px-4 py-2.5 opacity-80">
                     {r.apartment_number ?? "—"}
+                  </td>
+                  <td className="px-4 py-2.5 opacity-70 max-w-[16rem] truncate" title={r.apartment_comment ?? undefined}>
+                    {r.apartment_comment ?? "—"}
                   </td>
                   <td className="px-4 py-2.5 opacity-80">{r.zone_name ?? "—"}</td>
                   <td className="px-4 py-2.5 opacity-80">{TYPE_LABEL[r.type]}</td>

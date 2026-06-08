@@ -17,6 +17,7 @@ export default async function RentersPage() {
       `SELECT
          r.id, r.first_name, r.last_name, r.type, r.po_box,
          a.number AS apartment_number,
+         a.notes  AS apartment_comment,
          z.name   AS zone_name,
          (SELECT number FROM phones WHERE resident_id = r.id AND is_primary = 1 LIMIT 1) AS primary_phone
        FROM residents r

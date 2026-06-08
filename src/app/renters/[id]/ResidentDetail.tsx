@@ -24,6 +24,7 @@ type Resident = {
   po_box: string | null;
   notes: string | null;
   apartment_number: string | null;
+  apartment_comment: string | null;
   zone_name: string | null;
 };
 
@@ -69,6 +70,16 @@ export function ResidentDetail({
           submitLabel="שמור שינויים"
         />
       </fieldset>
+
+      {resident.apartment_comment && (
+        <div className="rounded-lg border border-black/10 dark:border-white/10 p-4 space-y-1">
+          <div className="text-xs uppercase tracking-wide opacity-60">
+            הערת דירה
+            {resident.apartment_number ? ` — דירה ${resident.apartment_number}` : ""}
+          </div>
+          <p className="text-sm whitespace-pre-wrap">{resident.apartment_comment}</p>
+        </div>
+      )}
 
       <ResidentCars apartmentNumber={resident.apartment_number} />
     </div>

@@ -16,6 +16,7 @@ type Resident = {
   po_box: string | null;
   notes: string | null;
   apartment_number: string | null;
+  apartment_comment: string | null;
   zone_name: string | null;
 };
 
@@ -47,6 +48,7 @@ export default async function ResidentPage({
       `SELECT r.id, r.apartment_id, r.first_name, r.last_name, r.type,
               r.id_number, r.po_box, r.notes,
               a.number AS apartment_number,
+              a.notes  AS apartment_comment,
               z.name   AS zone_name
        FROM residents r
        LEFT JOIN apartments a ON a.id = r.apartment_id

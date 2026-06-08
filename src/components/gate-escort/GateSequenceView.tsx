@@ -10,7 +10,7 @@ import { Countdown } from "./overlays/Countdown";
 import { DooringFlash } from "./overlays/DooringFlash";
 import { LiveDot } from "./overlays/LiveDot";
 import { ShotProgress } from "./overlays/ShotProgress";
-import { buildCaption, SHOTS } from "./sequence.config";
+import { AUTO_DETECT_CAMS, buildCaption, SHOTS } from "./sequence.config";
 import { useCameraFrame } from "./useCameraFrame";
 import { useEscortSequence } from "./useEscortSequence";
 
@@ -19,7 +19,7 @@ type Props = { onClose: () => void };
 export function GateSequenceView({ onClose }: Props) {
   const { phase, cam, secsToLower, dooring, abort } = useEscortSequence(onClose);
   const { detect, detectError, toggleDetect, onDetectError, source } =
-    useCameraFrame(cam);
+    useCameraFrame(cam, AUTO_DETECT_CAMS.includes(cam));
 
   const rootRef = useRef<HTMLDivElement>(null);
   const { isFullscreen, toggle: toggleFullscreen } = useFullscreen(rootRef);

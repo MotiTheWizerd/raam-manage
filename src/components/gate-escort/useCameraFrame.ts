@@ -22,12 +22,17 @@ export type CameraFrame = {
  * Resolves the picture for a camera: either the vision service's annotated
  * detection MJPEG, or a polled raw snapshot (also the fallback when detection
  * errors). The detection toggle lives here so the view just renders `source`.
+ *
+ * `autoDetect` forces detection on for the current shot regardless of the
+ * manual toggle (e.g. the lower-gate cam lights up boxes on the entering car).
  */
-export function useCameraFrame(cam: CameraId): CameraFrame {
+export function useCameraFrame(cam: CameraId, autoDetect = false): CameraFrame {
   const [src, setSrc] = useState<string | null>(null);
-  const [detect, setDetect] = useState(false);
+  const [manualDetect, setManualDetect] = useState(false);
   const [detectError, setDetectError] = useState(false);
   const [detectStream, setDetectStream] = useState<string | null>(null);
+
+  const detect = manualDetect || autoDetect;
 
   // ---- Detection stream (re-runs on each camera cut / toggle) ----
   // Point an MJPEG <img> at the vision service's annotated stream for the active
@@ -81,7 +86,7 @@ export function useCameraFrame(cam: CameraId): CameraFrame {
   return {
     detect,
     detectError,
-    toggleDetect: () => setDetect((d) => !d),
+    toggleDetect: () => setManualDetect((d) => !d),
     onDetectError: () => setDetectError(true),
     source,
   };

@@ -15,11 +15,13 @@ import type { CameraId } from "@/lib/gates";
 //
 // TUNE THESE after watching real cars:
 export const SEQ = {
+  // Overall time to the lower gate opening ≈ coldOpen + upper + ramp +
+  // roadAtSecLeft = 3 + 4 + 4 + 14 = 25s (the countdown the lobbyist watches).
   coldOpenMs: 3000, // .60 street — car approaching
   upperMs: 4000, // .107 upper gate — car enters
   rampMs: 4000, // .61 ramp — brief in-ramp shot at the top of the descent
-  roadAtSecLeft: 24, // cut to the road cam (cam 29 שביל) when this many seconds remain
-  lowerAtSecLeft: 15, // cut to the lower-gate cam (.112) when this many seconds remain
+  roadAtSecLeft: 14, // cut to the road cam (cam 29 שביל) when this many seconds remain
+  lowerAtSecLeft: 10, // cut to the lower-gate cam (.112) when this many seconds remain
   lowerHoldMs: 30000, // .112 lower — how long we hold the lower gate open after it opens
   pulseEveryMs: 4000, // re-fire cadence (< the ~5s auto-close, so no visible judder)
   closeWatchMs: 7000, // after the last pulse, keep watching until the gate auto-closes (~5s) + margin
@@ -42,6 +44,12 @@ export const T_ROAD = T_RAMP + SEQ.rampMs; // road cam on; countdown reads roadA
 export const T_OPEN = T_ROAD + SEQ.roadAtSecLeft * 1000; // lower gate opens here (countdown 0)
 export const T_LOWER_CAM = T_OPEN - SEQ.lowerAtSecLeft * 1000; // lower cam on; countdown reads lowerAtSecLeft
 export const T_END = T_OPEN + SEQ.lowerHoldMs;
+
+// Cameras that should auto-enable object-detection mode when their shot is on
+// screen — the lower-gate cam shows the car driving in once the gate opens, so
+// we light up the detection boxes for the cool factor (and it's the same feed a
+// future watcher will use to auto-close once the car is through).
+export const AUTO_DETECT_CAMS: CameraId[] = ["lower"];
 
 export type Phase = "cold" | "upper" | "ramp" | "road" | "lower" | "open" | "done";
 

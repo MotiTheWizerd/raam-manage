@@ -43,5 +43,27 @@ module.exports = {
       merge_logs: true,
       time: true,
     },
+    {
+      // Face-recognition sentry (vision/face_probe.py) — watches the lobby cam,
+      // recognizes enrolled residents, and opens the matching GeoVision door.
+      // The app's זיהוי פנים settings tab enrolls/forgets faces and arms/disarms
+      // it over this service's localhost HTTP API (port 8090). Motion-gated, so
+      // it sits near-idle until something actually moves in front of a camera.
+      // Same windowless pythonw interpreter as raam-vision.
+      name: "raam-face",
+      script: "face_probe.py",
+      interpreter: path.join(__dirname, "vision", ".venv", "Scripts", "pythonw.exe"),
+      interpreter_args: "-u",
+      args: "--cam lobby --port 8090",
+      cwd: path.join(__dirname, "vision"),
+      exec_mode: "fork",
+      instances: 1,
+      autorestart: true,
+      max_memory_restart: "1500M",
+      out_file: path.join(__dirname, "logs", "pm2-face-out.log"),
+      error_file: path.join(__dirname, "logs", "pm2-face-error.log"),
+      merge_logs: true,
+      time: true,
+    },
   ],
 };

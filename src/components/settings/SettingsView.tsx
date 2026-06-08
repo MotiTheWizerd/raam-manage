@@ -5,6 +5,7 @@ import { getOpenSuggestionCount } from "@/app/settings/suggestions-actions";
 import { Tabs, type TabItem } from "@/components/ui/Tabs";
 import { onSuggestionsChanged } from "@/lib/suggestions-events";
 import { BackupTab } from "./BackupTab";
+import { FaceRecTab } from "./FaceRecTab";
 import { RegisteredCarsTab } from "./RegisteredCarsTab";
 import { SuggestionsTab } from "./SuggestionsTab";
 import { SystemMessagesTab } from "./SystemMessagesTab";
@@ -40,6 +41,7 @@ export function SettingsView() {
     { value: "suggestions", label: "הצעות ייעול", badge: openCount },
     { value: "zones", label: "אזורים" },
     { value: "registered-cars", label: "רכבים רשומים" },
+    { value: "face-rec", label: "זיהוי פנים" },
     { value: "backup", label: "גיבוי" },
   ];
 
@@ -56,6 +58,7 @@ export function SettingsView() {
         {tab === "suggestions" && <SuggestionsTab />}
         {tab === "zones" && <ZonesTab />}
         {tab === "registered-cars" && <RegisteredCarsTab />}
+        {tab === "face-rec" && <FaceRecTab />}
         {tab === "backup" && <BackupTab />}
       </section>
     </div>

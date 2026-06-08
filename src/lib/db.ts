@@ -5,7 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 const DB_PATH = path.join(process.cwd(), "data", "raam.db");
-const SCHEMA_EVOLUTION_VERSION = 8;
+const SCHEMA_EVOLUTION_VERSION = 10;
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS zones (
@@ -274,6 +274,17 @@ CREATE TABLE IF NOT EXISTS user_preferences (
 );
 
 INSERT OR IGNORE INTO user_preferences (id, data) VALUES (1, '{}');
+
+CREATE TABLE IF NOT EXISTS face_enrollments (
+  id           INTEGER PRIMARY KEY,
+  kind         TEXT NOT NULL DEFAULT 'resident' CHECK (kind IN ('resident','staff')),
+  resident_id  INTEGER UNIQUE REFERENCES residents(id) ON DELETE CASCADE,
+  name         TEXT,
+  label        TEXT NOT NULL UNIQUE,
+  enrolled_by  TEXT NOT NULL DEFAULT '',
+  created_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 `;
 
 function ensureColumn(
@@ -363,7 +374,44 @@ function applySchemaEvolution(db: Database.Database) {
       created_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
     CREATE INDEX IF NOT EXISTS idx_door_events_created ON door_events(created_at);
+
+    CREATE TABLE IF NOT EXISTS face_enrollments (
+      id           INTEGER PRIMARY KEY,
+      kind         TEXT NOT NULL DEFAULT 'resident' CHECK (kind IN ('resident','staff')),
+      resident_id  INTEGER UNIQUE REFERENCES residents(id) ON DELETE CASCADE,
+      name         TEXT,
+      label        TEXT NOT NULL UNIQUE,
+      enrolled_by  TEXT NOT NULL DEFAULT '',
+      created_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
   `);
+
+  // Migration v10: face_enrollments grew a 'kind' (resident|staff) + 'name' so
+  // building workers (not in the residents table) can be enrolled too, and
+  // resident_id became nullable. Rebuild the v9 table if it predates 'kind'.
+  const faceSql = (db.prepare(
+    `SELECT sql FROM sqlite_master WHERE type='table' AND name='face_enrollments'`
+  ).get() as { sql: string } | undefined)?.sql ?? '';
+  if (faceSql && !faceSql.includes("kind")) {
+    db.exec(`
+      CREATE TABLE face_enrollments_new (
+        id           INTEGER PRIMARY KEY,
+        kind         TEXT NOT NULL DEFAULT 'resident' CHECK (kind IN ('resident','staff')),
+        resident_id  INTEGER UNIQUE REFERENCES residents(id) ON DELETE CASCADE,
+        name         TEXT,
+        label        TEXT NOT NULL UNIQUE,
+        enrolled_by  TEXT NOT NULL DEFAULT '',
+        created_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+      INSERT INTO face_enrollments_new (id, kind, resident_id, name, label, enrolled_by, created_at, updated_at)
+        SELECT id, 'resident', resident_id, NULL, label, enrolled_by, created_at, updated_at
+          FROM face_enrollments;
+      DROP TABLE face_enrollments;
+      ALTER TABLE face_enrollments_new RENAME TO face_enrollments;
+    `);
+  }
 
   ensureColumn(db, "resident_guests", "auto_open", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "gate_events", "source", "TEXT NOT NULL DEFAULT 'manual'");

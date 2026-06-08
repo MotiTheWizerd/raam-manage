@@ -61,7 +61,8 @@ DOOR_MIN_PX = 30           # require a real, close-enough face
 DOOR_CONFIRM_FRAMES = 3    # consecutive matching frames before firing
 DOOR_COOLDOWN = 12.0       # don't re-open a door within this many seconds
 
-ENROLL_SECONDS = 5.0
+ENROLL_SECONDS = 6.0        # capture window length, once a face actually appears
+ENROLL_WAIT_SECONDS = 50.0  # grace to walk to the camera after clicking enroll
 MIN_ENROLL_PX = 60
 
 # performance — the keys to scaling across cameras on a CPU box
@@ -75,6 +76,37 @@ MOTION_LINGER = 2.0        # keep recognizing this long after the last motion
 # here as we deploy them (e.g. a pool cam -> the pool door). Default = lobby.
 CAM_DOOR = {"lobby": (4, 0)}
 DEFAULT_DOOR = (4, 0)
+
+# --- audio feedback --------------------------------------------------------
+# Short tones on the lobby PC so the person being enrolled (who has walked over
+# to the camera, away from the screen) hears when the capture STARTS and when it
+# has SAVED. winsound is Windows-only + stdlib; tones play on the box's default
+# audio device. Always run in a thread — winsound.Beep blocks for its duration.
+try:
+    import winsound
+except ImportError:  # non-Windows dev box
+    winsound = None
+
+_SOUNDS = {
+    "start": [(880, 120), (1175, 160)],            # rising "get ready / look now"
+    "done": [(1047, 130), (1319, 130), (1568, 200)],  # happy 3-note "saved!"
+    "fail": [(440, 200), (330, 320)],              # low "didn't work"
+}
+
+
+def _play(kind: str) -> None:
+    if winsound is None:
+        return
+
+    def run():
+        for freq, dur in _SOUNDS.get(kind, []):
+            try:
+                winsound.Beep(freq, dur)
+            except Exception:
+                return
+
+    threading.Thread(target=run, daemon=True).start()
+
 
 # --- GeoVision door client (shared) ----------------------------------------
 DOOR_BASE = "https://localhost/ASWeb"
@@ -248,7 +280,8 @@ class CameraWorker:
         self._prev_gray = None
         self._streak = 0
         self._last_open = 0.0
-        self._enroll = {"active": False, "name": "", "until": 0.0, "samples": []}
+        self._enroll = {"active": False, "name": "", "samples": [],
+                        "started": False, "deadline": 0.0, "wait_until": 0.0}
         self._msg = ""
         self._msg_until = 0.0
         self._started = False
@@ -263,8 +296,12 @@ class CameraWorker:
             threading.Thread(target=self._loop, name=f"rec-{self.cam_id}", daemon=True).start()
 
     def start_enroll(self, name: str) -> None:
-        self._enroll = {"active": True, "name": name,
-                        "until": time.time() + ENROLL_SECONDS, "samples": []}
+        # Arm enrollment but DON'T start the capture clock yet — the operator
+        # clicks here, then walks to the camera. The timed capture begins only
+        # once a real, close-enough face actually appears (see _recognize).
+        self._enroll = {"active": True, "name": name, "samples": [],
+                        "started": False, "deadline": 0.0,
+                        "wait_until": time.time() + ENROLL_WAIT_SECONDS}
 
     # ---- threads ----
     def _grab(self) -> None:
@@ -325,6 +362,19 @@ class CameraWorker:
                 self._banner(frame, "idle - watching for motion", (150, 150, 150))
                 interval = 1.0 / IDLE_FPS
 
+            # Enroll lifecycle: finish the timed capture once the window elapses,
+            # or give up if nobody stepped in front of the camera in time. Kept
+            # here (not in _recognize) so it still fires if the face leaves.
+            e = self._enroll
+            if e["active"]:
+                now = time.time()
+                if e["started"] and now >= e["deadline"]:
+                    e["active"] = False
+                    self._finish_enroll()
+                elif not e["started"] and now >= e["wait_until"]:
+                    e["active"] = False
+                    self._enroll_timeout()
+
             ok, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
             if ok:
                 with self.cond:
@@ -345,7 +395,11 @@ class CameraWorker:
 
         if biggest is None:
             self._streak = 0
-            self._banner(frame, "no face", (0, 215, 255))
+            if enrolling and not self._enroll["started"]:
+                self._banner(frame, f"ENROLLING {self._enroll['name']}: step in front of the camera",
+                             (255, 180, 0))
+            else:
+                self._banner(frame, "no face", (0, 215, 255))
             return
 
         x1, y1, x2, y2 = biggest.bbox.astype(int)
@@ -354,14 +408,21 @@ class CameraWorker:
         color = (0, 215, 255)
 
         if enrolling:
+            e = self._enroll
             if px >= MIN_ENROLL_PX:
-                self._enroll["samples"].append(emb)
-            n = len(self._enroll["samples"])
-            text = f"ENROLLING {self._enroll['name']}: {n} samples (face {px}px)"
+                # First good face → start the capture clock + chime "look now".
+                if not e["started"]:
+                    e["started"] = True
+                    e["deadline"] = time.time() + ENROLL_SECONDS
+                    _play("start")
+                e["samples"].append(emb)
+            n = len(e["samples"])
             color = (255, 180, 0)
-            if time.time() >= self._enroll["until"]:
-                self._enroll["active"] = False
-                self._finish_enroll()
+            if not e["started"]:
+                text = f"ENROLLING {e['name']}: come closer / look at the camera ({px}px)"
+            else:
+                remain = max(0.0, e["deadline"] - time.time())
+                text = f"ENROLLING {e['name']}: {n} samples ({px}px) {remain:.0f}s"
         else:
             name, score = self.engine.best_match(emb)
             if name is not None and score >= MATCH_THRESHOLD:
@@ -402,11 +463,19 @@ class CameraWorker:
         samples = self._enroll["samples"]
         if len(samples) < 3:
             self._msg = f"enroll FAILED: only {len(samples)} samples — try again"
+            _play("fail")
         else:
             n = self.engine.enroll(self._enroll["name"], samples)
             self._msg = f"SAVED {self._enroll['name']} from {n} samples"
+            _play("done")
             print(f"[{self.cam_id}] {self._msg}")
         self._msg_until = time.time() + 4.0
+
+    def _enroll_timeout(self) -> None:
+        self._msg = f"enroll timed out — no face seen for {self._enroll['name']}"
+        self._msg_until = time.time() + 4.0
+        _play("fail")
+        print(f"[{self.cam_id}] {self._msg}")
 
     def _banner(self, frame, text: str, color) -> None:
         if self._msg and time.time() < self._msg_until:

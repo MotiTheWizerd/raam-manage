@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { openDoor } from "@/app/doors/actions";
 import { openGate } from "@/app/gates/actions";
 import { GateLiveView } from "@/components/GateLiveView";
-import { GateSequenceView } from "@/components/GateSequenceView";
+import { GateSequenceView } from "@/components/gate-escort";
 import { cn } from "@/lib/cn";
 
 type Gate = { id: "upper" | "lower"; name: string; short: string };

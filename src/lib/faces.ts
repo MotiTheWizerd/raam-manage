@@ -102,3 +102,35 @@ export async function setArmed(armed: boolean): Promise<boolean> {
   );
   return !!j.armed;
 }
+
+// --- entry-event feed (drained by the face-watcher) ------------------------
+export type SentryFaceEvent = {
+  id: number; // the sentry's own event id (monotonic; use as `since` cursor)
+  ts: number; // epoch seconds
+  cam: string;
+  kind: "known" | "unknown";
+  label: string | null;
+  score: number;
+  px: number;
+};
+
+// Pulls events newer than `since` from the sentry's ring buffer.
+export async function faceEvents(
+  since: number,
+  limit: number = 100
+): Promise<{ events: SentryFaceEvent[]; lastId: number }> {
+  const j = await get<{ events: SentryFaceEvent[]; last_id: number }>(
+    `/events?since=${since}&limit=${limit}`
+  );
+  return { events: j.events ?? [], lastId: j.last_id ?? 0 };
+}
+
+// Fetches the JPEG snapshot for one event (so the watcher can persist it).
+export async function faceEventSnap(sentryId: number): Promise<Buffer | null> {
+  const res = await fetch(`${BASE}/events/snap?id=${sentryId}`, {
+    cache: "no-store",
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+  });
+  if (!res.ok) return null;
+  return Buffer.from(await res.arrayBuffer());
+}

@@ -20,13 +20,17 @@ import {
   enrollStaffFace,
   forgetEnrolledFace,
   getFaceConsole,
+  getFaceEventsPage,
   setFaceArmed,
   type EnrolledFace,
   type FaceConsole,
+  type FaceEventFilter,
+  type FaceEventRow,
 } from "@/app/settings/face-actions";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Input } from "@/components/ui/Input";
+import { Pagination } from "@/components/ui/Pagination";
 import { cn } from "@/lib/cn";
 import { useDebouncedValue } from "@/lib/hooks/useDebouncedValue";
 
@@ -85,8 +89,153 @@ export function FaceRecTab() {
           </div>
 
           <EnrolledList data={data} onChanged={reload} />
+
+          <FaceEventsLog />
         </>
       )}
+    </div>
+  );
+}
+
+// --- entry log feed --------------------------------------------------------
+const LOG_PAGE_SIZE = 24;
+const LOG_REFRESH_MS = 8000;
+
+const FILTERS: { value: FaceEventFilter; label: string }[] = [
+  { value: "all", label: "הכל" },
+  { value: "known", label: "מזוהים" },
+  { value: "unknown", label: "לא מזוהים" },
+];
+
+function formatWhen(createdAt: string): string {
+  // SQLite CURRENT_TIMESTAMP is UTC "YYYY-MM-DD HH:MM:SS" — render in local time.
+  const d = new Date(createdAt.replace(" ", "T") + "Z");
+  if (Number.isNaN(d.getTime())) return createdAt;
+  return d.toLocaleString("he-IL", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function FaceEventsLog() {
+  const [filter, setFilter] = useState<FaceEventFilter>("all");
+  const [page, setPage] = useState(1);
+  const [rows, setRows] = useState<FaceEventRow[]>([]);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    const res = await getFaceEventsPage(page, LOG_PAGE_SIZE, filter);
+    setRows(res.rows);
+    setTotal(res.total);
+    setTotalPages(res.totalPages);
+    setLoading(false);
+  }, [page, filter]);
+
+  useEffect(() => {
+    setLoading(true);
+    load();
+  }, [load]);
+
+  // Keep the first page live so new entries appear without a manual refresh.
+  useEffect(() => {
+    if (page !== 1) return;
+    const t = setInterval(load, LOG_REFRESH_MS);
+    return () => clearInterval(t);
+  }, [page, load]);
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-sm font-medium opacity-80">יומן כניסות מזוהות</h3>
+        <div className="flex rounded-lg border border-black/10 p-0.5 dark:border-white/10">
+          {FILTERS.map((f) => (
+            <button
+              key={f.value}
+              type="button"
+              onClick={() => {
+                setFilter(f.value);
+                setPage(1);
+              }}
+              className={cn(
+                "rounded-md px-3 py-1 text-xs font-medium transition-colors",
+                filter === f.value ? "bg-foreground/10" : "opacity-60 hover:opacity-100"
+              )}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {loading && rows.length === 0 ? (
+        <div className="py-8 text-center text-sm opacity-50">טוען…</div>
+      ) : rows.length === 0 ? (
+        <p className="rounded-lg border border-black/10 px-4 py-6 text-center text-sm opacity-60 dark:border-white/10">
+          עדיין אין כניסות מתועדות.
+        </p>
+      ) : (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+          {rows.map((ev) => (
+            <FaceEventCard key={ev.id} ev={ev} />
+          ))}
+        </div>
+      )}
+
+      <Pagination
+        page={page}
+        totalPages={totalPages}
+        pageSize={LOG_PAGE_SIZE}
+        total={total}
+        onPageChange={setPage}
+      />
+    </div>
+  );
+}
+
+function FaceEventCard({ ev }: { ev: FaceEventRow }) {
+  const known = ev.kind === "known";
+  return (
+    <div
+      className={cn(
+        "overflow-hidden rounded-xl border bg-white/40 dark:bg-white/[0.02]",
+        known ? "border-emerald-500/30" : "border-amber-500/30"
+      )}
+    >
+      <div className="relative aspect-square w-full bg-black">
+        {ev.hasImage ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={`/api/face-event/image?id=${ev.id}`}
+            alt={ev.name ?? "לא מזוהה"}
+            loading="lazy"
+            className="block h-full w-full object-cover"
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center text-zinc-600">
+            <ScanFace className="size-8" />
+          </div>
+        )}
+        <span
+          className={cn(
+            "absolute right-1.5 top-1.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold",
+            known
+              ? "bg-emerald-500/90 text-white"
+              : "bg-amber-500/90 text-white"
+          )}
+        >
+          {known ? "מזוהה" : "לא מזוהה"}
+        </span>
+      </div>
+      <div className="px-2.5 py-2">
+        <div className="truncate text-sm font-medium">
+          {known ? ev.name || "—" : "לא מזוהה"}
+        </div>
+        <div className="text-[11px] opacity-50">{formatWhen(ev.createdAt)}</div>
+      </div>
     </div>
   );
 }

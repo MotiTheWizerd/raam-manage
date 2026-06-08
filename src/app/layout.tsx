@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { Suspense } from "react";
 import { Toaster } from "sonner";
 import { AuthProvider } from "@/components/AuthProvider";
+import { FaceNotifier } from "@/components/FaceNotifier";
 import { GateControl } from "@/components/GateControl";
 import { Header } from "@/components/Header";
 import { NewCarNotifier } from "@/components/NewCarNotifier";
@@ -58,6 +59,7 @@ export default async function RootLayout({
                     notifier rises to the top with no gap. */}
                 <div className="pointer-events-none fixed top-20 left-4 z-50 flex w-80 max-w-[calc(100vw-2rem)] flex-col gap-2">
                   <StickyMessages />
+                  <FaceNotifier />
                   <Suspense fallback={null}>
                     <NewCarNotifier />
                   </Suspense>

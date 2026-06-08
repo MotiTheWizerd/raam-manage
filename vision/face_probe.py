@@ -32,6 +32,7 @@ import os
 os.environ.setdefault("OPENCV_FFMPEG_LOGLEVEL", "-8")
 
 import argparse
+import collections
 import http.cookiejar
 import json
 import ssl
@@ -60,6 +61,11 @@ DOOR_MIN_SCORE = 0.30      # must clear this to open (strangers score ~0.0-0.1)
 DOOR_MIN_PX = 30           # require a real, close-enough face
 DOOR_CONFIRM_FRAMES = 3    # consecutive matching frames before firing
 DOOR_COOLDOWN = 12.0       # don't re-open a door within this many seconds
+
+# entry log: one event per arrival (known OR unknown), with a snapshot. Debounced
+# per identity so a lingering person is logged once, then again after the cooldown.
+EVENT_COOLDOWN = 45.0      # seconds before the same identity logs another event
+EVENTS_CAPACITY = 400      # how many recent events (+ their snapshots) to keep
 
 ENROLL_SECONDS = 6.0        # capture window length, once a face actually appears
 ENROLL_WAIT_SECONDS = 50.0  # grace to walk to the camera after clicking enroll
@@ -280,6 +286,8 @@ class CameraWorker:
         self._prev_gray = None
         self._streak = 0
         self._last_open = 0.0
+        self._last_event_key: str | None = None
+        self._last_event_ts = 0.0
         self._enroll = {"active": False, "name": "", "samples": [],
                         "started": False, "deadline": 0.0, "wait_until": 0.0}
         self._msg = ""
@@ -423,22 +431,49 @@ class CameraWorker:
             else:
                 remain = max(0.0, e["deadline"] - time.time())
                 text = f"ENROLLING {e['name']}: {n} samples ({px}px) {remain:.0f}s"
+        ev: tuple[str, str | None, float] | None = None
+        if enrolling:
+            pass  # ev stays None — enrollment isn't an entry event
         else:
             name, score = self.engine.best_match(emb)
             if name is not None and score >= MATCH_THRESHOLD:
                 text = f"MATCH: {name} ({score:.2f}) face {px}px"
                 color = (0, 220, 0)
                 self._maybe_open(name, score, px)
+                ev = ("known", name, score)
             else:
                 who = f"closest {name} {score:.2f}" if name else "no one enrolled"
                 text = f"UNKNOWN ({who}) face {px}px"
                 self._streak = 0
+                ev = ("unknown", None, score if name is not None else 0.0)
 
         cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
         if biggest.kps is not None:
             for (kx, ky) in biggest.kps.astype(int):
                 cv2.circle(frame, (kx, ky), 2, color, -1)
         self._banner(frame, text, color)
+
+        # Log the appearance AFTER annotating, so the snapshot shows the box +
+        # banner. Debounced per identity so one arrival = one event.
+        if ev is not None:
+            self._emit_event(frame, ev[0], ev[1], ev[2], px)
+
+    def _emit_event(self, frame, kind: str, label: str | None,
+                    score: float, px: int) -> None:
+        key = label if kind == "known" else "__unknown__"
+        now = time.time()
+        if key == self._last_event_key and (now - self._last_event_ts) < EVENT_COOLDOWN:
+            return
+        self._last_event_key = key
+        self._last_event_ts = now
+
+        img = frame
+        h, w = img.shape[:2]
+        if w > 800:  # keep snapshots small — this is a feed thumbnail
+            img = cv2.resize(img, (800, int(h * 800.0 / w)))
+        ok, buf = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 80])
+        if ok:
+            _events.add(self.cam_id, kind, label, score, px, buf.tobytes())
 
     def _maybe_open(self, name: str, score: float, px: int) -> None:
         now = time.time()
@@ -493,6 +528,48 @@ class CameraWorker:
                     break
                 self.cond.wait(timeout=rem)
             return self.latest_jpeg, self.seq
+
+
+# --- entry-event log (shared) ----------------------------------------------
+class EventLog:
+    """A small in-memory ring of recent face appearances + their snapshots. The
+    app polls /events to drain new ones into its own DB (so this is just a short
+    handoff buffer, not the system of record)."""
+
+    def __init__(self, capacity: int = EVENTS_CAPACITY):
+        self.capacity = capacity
+        self.lock = threading.Lock()
+        self.events: collections.deque = collections.deque(maxlen=capacity)
+        self.snaps: dict[int, bytes] = {}
+        self._next = 1
+
+    def add(self, cam: str, kind: str, label: str | None,
+            score: float, px: int, jpeg: bytes) -> int:
+        with self.lock:
+            eid = self._next
+            self._next += 1
+            self.events.append({"id": eid, "ts": time.time(), "cam": cam,
+                                "kind": kind, "label": label,
+                                "score": round(float(score), 3), "px": int(px)})
+            self.snaps[eid] = jpeg
+            # drop snapshots whose event has aged out of the ring
+            live = {e["id"] for e in self.events}
+            for k in [k for k in self.snaps if k not in live]:
+                del self.snaps[k]
+            return eid
+
+    def since(self, since: int, limit: int) -> tuple[list, int]:
+        with self.lock:
+            out = [e for e in self.events if e["id"] > since][:limit]
+            last = self.events[-1]["id"] if self.events else 0
+            return out, last
+
+    def snap(self, eid: int) -> bytes | None:
+        with self.lock:
+            return self.snaps.get(eid)
+
+
+_events = EventLog()
 
 
 _engine: FaceEngine | None = None
@@ -586,6 +663,34 @@ class Handler(BaseHTTPRequestHandler):
             ctrl, dr = CAM_DOOR.get(DEFAULT_CAM, DEFAULT_DOOR)
             threading.Thread(target=open_door, args=(ctrl, dr), daemon=True).start()
             self._json(200, {"ok": True, "msg": "opening door…"})
+            return
+
+        # entry-event feed: /events?since=<id>&limit=<n> + /events/snap?id=<id>
+        if head == "events":
+            if len(parts) > 1 and parts[1] == "snap":
+                try:
+                    eid = int(qs.get("id", ["0"])[0])
+                except ValueError:
+                    eid = 0
+                jpeg = _events.snap(eid)
+                if jpeg is None:
+                    self._json(404, {"error": "no snapshot"})
+                    return
+                self.close_connection = True
+                self.send_response(200)
+                self.send_header("Content-Type", "image/jpeg")
+                self.send_header("Content-Length", str(len(jpeg)))
+                self.send_header("Connection", "close")
+                self.end_headers()
+                self.wfile.write(jpeg)
+                return
+            try:
+                since = int(qs.get("since", ["0"])[0])
+                limit = min(200, max(1, int(qs.get("limit", ["100"])[0])))
+            except ValueError:
+                since, limit = 0, 100
+            evs, last_id = _events.since(since, limit)
+            self._json(200, {"events": evs, "last_id": last_id})
             return
 
         self._json(404, {"error": "not found"})

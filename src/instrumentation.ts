@@ -8,5 +8,8 @@ export async function register() {
 
     const { startGateWatcher } = await import("./lib/gate-watcher");
     startGateWatcher();
+
+    const { startFaceWatcher } = await import("./lib/face-watcher");
+    startFaceWatcher();
   }
 }

@@ -5,7 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 const DB_PATH = path.join(process.cwd(), "data", "raam.db");
-const SCHEMA_EVOLUTION_VERSION = 10;
+const SCHEMA_EVOLUTION_VERSION = 11;
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS zones (
@@ -285,6 +285,22 @@ CREATE TABLE IF NOT EXISTS face_enrollments (
   created_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS face_events (
+  id          INTEGER PRIMARY KEY,
+  sentry_id   INTEGER,
+  cam         TEXT NOT NULL DEFAULT 'lobby',
+  kind        TEXT NOT NULL DEFAULT 'unknown',
+  label       TEXT,
+  name        TEXT,
+  resident_id INTEGER,
+  score       REAL,
+  px          INTEGER,
+  image_path  TEXT,
+  created_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_face_events_created ON face_events(created_at);
 `;
 
 function ensureColumn(
@@ -385,6 +401,21 @@ function applySchemaEvolution(db: Database.Database) {
       created_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS face_events (
+      id          INTEGER PRIMARY KEY,
+      sentry_id   INTEGER,
+      cam         TEXT NOT NULL DEFAULT 'lobby',
+      kind        TEXT NOT NULL DEFAULT 'unknown',
+      label       TEXT,
+      name        TEXT,
+      resident_id INTEGER,
+      score       REAL,
+      px          INTEGER,
+      image_path  TEXT,
+      created_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_face_events_created ON face_events(created_at);
   `);
 
   // Migration v10: face_enrollments grew a 'kind' (resident|staff) + 'name' so

@@ -228,3 +228,93 @@ export async function setFaceArmed(
     return { ok: false, armed: false, error: "שירות זיהוי הפנים אינו פעיל" };
   }
 }
+
+// --- entry log -------------------------------------------------------------
+
+export type LatestFaceEvent = {
+  id: number;
+  name: string;
+  residentId: number | null;
+  createdAt: string;
+};
+
+// The newest RECOGNIZED entry — drives the live "X נכנס ללובי" toast. Available
+// to any logged-in staff (operational heads-up, like the car notifier).
+export async function getLatestFaceEvent(): Promise<LatestFaceEvent | null> {
+  const user = await getCurrentUser();
+  if (!user) return null;
+  const row = db
+    .prepare(
+      `SELECT id, name, resident_id AS residentId, created_at AS createdAt
+         FROM face_events
+        WHERE kind = 'known' AND name IS NOT NULL AND TRIM(name) <> ''
+        ORDER BY id DESC LIMIT 1`
+    )
+    .get() as LatestFaceEvent | undefined;
+  return row ?? null;
+}
+
+export type FaceEventRow = {
+  id: number;
+  kind: "known" | "unknown";
+  name: string | null;
+  score: number | null;
+  px: number | null;
+  createdAt: string;
+  hasImage: boolean;
+};
+
+export type PaginatedFaceEvents = {
+  rows: FaceEventRow[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+};
+
+export type FaceEventFilter = "all" | "known" | "unknown";
+
+// Paginated photo log of who's been seen (manager-only — lives in settings).
+export async function getFaceEventsPage(
+  page: number = 1,
+  pageSize: number = 24,
+  filter: FaceEventFilter = "all"
+): Promise<PaginatedFaceEvents> {
+  const empty: PaginatedFaceEvents = { rows: [], page: 1, pageSize, total: 0, totalPages: 1 };
+  if (!(await isManager())) return empty;
+
+  const safeSize = Math.max(1, Math.min(60, Math.floor(pageSize)));
+  const where = filter === "all" ? "" : `WHERE kind = '${filter}'`;
+
+  const total = (
+    db.prepare(`SELECT COUNT(*) AS n FROM face_events ${where}`).get() as { n: number }
+  ).n;
+  const totalPages = Math.max(1, Math.ceil(total / safeSize));
+  const safePage = Math.min(Math.max(1, Math.floor(page)), totalPages);
+  const offset = (safePage - 1) * safeSize;
+
+  const rows = db
+    .prepare(
+      `SELECT id, kind, name, score, px, created_at AS createdAt, image_path AS imagePath
+         FROM face_events ${where}
+        ORDER BY id DESC
+        LIMIT ? OFFSET ?`
+    )
+    .all(safeSize, offset) as (Omit<FaceEventRow, "hasImage"> & { imagePath: string | null })[];
+
+  return {
+    rows: rows.map((r) => ({
+      id: r.id,
+      kind: r.kind,
+      name: r.name,
+      score: r.score,
+      px: r.px,
+      createdAt: r.createdAt,
+      hasImage: !!r.imagePath,
+    })),
+    page: safePage,
+    pageSize: safeSize,
+    total,
+    totalPages,
+  };
+}

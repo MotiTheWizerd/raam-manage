@@ -389,3 +389,28 @@ export async function updateApartmentKeys(
   revalidatePath("/events");
   return { submittedAt: Date.now() };
 }
+
+// Update only an apartment's general note. Usable from anywhere that shows the
+// note (e.g. the resident detail page), since the note belongs to the apartment.
+export async function updateApartmentNotes(
+  _prev: ApartmentFormState,
+  formData: FormData
+): Promise<ApartmentFormState> {
+  const idRaw = String(formData.get("id") ?? "").trim();
+  const id = parseInt(idRaw, 10);
+  if (Number.isNaN(id)) return fail("מזהה לא חוקי");
+
+  const notes = String(formData.get("notes") ?? "").trim() || null;
+
+  const result = db
+    .prepare(
+      `UPDATE apartments SET notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
+    )
+    .run(notes, id);
+  if (result.changes === 0) return fail("דירה לא נמצאה");
+
+  revalidatePath(`/apartments/${id}`);
+  revalidatePath("/renters");
+  revalidatePath("/renters/[id]", "page");
+  return { submittedAt: Date.now() };
+}

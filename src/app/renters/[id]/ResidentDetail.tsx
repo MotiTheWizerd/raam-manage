@@ -4,6 +4,7 @@ import { useIsManager } from "@/components/AuthProvider";
 import { updateResident } from "../actions";
 import { ResidentForm, type ApartmentOption } from "../ResidentForm";
 import { type PhoneInit } from "../PhoneFields";
+import { ApartmentNoteSection } from "./ApartmentNoteSection";
 import { ResidentCars } from "./ResidentCars";
 
 type Phone = {
@@ -71,15 +72,12 @@ export function ResidentDetail({
         />
       </fieldset>
 
-      {resident.apartment_comment && (
-        <div className="rounded-lg border border-black/10 dark:border-white/10 p-4 space-y-1">
-          <div className="text-xs uppercase tracking-wide opacity-60">
-            הערת דירה
-            {resident.apartment_number ? ` — דירה ${resident.apartment_number}` : ""}
-          </div>
-          <p className="text-sm whitespace-pre-wrap">{resident.apartment_comment}</p>
-        </div>
-      )}
+      <ApartmentNoteSection
+        apartmentId={resident.apartment_id}
+        apartmentNumber={resident.apartment_number}
+        initialNote={resident.apartment_comment}
+        canEdit={canEdit}
+      />
 
       <ResidentCars apartmentNumber={resident.apartment_number} />
     </div>

@@ -11,6 +11,7 @@ import { NewCarNotifier } from "@/components/NewCarNotifier";
 import { PreferencesProvider } from "@/components/PreferencesProvider";
 import { Sidebar } from "@/components/Sidebar";
 import { StickyMessages } from "@/components/StickyMessages";
+import { BackToTop } from "@/components/ui/BackToTop";
 import { getCurrentUser } from "@/lib/auth";
 import { getPreferences } from "@/lib/preferences";
 import "./globals.css";
@@ -65,6 +66,7 @@ export default async function RootLayout({
                   </Suspense>
                 </div>
                 <GateControl />
+                <BackToTop />
               </>
             ) : (
               children

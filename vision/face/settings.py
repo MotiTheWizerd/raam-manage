@@ -29,8 +29,13 @@ DEFAULT_DOOR = (4, 0)
 
 @dataclass
 class Settings:
-    """Live-tunable knobs (via /threshold). Defaults are the session-27 baked-in
-    sweet spot for the .119 ceiling fisheye lobby cam."""
+    """Live-tunable knobs (via /threshold). Defaults are the session-28 sweet spot
+    for the .119 ceiling fisheye + the MobileFaceNet (buffalo_s) recognition model:
+    relaxed distance/accumulation gates so the door opens EARLY/FAR on a natural
+    walk-up (proven live — opened at ~px33), with identity held by score+margin.
+    NOTE: margin is a no-op until >=2 faces are enrolled, so door_min_score is the
+    sole identity gate while only one person is enrolled — raise it (or enroll a
+    second person) before trusting it unattended on the real door."""
 
     # --- recognition / logging ---
     # Recognition is DECOUPLED into logging vs the door decision. LOG/greet on any
@@ -41,11 +46,11 @@ class Settings:
     match_threshold: float = 0.30   # cosine sim to LOG/greet + to count as a vote
 
     # --- accumulator (the door decision) ---
-    accum_window: float = 3.5       # seconds of recent votes the decision considers
-    accum_min_votes: int = 3        # need at least this many frames (no single-blip)
-    accum_weight_min: float = 1.2   # total quality-weighted evidence the winner needs
-    accum_consensus: float = 0.60   # winner must own >= this fraction of window weight
-    door_min_score: float = 0.34    # winner's weighted-mean score to open (lower than
+    accum_window: float = 4.0       # seconds of recent votes the decision considers
+    accum_min_votes: int = 2        # need at least this many frames (no single-blip)
+    accum_weight_min: float = 0.7   # total quality-weighted evidence the winner needs
+    accum_consensus: float = 0.55   # winner must own >= this fraction of window weight
+    door_min_score: float = 0.31    # winner's weighted-mean score to open (lower than
                                     #   a single-frame bar — accumulated consistency pays)
     door_margin: float = 0.08       # winner's weighted-mean top1-top2 margin (lookalike kill)
     door_cooldown: float = 12.0     # don't re-open a door within this many seconds
@@ -55,8 +60,9 @@ class Settings:
     # a small/blurry/side face counts LITTLE (not penalized — just carries less
     # weight; a 30px face is mush = noisy, so it shouldn't decide alone). PX_FULL is
     # tuned to THIS ceiling fisheye, where a natural-approach face is only ~55-65px.
-    px_floor: int = 30              # below this a vote carries ~no weight (mush)
-    px_full: int = 60               # at/above this, full pixel-confidence
+    px_floor: int = 22              # below this a vote carries ~no weight (mush)
+    px_full: int = 38               # at/above this, full pixel-confidence (tuned so a
+                                    #   far ~33-40px walk-up face already carries weight)
 
     # --- entry-event log ---
     # one event per arrival (known OR unknown), debounced per identity.
@@ -67,6 +73,16 @@ class Settings:
     enroll_seconds: float = 6.0     # capture window length, once a face appears
     enroll_wait_seconds: float = 50.0  # grace to walk to the camera after clicking
     min_enroll_px: int = 60
+
+    # --- models (load-time; not /threshold-tunable) ---
+    # Detection and recognition are decoupled into separate insightface packs.
+    # DETECTION = buffalo_l SCRFD (det_10g): finds the small 30-65px faces at this
+    # ceiling fisheye — that reach is what makes the early/distance open possible.
+    # RECOGNITION = buffalo_s (w600k_mbf, MobileFaceNet): ~10-20x lighter than
+    # buffalo_l's ArcFace ResNet50, for fast per-frame embeddings. Embeddings are
+    # model-specific — changing rec_pack means RE-ENROLLING faces_db.json.
+    det_pack: str = "buffalo_l"
+    rec_pack: str = "buffalo_s"
 
     # --- performance (the keys to scaling across cameras on a CPU box) ---
     ort_threads: int = 4            # cap onnxruntime cores (default grabs ALL 16)

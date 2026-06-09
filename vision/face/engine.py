@@ -9,6 +9,8 @@ untouched (stored embeddings become stale, which is a re-enroll, not code).
 
 from __future__ import annotations
 
+import os
+
 from insightface.app import FaceAnalysis
 from insightface.app.common import Face
 
@@ -31,10 +33,33 @@ class FaceEngine:
             return _orig(*a, **k)
 
         ort.InferenceSession = _capped
-        print("[face] loading buffalo_l (SCRFD detect + ArcFace recognition) on CPU…")
-        self.app = FaceAnalysis(name="buffalo_l", providers=["CPUExecutionProvider"],
-                                allowed_modules=["detection", "recognition"])
+        # DETECTION: keep buffalo_l's SCRFD (det_10g) — it finds the small 30-65px
+        # faces at this fisheye, which is what makes the early/distance open work.
+        print(f"[face] loading detection: {settings.det_pack} SCRFD on CPU…")
+        self.app = FaceAnalysis(name=settings.det_pack, providers=["CPUExecutionProvider"],
+                                allowed_modules=["detection"])
         self.app.prepare(ctx_id=0, det_size=(det, det))
+        # RECOGNITION: load ONLY the recognition model from a (possibly different,
+        # lighter) pack. buffalo_s = w600k_mbf (MobileFaceNet), ~10-20x faster than
+        # buffalo_l's w600k_r50. Detection quality is unchanged; only embeddings get
+        # fast. Embeddings are model-specific — re-enroll after changing rec_pack.
+        # NB: FaceAnalysis can't load recognition alone (it asserts a detector), so
+        # we load the ArcFace ONNX directly via model_zoo. The recognition file in a
+        # buffalo_* pack is w600k_*.onnx (r50 for buffalo_l, mbf for buffalo_s).
+        print(f"[face] loading recognition: {settings.rec_pack} on CPU…")
+        import glob as _glob
+        from insightface.model_zoo import get_model
+        pack_dir = os.path.join(os.path.expanduser("~"), ".insightface", "models", settings.rec_pack)
+        rec_files = _glob.glob(os.path.join(pack_dir, "w600k_*.onnx"))
+        if not rec_files:
+            # cold cache — let FaceAnalysis pull the pack (it loads the detector too,
+            # which we discard), then re-glob for the recognition onnx.
+            FaceAnalysis(name=settings.rec_pack, providers=["CPUExecutionProvider"])
+            rec_files = _glob.glob(os.path.join(pack_dir, "w600k_*.onnx"))
+        if not rec_files:
+            raise RuntimeError(f"no recognition model (w600k_*.onnx) in {pack_dir}")
+        self.rec_model = get_model(rec_files[0], providers=["CPUExecutionProvider"])
+        self.rec_model.prepare(ctx_id=0)
 
     def detect_recognize_biggest(self, frame) -> Face | None:
         """Detect every face (cheap, ~0.1s) but run the COSTLY ArcFace recognition
@@ -47,5 +72,5 @@ class FaceEngine:
             return None
         i = int((bboxes[:, 3] - bboxes[:, 1]).argmax())   # tallest bbox = closest
         face = Face(bbox=bboxes[i, 0:4], kps=kpss[i], det_score=float(bboxes[i, 4]))
-        self.app.models["recognition"].get(frame, face)
+        self.rec_model.get(frame, face)
         return face

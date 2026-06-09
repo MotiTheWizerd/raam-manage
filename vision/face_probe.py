@@ -55,10 +55,13 @@ DEFAULT_CAM = "lobby"
 BOUNDARY = "frame"
 DB_PATH = os.path.join(os.path.dirname(__file__), "faces_db.json")
 
-# recognition / door thresholds (live-tunable via /threshold)
-MATCH_THRESHOLD = 0.30     # cosine similarity for "this is them"
-DOOR_MIN_SCORE = 0.30      # must clear this to open (strangers score ~0.0-0.1)
-DOOR_MIN_PX = 30           # require a real, close-enough face
+# recognition / door thresholds (live-tunable via /threshold). LOGGING and the
+# DOOR DECISION are deliberately DECOUPLED: we log/greet on a loose match, but
+# opening a real door demands a much higher bar (closes the lookalike false-accept).
+MATCH_THRESHOLD = 0.30     # cosine sim to LOG/greet "this is them" (loose)
+DOOR_MIN_SCORE = 0.42      # higher bar to actually OPEN the door (strict)
+DOOR_MIN_PX = 60           # the door DECISION needs a real, close-enough face
+DOOR_MARGIN = 0.10         # top-1 must beat top-2 enrolled by this (lookalike kill)
 DOOR_CONFIRM_FRAMES = 3    # consecutive matching frames before firing
 DOOR_COOLDOWN = 12.0       # don't re-open a door within this many seconds
 
@@ -253,15 +256,22 @@ class FaceEngine:
         with self.db_lock:
             return sorted(self.db)
 
-    def best_match(self, emb: np.ndarray) -> tuple[str | None, float]:
+    def best_match(self, emb: np.ndarray) -> tuple[str | None, float, str | None, float]:
+        """Return (top1_name, top1_score, top2_name, top2_score), cosine sims.
+        top2_* is (None, 0.0) when fewer than 2 templates are enrolled — so the
+        margin rule is a no-op until there's an actual lookalike to confuse with."""
         with self.db_lock:
             if not self.db:
-                return None, 0.0
+                return None, 0.0, None, 0.0
             names = list(self.db)
             mat = np.stack([self.db[n] for n in names])
         sims = mat @ emb  # cosine (both sides L2-normalized)
-        i = int(np.argmax(sims))
-        return names[i], float(sims[i])
+        order = np.argsort(sims)[::-1]
+        i = int(order[0])
+        if len(order) > 1:
+            j = int(order[1])
+            return names[i], float(sims[i]), names[j], float(sims[j])
+        return names[i], float(sims[i]), None, 0.0
 
 
 # --- per-camera worker ------------------------------------------------------
@@ -431,21 +441,29 @@ class CameraWorker:
             else:
                 remain = max(0.0, e["deadline"] - time.time())
                 text = f"ENROLLING {e['name']}: {n} samples ({px}px) {remain:.0f}s"
-        ev: tuple[str, str | None, float] | None = None
+        ev: tuple[str, str | None, float, dict] | None = None
         if enrolling:
             pass  # ev stays None — enrollment isn't an entry event
         else:
-            name, score = self.engine.best_match(emb)
+            name, score, second, second_score = self.engine.best_match(emb)
+            # margin = how far the best match beats the runner-up. With <2 enrolled
+            # there's no rival to confuse with, so margin = the score itself (passes).
+            margin = (score - second_score) if second is not None else score
             if name is not None and score >= MATCH_THRESHOLD:
-                text = f"MATCH: {name} ({score:.2f}) face {px}px"
                 color = (0, 220, 0)
-                self._maybe_open(name, score, px)
-                ev = ("known", name, score)
+                reason = self._door_reason(name, score, px, margin, second, second_score)
+                self._maybe_open(name, score, px, margin)
+                tag = {"pass": "OK", "blocked": "HOLD",
+                       "disarmed": "DISARMED"}.get(reason["verdict"], reason["verdict"])
+                text = f"MATCH: {name} ({score:.2f}) {px}px m{margin:.2f} [{tag}]"
+                ev = ("known", name, score, reason)
             else:
                 who = f"closest {name} {score:.2f}" if name else "no one enrolled"
                 text = f"UNKNOWN ({who}) face {px}px"
                 self._streak = 0
-                ev = ("unknown", None, score if name is not None else 0.0)
+                reason = {"verdict": "unknown", "score": round(float(score), 3),
+                          "match_threshold": MATCH_THRESHOLD, "closest": name}
+                ev = ("unknown", None, score if name is not None else 0.0, reason)
 
         cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
         if biggest.kps is not None:
@@ -456,10 +474,10 @@ class CameraWorker:
         # Log the appearance AFTER annotating, so the snapshot shows the box +
         # banner. Debounced per identity so one arrival = one event.
         if ev is not None:
-            self._emit_event(frame, ev[0], ev[1], ev[2], px)
+            self._emit_event(frame, ev[0], ev[1], ev[2], px, ev[3])
 
     def _emit_event(self, frame, kind: str, label: str | None,
-                    score: float, px: int) -> None:
+                    score: float, px: int, reason: dict | None = None) -> None:
         key = label if kind == "known" else "__unknown__"
         now = time.time()
         if key == self._last_event_key and (now - self._last_event_ts) < EVENT_COOLDOWN:
@@ -473,16 +491,46 @@ class CameraWorker:
             img = cv2.resize(img, (800, int(h * 800.0 / w)))
         ok, buf = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 80])
         if ok:
-            _events.add(self.cam_id, kind, label, score, px, buf.tobytes())
+            _events.add(self.cam_id, kind, label, score, px, buf.tobytes(), reason)
 
-    def _maybe_open(self, name: str, score: float, px: int) -> None:
+    def _door_gate(self, score: float, px: int, margin: float) -> tuple[bool, list[str]]:
+        """The per-frame door decision, in ONE place (reused by the reason payload
+        so the log can never disagree with what actually fired). Returns
+        (passed, blockers) where blockers names each failing condition."""
+        blockers = []
+        if score < DOOR_MIN_SCORE:
+            blockers.append("score")
+        if px < DOOR_MIN_PX:
+            blockers.append("px")
+        if margin < DOOR_MARGIN:
+            blockers.append("margin")
+        return (not blockers), blockers
+
+    def _door_reason(self, name: str, score: float, px: int, margin: float,
+                     second: str | None, second_score: float) -> dict:
+        """The 'why' behind this frame's door decision — recorded on the event so
+        the log can later explain both opens and non-opens (Step 4 foundation)."""
+        passed, blockers = self._door_gate(score, px, margin)
+        verdict = "disarmed" if not _door_armed else ("pass" if passed else "blocked")
+        r = {
+            "verdict": verdict, "name": name,
+            "score": round(float(score), 3), "door_min_score": DOOR_MIN_SCORE,
+            "px": int(px), "door_min_px": DOOR_MIN_PX,
+            "margin": round(float(margin), 3), "door_margin": DOOR_MARGIN,
+            "second": second, "second_score": round(float(second_score), 3),
+            "match_threshold": MATCH_THRESHOLD,
+            "confirm_frames": DOOR_CONFIRM_FRAMES, "armed": _door_armed,
+        }
+        if blockers:
+            r["blocked_by"] = blockers
+        return r
+
+    def _maybe_open(self, name: str, score: float, px: int, margin: float) -> None:
         now = time.time()
         if not _door_armed:
             return
-        if score >= DOOR_MIN_SCORE and px >= DOOR_MIN_PX:
-            self._streak += 1
-        else:
-            self._streak = 0
+        passed, _ = self._door_gate(score, px, margin)
+        self._streak = self._streak + 1 if passed else 0
         if self._streak >= DOOR_CONFIRM_FRAMES and now - self._last_open >= DOOR_COOLDOWN:
             self._last_open = now
             self._streak = 0
@@ -544,13 +592,14 @@ class EventLog:
         self._next = 1
 
     def add(self, cam: str, kind: str, label: str | None,
-            score: float, px: int, jpeg: bytes) -> int:
+            score: float, px: int, jpeg: bytes, reason: dict | None = None) -> int:
         with self.lock:
             eid = self._next
             self._next += 1
             self.events.append({"id": eid, "ts": time.time(), "cam": cam,
                                 "kind": kind, "label": label,
-                                "score": round(float(score), 3), "px": int(px)})
+                                "score": round(float(score), 3), "px": int(px),
+                                "reason": reason})
             self.snaps[eid] = jpeg
             # drop snapshots whose event has aged out of the ring
             live = {e["id"] for e in self.events}
@@ -605,7 +654,7 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
-        global MATCH_THRESHOLD, DOOR_MIN_SCORE, DOOR_MIN_PX, _door_armed
+        global MATCH_THRESHOLD, DOOR_MIN_SCORE, DOOR_MIN_PX, DOOR_MARGIN, _door_armed
         u = urlparse(self.path)
         qs = parse_qs(u.query)
         parts = [p for p in u.path.split("/") if p]
@@ -624,7 +673,7 @@ class Handler(BaseHTTPRequestHandler):
         if head == "list":
             self._json(200, {"enrolled": _engine.names(), "threshold": MATCH_THRESHOLD,
                              "door_score": DOOR_MIN_SCORE, "door_px": DOOR_MIN_PX,
-                             "armed": _door_armed,
+                             "door_margin": DOOR_MARGIN, "armed": _door_armed,
                              "running": sorted(_workers)})
             return
 
@@ -638,16 +687,23 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if head == "threshold":
+            # DECOUPLED knobs: v = log/greet threshold, door = the (higher) open
+            # bar, px = min face for the door decision, margin = top1-top2 gap.
             try:
                 if "v" in qs:
-                    MATCH_THRESHOLD = DOOR_MIN_SCORE = float(qs["v"][0])
+                    MATCH_THRESHOLD = float(qs["v"][0])
+                if "door" in qs:
+                    DOOR_MIN_SCORE = float(qs["door"][0])
                 if "px" in qs:
                     DOOR_MIN_PX = int(qs["px"][0])
+                if "margin" in qs:
+                    DOOR_MARGIN = float(qs["margin"][0])
             except ValueError:
-                self._json(400, {"error": "use ?v=0.30 and/or ?px=30"})
+                self._json(400, {"error": "use ?v= (log) &door= (open) &px= &margin="})
                 return
             self._json(200, {"ok": True, "threshold": MATCH_THRESHOLD,
-                             "door_score": DOOR_MIN_SCORE, "door_px": DOOR_MIN_PX})
+                             "door_score": DOOR_MIN_SCORE, "door_px": DOOR_MIN_PX,
+                             "door_margin": DOOR_MARGIN})
             return
 
         if head == "forget":
@@ -746,7 +802,8 @@ def main() -> None:
     if args.no_door:
         _door_armed = False
     _engine = FaceEngine(args.det)
-    print(f"[face] ready. threshold={MATCH_THRESHOLD} px={DOOR_MIN_PX} "
+    print(f"[face] ready. log>={MATCH_THRESHOLD} door>={DOOR_MIN_SCORE} "
+          f"px>={DOOR_MIN_PX} margin>={DOOR_MARGIN} "
           f"armed={_door_armed} ort_threads={ORT_THREADS}")
 
     get_worker(args.cam)  # pre-warm the main camera

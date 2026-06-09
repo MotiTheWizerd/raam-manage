@@ -30,6 +30,9 @@ from __future__ import annotations
 import os
 
 os.environ.setdefault("OPENCV_FFMPEG_LOGLEVEL", "-8")
+# Cap the RTSP decoder's threads so software-decoding the 30fps 1080p stream
+# doesn't fan out across every core and starve the recognizer on this CPU box.
+os.environ.setdefault("OPENCV_FFMPEG_CAPTURE_OPTIONS", "rtsp_transport;tcp|threads;2")
 
 import argparse
 import collections
@@ -46,6 +49,7 @@ from urllib.parse import urlparse, parse_qs
 import cv2
 import numpy as np
 from insightface.app import FaceAnalysis
+from insightface.app.common import Face
 
 from detect import CAMERAS, rtsp_url
 
@@ -55,15 +59,30 @@ DEFAULT_CAM = "lobby"
 BOUNDARY = "frame"
 DB_PATH = os.path.join(os.path.dirname(__file__), "faces_db.json")
 
-# recognition / door thresholds (live-tunable via /threshold). LOGGING and the
-# DOOR DECISION are deliberately DECOUPLED: we log/greet on a loose match, but
-# opening a real door demands a much higher bar (closes the lookalike false-accept).
-MATCH_THRESHOLD = 0.30     # cosine sim to LOG/greet "this is them" (loose)
-DOOR_MIN_SCORE = 0.42      # higher bar to actually OPEN the door (strict)
-DOOR_MIN_PX = 60           # the door DECISION needs a real, close-enough face
-DOOR_MARGIN = 0.10         # top-1 must beat top-2 enrolled by this (lookalike kill)
-DOOR_CONFIRM_FRAMES = 3    # consecutive matching frames before firing
-DOOR_COOLDOWN = 12.0       # don't re-open a door within this many seconds
+# Recognition is DECOUPLED into logging vs the door decision (live-tunable via
+# /threshold). LOG/greet on any loose match; OPEN on quality-weighted EVIDENCE
+# ACCUMULATED over a short window, not a single lucky frame — so a resident opens
+# the door while walking up (many light votes add up) instead of stopping to pose,
+# while a lookalike (low margin) or a flickering crowd (split consensus) never
+# accrues enough. Each frame votes, weighted by face QUALITY = ramp(px) x detConf
+# x frontality: a small/blurry/side face counts LITTLE, not penalized — it just
+# carries less weight (a 30px face is mush = noisy, so it shouldn't decide alone).
+MATCH_THRESHOLD = 0.30      # cosine sim to LOG/greet + to count as a vote (loose)
+
+ACCUM_WINDOW = 3.5          # seconds of recent votes the door decision considers
+ACCUM_MIN_VOTES = 3         # need at least this many frames (no single-blip opens)
+ACCUM_WEIGHT_MIN = 1.2      # total quality-weighted evidence the winner must reach
+ACCUM_CONSENSUS = 0.60      # winner must own >= this fraction of the window's weight
+DOOR_MIN_SCORE = 0.34       # winner's weighted-mean score to open (lower than a
+                            #   single-frame bar — accumulated consistency pays for it)
+DOOR_MARGIN = 0.08          # winner's weighted-mean top1-top2 margin (lookalike kill)
+DOOR_COOLDOWN = 12.0        # don't re-open a door within this many seconds
+
+# face-quality weighting — the ramp that makes far/blurry/side frames count less.
+# PX_FULL is tuned to THIS ceiling fisheye cam, where a natural-approach face is
+# only ~55-65px (an eye-level cam would give 150px+ and we'd raise this).
+PX_FLOOR = 30               # below this a vote carries ~no weight (mush)
+PX_FULL = 60                # at/above this, full pixel-confidence
 
 # entry log: one event per arrival (known OR unknown), with a snapshot. Debounced
 # per identity so a lingering person is logged once, then again after the cooldown.
@@ -256,6 +275,20 @@ class FaceEngine:
         with self.db_lock:
             return sorted(self.db)
 
+    def detect_recognize_biggest(self, frame) -> Face | None:
+        """Detect every face (cheap, ~0.1s) but run the COSTLY ArcFace recognition
+        on ONLY the biggest one — the person at the door. Recognition is ~0.4s PER
+        FACE on this CPU, so embedding every reflection in the glass lobby (up to 6
+        faces -> 1.5s) was the real lag; we only ever use the biggest, so recognize
+        just that. Returns a Face with .bbox/.kps/.det_score/.normed_embedding."""
+        bboxes, kpss = self.app.det_model.detect(frame, max_num=0, metric="default")
+        if bboxes is None or len(bboxes) == 0:
+            return None
+        i = int((bboxes[:, 3] - bboxes[:, 1]).argmax())   # tallest bbox = closest
+        face = Face(bbox=bboxes[i, 0:4], kps=kpss[i], det_score=float(bboxes[i, 4]))
+        self.app.models["recognition"].get(frame, face)
+        return face
+
     def best_match(self, emb: np.ndarray) -> tuple[str | None, float, str | None, float]:
         """Return (top1_name, top1_score, top2_name, top2_score), cosine sims.
         top2_* is (None, 0.0) when fewer than 2 templates are enrolled — so the
@@ -272,6 +305,95 @@ class FaceEngine:
             j = int(order[1])
             return names[i], float(sims[i]), names[j], float(sims[j])
         return names[i], float(sims[i]), None, 0.0
+
+
+# --- quality-weighted evidence accumulation --------------------------------
+def _ramp(x: float, lo: float, hi: float) -> float:
+    """0 below lo, 1 at/above hi, linear between — a confidence ramp with floor."""
+    if x <= lo:
+        return 0.0
+    if x >= hi:
+        return 1.0
+    return (x - lo) / (hi - lo)
+
+
+def _frontality(kps) -> float:
+    """0..1 yaw-frontality from the 5 face landmarks: how centered the nose sits
+    between the eyes (turning the head shifts the nose toward one eye). Cheap and
+    robust enough to down-weight strong profiles. Pitch (looking down at a ceiling
+    cam) mostly shows up as a lower detection score, which we also weight on."""
+    if kps is None or len(kps) < 3:
+        return 0.5
+    le, re, nose = kps[0], kps[1], kps[2]
+    eye_mid_x = (le[0] + re[0]) / 2.0
+    inter_eye = abs(re[0] - le[0]) + 1e-6
+    offset = abs(nose[0] - eye_mid_x) / inter_eye   # 0 = dead frontal
+    return float(max(0.0, min(1.0, 1.0 - offset / 0.6)))
+
+
+def _frame_weight(px: int, det: float, frontality: float) -> float:
+    """How much this frame's vote counts (0..1): pixel sharpness x detection
+    confidence x frontality. The PX_FLOOR keeps a mush face from ever deciding."""
+    return _ramp(px, PX_FLOOR, PX_FULL) * float(max(0.0, min(1.0, det))) * frontality
+
+
+class VoteAccumulator:
+    """A short rolling window of quality-weighted identity votes. The door opens
+    on consistent, quality-backed evidence over the window rather than one frame:
+    close+sharp -> 2-3 heavy votes -> opens fast; far -> many light votes add up as
+    they approach -> opens early; lookalike -> margin never holds; crowd -> the
+    leading identity never dominates. One accumulator per camera worker."""
+
+    def __init__(self):
+        self.votes: collections.deque = collections.deque()
+
+    def add(self, name: str, score: float, margin: float, weight: float, ts: float) -> None:
+        self.votes.append((ts, name, score, margin, weight))
+        self._evict(ts)
+
+    def clear(self) -> None:
+        self.votes.clear()
+
+    def _evict(self, now: float) -> None:
+        while self.votes and now - self.votes[0][0] > ACCUM_WINDOW:
+            self.votes.popleft()
+
+    def evaluate(self, now: float) -> dict | None:
+        """Tally the window and judge the leading identity against every bar.
+        Returns the decision (or None if the window is empty)."""
+        self._evict(now)
+        if not self.votes:
+            return None
+        agg: dict[str, dict] = {}
+        w_total = 0.0
+        for _ts, name, score, margin, w in self.votes:
+            d = agg.setdefault(name, {"w": 0.0, "ws": 0.0, "wm": 0.0, "n": 0})
+            d["w"] += w
+            d["ws"] += w * score
+            d["wm"] += w * margin
+            d["n"] += 1
+            w_total += w
+        winner = max(agg, key=lambda k: agg[k]["w"])
+        d = agg[winner]
+        w = d["w"]
+        consensus = (w / w_total) if w_total > 0 else 0.0
+        wscore = (d["ws"] / w) if w > 0 else 0.0
+        wmargin = (d["wm"] / w) if w > 0 else 0.0
+        blockers = []
+        if d["n"] < ACCUM_MIN_VOTES:
+            blockers.append("votes")
+        if w < ACCUM_WEIGHT_MIN:
+            blockers.append("evidence")
+        if consensus < ACCUM_CONSENSUS:
+            blockers.append("consensus")
+        if wscore < DOOR_MIN_SCORE:
+            blockers.append("score")
+        if wmargin < DOOR_MARGIN:
+            blockers.append("margin")
+        return {"name": winner, "n": d["n"], "weight": round(w, 2),
+                "consensus": round(consensus, 2), "score": round(wscore, 3),
+                "margin": round(wmargin, 3), "passed": not blockers,
+                "blockers": blockers}
 
 
 # --- per-camera worker ------------------------------------------------------
@@ -294,7 +416,9 @@ class CameraWorker:
         self._raw_seq = 0
 
         self._prev_gray = None
-        self._streak = 0
+        self._accum = VoteAccumulator()
+        self._last_reason: dict | None = None   # latest per-frame decision (for /debug)
+        self._infer_ms = 0.0                     # last app.get() cost
         self._last_open = 0.0
         self._last_event_key: str | None = None
         self._last_event_ts = 0.0
@@ -405,14 +529,11 @@ class CameraWorker:
                 time.sleep(interval - spent)
 
     def _recognize(self, frame, enrolling: bool) -> None:
-        faces = self.engine.app.get(frame)
-        biggest = None
-        for f in faces:
-            if biggest is None or (f.bbox[3] - f.bbox[1]) > (biggest.bbox[3] - biggest.bbox[1]):
-                biggest = f
+        _t = time.time()
+        biggest = self.engine.detect_recognize_biggest(frame)
+        self._infer_ms = (time.time() - _t) * 1000.0
 
         if biggest is None:
-            self._streak = 0
             if enrolling and not self._enroll["started"]:
                 self._banner(frame, f"ENROLLING {self._enroll['name']}: step in front of the camera",
                              (255, 180, 0))
@@ -423,6 +544,8 @@ class CameraWorker:
         x1, y1, x2, y2 = biggest.bbox.astype(int)
         px = int(y2 - y1)
         emb = biggest.normed_embedding
+        det = float(getattr(biggest, "det_score", 1.0) or 1.0)
+        frontality = _frontality(biggest.kps)
         color = (0, 215, 255)
 
         if enrolling:
@@ -451,19 +574,26 @@ class CameraWorker:
             margin = (score - second_score) if second is not None else score
             if name is not None and score >= MATCH_THRESHOLD:
                 color = (0, 220, 0)
-                reason = self._door_reason(name, score, px, margin, second, second_score)
-                self._maybe_open(name, score, px, margin)
-                tag = {"pass": "OK", "blocked": "HOLD",
-                       "disarmed": "DISARMED"}.get(reason["verdict"], reason["verdict"])
-                text = f"MATCH: {name} ({score:.2f}) {px}px m{margin:.2f} [{tag}]"
+                now = time.time()
+                weight = _frame_weight(px, det, frontality)
+                self._accum.add(name, score, margin, weight, now)
+                reason = self._maybe_open(now, name, score, px, margin,
+                                          second, second_score, weight)
+                tag = {"open": "OPEN", "cooldown": "OPEN", "blocked": "HOLD",
+                       "disarmed": "DISARM"}.get(reason["verdict"], reason["verdict"])
+                a = reason.get("accum")
+                acc = f" | acc {a['score']:.2f} m{a['margin']:.2f} W{a['weight']:.1f} c{a['consensus']:.2f}" if a else ""
+                text = f"MATCH {name} {score:.2f} {px}px w{weight:.2f}{acc} [{tag}]"
                 ev = ("known", name, score, reason)
             else:
                 who = f"closest {name} {score:.2f}" if name else "no one enrolled"
                 text = f"UNKNOWN ({who}) face {px}px"
-                self._streak = 0
                 reason = {"verdict": "unknown", "score": round(float(score), 3),
                           "match_threshold": MATCH_THRESHOLD, "closest": name}
                 ev = ("unknown", None, score if name is not None else 0.0, reason)
+            self._last_reason = {**reason, "px": int(px),
+                                 "infer_ms": round(self._infer_ms, 1),
+                                 "ts": round(time.time(), 2)}
 
         cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
         if biggest.kps is not None:
@@ -493,54 +623,73 @@ class CameraWorker:
         if ok:
             _events.add(self.cam_id, kind, label, score, px, buf.tobytes(), reason)
 
-    def _door_gate(self, score: float, px: int, margin: float) -> tuple[bool, list[str]]:
-        """The per-frame door decision, in ONE place (reused by the reason payload
-        so the log can never disagree with what actually fired). Returns
-        (passed, blockers) where blockers names each failing condition."""
-        blockers = []
-        if score < DOOR_MIN_SCORE:
-            blockers.append("score")
-        if px < DOOR_MIN_PX:
-            blockers.append("px")
-        if margin < DOOR_MARGIN:
-            blockers.append("margin")
-        return (not blockers), blockers
-
-    def _door_reason(self, name: str, score: float, px: int, margin: float,
-                     second: str | None, second_score: float) -> dict:
-        """The 'why' behind this frame's door decision — recorded on the event so
-        the log can later explain both opens and non-opens (Step 4 foundation)."""
-        passed, blockers = self._door_gate(score, px, margin)
-        verdict = "disarmed" if not _door_armed else ("pass" if passed else "blocked")
-        r = {
-            "verdict": verdict, "name": name,
-            "score": round(float(score), 3), "door_min_score": DOOR_MIN_SCORE,
-            "px": int(px), "door_min_px": DOOR_MIN_PX,
-            "margin": round(float(margin), 3), "door_margin": DOOR_MARGIN,
-            "second": second, "second_score": round(float(second_score), 3),
-            "match_threshold": MATCH_THRESHOLD,
-            "confirm_frames": DOOR_CONFIRM_FRAMES, "armed": _door_armed,
-        }
-        if blockers:
-            r["blocked_by"] = blockers
-        return r
-
-    def _maybe_open(self, name: str, score: float, px: int, margin: float) -> None:
-        now = time.time()
-        if not _door_armed:
-            return
-        passed, _ = self._door_gate(score, px, margin)
-        self._streak = self._streak + 1 if passed else 0
-        if self._streak >= DOOR_CONFIRM_FRAMES and now - self._last_open >= DOOR_COOLDOWN:
+    def _maybe_open(self, now: float, name: str, score: float, px: int,
+                    margin: float, second: str | None, second_score: float,
+                    weight: float) -> dict:
+        """Judge the accumulated evidence and fire the door if it holds. Returns
+        the reason payload (this frame's numbers + the accumulator state + the
+        verdict) so the log can later explain both opens and non-opens."""
+        dec = self._accum.evaluate(now)
+        armed = _door_armed
+        fired = False
+        if dec and dec["passed"] and armed and (now - self._last_open) >= DOOR_COOLDOWN:
             self._last_open = now
-            self._streak = 0
-            threading.Thread(target=self._fire, args=(name,), daemon=True).start()
+            self._accum.clear()  # consume the evidence so we don't re-fire on it
+            fired = True
+            threading.Thread(target=self._fire, args=(dec["name"],), daemon=True).start()
+
+        if not armed:
+            verdict = "disarmed"
+        elif fired:
+            verdict = "open"
+        elif dec and dec["passed"]:
+            verdict = "cooldown"   # evidence holds, but within cooldown of a recent open
+        else:
+            verdict = "blocked"
+
+        r = {
+            "verdict": verdict,
+            "name": name,                            # this frame's top-1
+            "score": round(float(score), 3),         # this frame's score
+            "px": int(px),
+            "frame_margin": round(float(margin), 3),
+            "second": second, "second_score": round(float(second_score), 3),
+            "weight": round(float(weight), 2),       # this frame's vote weight
+            "match_threshold": MATCH_THRESHOLD,
+            "armed": armed,
+        }
+        if dec:
+            r["accum"] = {
+                "leader": dec["name"], "n": dec["n"], "weight": dec["weight"],
+                "consensus": dec["consensus"], "score": dec["score"],
+                "margin": dec["margin"],
+                "need": {"votes": ACCUM_MIN_VOTES, "weight": ACCUM_WEIGHT_MIN,
+                         "consensus": ACCUM_CONSENSUS, "score": DOOR_MIN_SCORE,
+                         "margin": DOOR_MARGIN, "window": ACCUM_WINDOW},
+            }
+            if dec["blockers"]:
+                r["blocked_by"] = dec["blockers"]
+        return r
 
     def _fire(self, name: str) -> None:
         ok, msg = open_door(*self.door)
         self._msg = f"OPENED DOOR -> {name}" if ok else f"DOOR ERROR: {msg}"
         self._msg_until = time.time() + 4.0
         print(f"[{self.cam_id}] {'opened for ' + name if ok else 'door ERROR ' + msg}")
+
+    def debug_state(self) -> dict:
+        """Real-time decision state for tuning — NOT debounced like the event log,
+        so we can watch the accumulator build during a walk-up."""
+        cap = (1000.0 / self._infer_ms) if self._infer_ms > 0 else ACTIVE_FPS
+        return {
+            "cam": self.cam_id, "armed": _door_armed,
+            "infer_ms": round(self._infer_ms, 1),
+            "active_fps_cap": round(min(ACTIVE_FPS, cap), 1),
+            "accum_now": self._accum.evaluate(time.time()),
+            "last_frame": self._last_reason,
+            "since_open_s": (round(time.time() - self._last_open, 1)
+                             if self._last_open else None),
+        }
 
     def _finish_enroll(self) -> None:
         samples = self._enroll["samples"]
@@ -654,7 +803,9 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
-        global MATCH_THRESHOLD, DOOR_MIN_SCORE, DOOR_MIN_PX, DOOR_MARGIN, _door_armed
+        global MATCH_THRESHOLD, DOOR_MIN_SCORE, DOOR_MARGIN, _door_armed
+        global ACCUM_WINDOW, ACCUM_MIN_VOTES, ACCUM_WEIGHT_MIN, ACCUM_CONSENSUS
+        global PX_FLOOR, PX_FULL
         u = urlparse(self.path)
         qs = parse_qs(u.query)
         parts = [p for p in u.path.split("/") if p]
@@ -671,10 +822,12 @@ class Handler(BaseHTTPRequestHandler):
             return self._serve_snapshot(cam) if snap else self._serve_stream(cam)
 
         if head == "list":
-            self._json(200, {"enrolled": _engine.names(), "threshold": MATCH_THRESHOLD,
-                             "door_score": DOOR_MIN_SCORE, "door_px": DOOR_MIN_PX,
-                             "door_margin": DOOR_MARGIN, "armed": _door_armed,
-                             "running": sorted(_workers)})
+            self._json(200, {"enrolled": _engine.names(), "log": MATCH_THRESHOLD,
+                             "door_score": DOOR_MIN_SCORE, "margin": DOOR_MARGIN,
+                             "weight": ACCUM_WEIGHT_MIN, "consensus": ACCUM_CONSENSUS,
+                             "votes": ACCUM_MIN_VOTES, "window": ACCUM_WINDOW,
+                             "px_floor": PX_FLOOR, "px_full": PX_FULL,
+                             "armed": _door_armed, "running": sorted(_workers)})
             return
 
         if head == "enroll":
@@ -687,28 +840,69 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if head == "threshold":
-            # DECOUPLED knobs: v = log/greet threshold, door = the (higher) open
-            # bar, px = min face for the door decision, margin = top1-top2 gap.
+            # Live-tune any knob. Logging: v. Door (accumulator): score = winner's
+            # weighted-mean score, margin = its weighted margin, weight = total
+            # evidence, consensus = its share, votes = min frames, window = seconds.
+            # Quality ramp: pxfloor / pxfull.
             try:
                 if "v" in qs:
                     MATCH_THRESHOLD = float(qs["v"][0])
-                if "door" in qs:
-                    DOOR_MIN_SCORE = float(qs["door"][0])
-                if "px" in qs:
-                    DOOR_MIN_PX = int(qs["px"][0])
+                if "score" in qs:
+                    DOOR_MIN_SCORE = float(qs["score"][0])
                 if "margin" in qs:
                     DOOR_MARGIN = float(qs["margin"][0])
+                if "weight" in qs:
+                    ACCUM_WEIGHT_MIN = float(qs["weight"][0])
+                if "consensus" in qs:
+                    ACCUM_CONSENSUS = float(qs["consensus"][0])
+                if "votes" in qs:
+                    ACCUM_MIN_VOTES = int(qs["votes"][0])
+                if "window" in qs:
+                    ACCUM_WINDOW = float(qs["window"][0])
+                if "pxfloor" in qs:
+                    PX_FLOOR = int(qs["pxfloor"][0])
+                if "pxfull" in qs:
+                    PX_FULL = int(qs["pxfull"][0])
             except ValueError:
-                self._json(400, {"error": "use ?v= (log) &door= (open) &px= &margin="})
+                self._json(400, {"error": "knobs: v score margin weight consensus "
+                                          "votes window pxfloor pxfull"})
                 return
-            self._json(200, {"ok": True, "threshold": MATCH_THRESHOLD,
-                             "door_score": DOOR_MIN_SCORE, "door_px": DOOR_MIN_PX,
-                             "door_margin": DOOR_MARGIN})
+            self._json(200, {"ok": True, "log": MATCH_THRESHOLD,
+                             "door_score": DOOR_MIN_SCORE, "margin": DOOR_MARGIN,
+                             "weight": ACCUM_WEIGHT_MIN, "consensus": ACCUM_CONSENSUS,
+                             "votes": ACCUM_MIN_VOTES, "window": ACCUM_WINDOW,
+                             "px_floor": PX_FLOOR, "px_full": PX_FULL})
             return
 
         if head == "forget":
             name = (qs.get("name", [""])[0]).strip()
             self._json(200, {"ok": _engine.forget(name), "forgot": name})
+            return
+
+        if head == "debug":
+            cam = qs.get("cam", [DEFAULT_CAM])[0]
+            cam = cam if cam in CAMERAS else DEFAULT_CAM
+            w = _workers.get(cam)
+            self._json(200, w.debug_state() if w else {"cam": cam, "running": False})
+            return
+
+        if head == "selftest":
+            # Measure the recognizer's REAL speed inside this live process (so we
+            # can tune perf without making someone walk to the camera). Uses a
+            # bundled multi-face image -> exercises detect + one recognition.
+            import insightface as _ins
+            try:
+                n = max(1, min(30, int(qs.get("n", ["8"])[0])))
+            except ValueError:
+                n = 8
+            img = _ins.data.get_image("t1")
+            _engine.detect_recognize_biggest(img)  # warmup
+            t = time.time()
+            for _ in range(n):
+                _engine.detect_recognize_biggest(img)
+            ms = (time.time() - t) / n * 1000.0
+            self._json(200, {"ok": True, "n": n, "ms_per_frame": round(ms, 1),
+                             "fps": round(1000.0 / ms, 2)})
             return
 
         if head == "door":
@@ -802,9 +996,10 @@ def main() -> None:
     if args.no_door:
         _door_armed = False
     _engine = FaceEngine(args.det)
-    print(f"[face] ready. log>={MATCH_THRESHOLD} door>={DOOR_MIN_SCORE} "
-          f"px>={DOOR_MIN_PX} margin>={DOOR_MARGIN} "
-          f"armed={_door_armed} ort_threads={ORT_THREADS}")
+    print(f"[face] ready. log>={MATCH_THRESHOLD} | door: score>={DOOR_MIN_SCORE} "
+          f"margin>={DOOR_MARGIN} weight>={ACCUM_WEIGHT_MIN} "
+          f"consensus>={ACCUM_CONSENSUS} votes>={ACCUM_MIN_VOTES} window={ACCUM_WINDOW}s "
+          f"px {PX_FLOOR}-{PX_FULL} | armed={_door_armed} ort_threads={ORT_THREADS}")
 
     get_worker(args.cam)  # pre-warm the main camera
 

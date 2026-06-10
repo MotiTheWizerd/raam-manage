@@ -118,7 +118,10 @@ export function CameraFeed({
             {title} — {detect ? "זיהוי אובייקטים" : "שידור חי"}
           </span>
         </div>
-        <div className="flex shrink-0 items-center gap-1">
+        <div
+          className="flex shrink-0 items-center gap-1"
+          onClick={(e) => e.stopPropagation()}
+        >
           <button
             type="button"
             onClick={() => setDetect((d) => !d)}

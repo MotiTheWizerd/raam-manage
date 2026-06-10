@@ -271,9 +271,9 @@ export function CarsTab({ onUseForGuest }: CarsTabProps) {
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   // When on, show only cars that actually entered our building (בוטיק) and drop
-  // the now-redundant building column. Default ON — the lobby cares about our
-  // own cars; press the toggle to reveal the neighbour (מנהטן) lane too.
-  const [boutiqueOnly, setBoutiqueOnly] = useState(true);
+  // the now-redundant building column. Default OFF — show all lanes (incl. the
+  // neighbour מנהטן); press the toggle to narrow to our own (בוטיק) cars.
+  const [boutiqueOnly, setBoutiqueOnly] = useState(false);
   // Tracks the newest row id we've seen so we can auto-follow new arrivals
   // without overriding a manual selection between them.
   const lastTopIdRef = useRef<number | null>(null);

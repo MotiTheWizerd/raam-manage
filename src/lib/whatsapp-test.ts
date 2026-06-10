@@ -179,22 +179,48 @@ class WhatsAppTestRuntime {
   }
 
   async logout(): Promise<WhatsAppTestStatus> {
+    // Stop any pending reconnect from re-creating a socket mid-reset.
+    this.shouldReconnect = false;
     try {
-      await this.socket?.logout();
+      // socket.logout() does a network round-trip; on a dead/broken socket it
+      // can hang forever (the old logout-hang bug), so cap it — we reset and
+      // wipe the on-disk creds regardless of the result.
+      if (this.socket) await withTimeout(this.socket.logout(), 4000);
     } catch {
       // Reset should still clean up partial or broken auth sessions.
     } finally {
       this.socket?.end?.();
-      this.socket = null;
-      this.state = "idle";
-      this.qrDataUrl = null;
-      this.user = null;
-      this.lastError = null;
-      this.shouldReconnect = false;
-      await fs.rm(AUTH_DIR, { force: true, recursive: true });
+      this.resetRuntime();
+      await this.purgeAuth();
     }
 
     return this.getStatus();
+  }
+
+  /** Wipe the on-disk auth folder. Never throws (missing dir is fine). */
+  private async purgeAuth(): Promise<void> {
+    await fs.rm(AUTH_DIR, { force: true, recursive: true }).catch(() => {});
+  }
+
+  /** Reset in-memory connection state back to a clean, disconnected slate. */
+  private resetRuntime(): void {
+    this.socket = null;
+    this.state = "idle";
+    this.qrDataUrl = null;
+    this.user = null;
+    this.lastError = null;
+    this.shouldReconnect = false;
+  }
+
+  /**
+   * Status codes where the stored credentials are DEAD — replaying them just
+   * loops (the 401 "Connection Failure" that kept getting stuck). The device
+   * was unlinked (401 loggedOut), rejected (403 forbidden) or the session is
+   * corrupt (500 badSession). In all three the creds on disk must be purged.
+   */
+  private isDeadCredsCode(code: number): boolean {
+    const loggedOut = this.loggedOutCode ?? 401;
+    return code === loggedOut || code === 403 || code === 500;
   }
 
   private async createSocket(): Promise<WhatsAppTestStatus> {
@@ -260,7 +286,15 @@ class WhatsAppTestRuntime {
         this.qrDataUrl = null;
         this.lastError = formatDisconnectError(update);
 
-        if (this.shouldReconnect && statusCode !== this.loggedOutCode) {
+        if (statusCode !== undefined && this.isDeadCredsCode(statusCode)) {
+          // The linked device is dead (401/403/500). Purge the on-disk creds
+          // NOW so the next connect generates a fresh QR instead of replaying
+          // them into an endless 401 loop. Keep lastError so the UI explains
+          // why; drop to "idle" since there's no session to resume anymore.
+          this.shouldReconnect = false;
+          await this.purgeAuth();
+          this.state = "idle";
+        } else if (this.shouldReconnect) {
           setTimeout(() => void this.connect(), 1500);
         }
       }
@@ -412,6 +446,15 @@ function formatDisconnectError(update: ConnectionUpdate): string {
   const code = statusCode ? ` (${statusCode})` : "";
 
   return `${error?.message ?? "WhatsApp connection closed."}${code}${details}`;
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error("operation timed out")), ms)
+    ),
+  ]);
 }
 
 function digitsOnly(input: string): string {

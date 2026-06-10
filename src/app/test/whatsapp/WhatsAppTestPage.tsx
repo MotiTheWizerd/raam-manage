@@ -2,7 +2,16 @@
 
 /* eslint-disable @next/next/no-img-element */
 
-import { Check, CheckCheck, Clock, LogOut, QrCode, Send, X } from "lucide-react";
+import {
+  Check,
+  CheckCheck,
+  Clock,
+  LogOut,
+  QrCode,
+  Send,
+  Trash2,
+  X,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
@@ -187,6 +196,18 @@ export function WhatsAppTestPage() {
     });
   }
 
+  // Hard clean: wipe the stored session + reset. Escape hatch for a stuck 401
+  // (dead creds that loop forever) — same backend path as logout, but reachable
+  // while disconnected.
+  async function hardClean() {
+    await runAction("clean", async () => {
+      const next = await postStatus("/api/test/whatsapp/logout");
+      setStatus(next);
+      setLoginOpen(false);
+      toast.success("החיבור נוקה. אפשר להתחבר מחדש");
+    });
+  }
+
   const refetchMessages = useCallback(async () => {
     const trimmed = phoneRef.current.trim();
     if (!residentIdRef.current && !trimmed) return;
@@ -259,10 +280,21 @@ export function WhatsAppTestPage() {
               התנתק
             </Button>
           ) : (
-            <Button onClick={openLogin} disabled={busyAction !== null}>
-              <QrCode size={16} aria-hidden="true" />
-              התחבר
-            </Button>
+            <>
+              <Button onClick={openLogin} disabled={busyAction !== null}>
+                <QrCode size={16} aria-hidden="true" />
+                התחבר
+              </Button>
+              <Button
+                variant="outline"
+                onClick={hardClean}
+                disabled={busyAction !== null}
+                title="מחיקת חיבור תקוע ואיפוס מלא של החיבור"
+              >
+                <Trash2 size={16} aria-hidden="true" />
+                ניקוי מלא
+              </Button>
+            </>
           )}
         </div>
       </header>
@@ -331,9 +363,20 @@ export function WhatsAppTestPage() {
           </p>
 
           {status.lastError && (
-            <p className="text-center text-xs text-red-600 dark:text-red-400">
-              {status.lastError}
-            </p>
+            <div className="space-y-2">
+              <p className="text-center text-xs text-red-600 dark:text-red-400">
+                {status.lastError}
+              </p>
+              <Button
+                variant="outline"
+                onClick={hardClean}
+                disabled={busyAction !== null}
+                className="w-full"
+              >
+                <Trash2 size={16} aria-hidden="true" />
+                ניקוי מלא והתחברות מחדש
+              </Button>
+            </div>
           )}
         </div>
       </Modal>

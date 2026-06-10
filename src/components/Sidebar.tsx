@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Building2, ClipboardList, Crown, Home, MessageCircle, Settings, UserCog, Users } from "lucide-react";
+import { Building2, Cctv, ClipboardList, Crown, Home, MessageCircle, Settings, UserCog, Users } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/cn";
@@ -19,6 +19,7 @@ type Item = {
 const items: Item[] = [
   { label: "כללי", href: "/", icon: Home },
   { label: "אירועים", href: "/events", icon: ClipboardList },
+  { label: "מצלמות", href: "/cameras", icon: Cctv },
   { label: "דירות", href: "/apartments", icon: Building2 },
   { label: "דיירים", href: "/renters", icon: Users },
   { label: "בעלי דירות", href: "/owners", icon: Crown },

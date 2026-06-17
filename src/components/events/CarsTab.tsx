@@ -1,15 +1,28 @@
 "use client";
 
-import { Building2, ImageIcon, RefreshCw, UserRound, UserRoundPlus } from "lucide-react";
+import {
+  Building2,
+  ImageIcon,
+  Loader2,
+  Phone,
+  RefreshCw,
+  Search,
+  UserRound,
+  UserRoundPlus,
+  X,
+} from "lucide-react";
 import NextImage from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   forgetResidentGuest,
   getRecentCarEvents,
+  lookupPlate,
   type CarBuilding,
+  type PlateLookupResult,
   type SlprCarEventRow,
 } from "@/app/events/cars-actions";
 import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
 import { DeleteEventButton } from "@/components/events/DeleteEventButton";
 import { Pagination } from "@/components/ui/Pagination";
 import { cn } from "@/lib/cn";
@@ -260,6 +273,174 @@ function CarDetails({
   );
 }
 
+/**
+ * The consolidated "what do we know about this plate" card shown after a
+ * plate-check search. Reuses the same visual language as the live-feed details
+ * panel (status pill, building tag, owner/guest blocks, visit history) and adds
+ * a strip of recent camera reads.
+ */
+function PlateLookupCard({
+  result,
+  onUseForGuest,
+}: {
+  result: PlateLookupResult;
+  onUseForGuest: (plate: string, guestName?: string | null) => void;
+}) {
+  if (!result.found) {
+    return (
+      <div className="rounded-lg border border-dashed border-black/15 bg-black/[0.015] p-6 text-center dark:border-white/15 dark:bg-white/[0.025]">
+        <p className="text-sm font-semibold">לא נמצא מידע על הרכב</p>
+        <p className="mt-1 text-xs opacity-60">
+          אין רישום, אורח מזוהה או היסטוריית כניסות עבור{" "}
+          <span dir="ltr" className="font-mono">
+            {result.plate}
+          </span>
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-lg border border-black/10 bg-black/[0.015] p-3 dark:border-white/10 dark:bg-white/[0.025]">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-lg font-bold" dir="ltr">
+            {result.plate}
+          </span>
+          <button
+            type="button"
+            onClick={() => onUseForGuest(result.plate, result.guest?.guestName)}
+            title="רישום חניית אורח עם רישוי זה"
+            aria-label={`רישום חניית אורח עם רישוי ${result.plate}`}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-black/10 transition-colors hover:border-red-300 hover:bg-red-50 hover:text-red-700 dark:border-white/10 dark:hover:border-red-900 dark:hover:bg-red-950/40 dark:hover:text-red-300"
+          >
+            <UserRoundPlus size={16} />
+          </button>
+        </div>
+        {result.building && (
+          <span
+            className={cn(
+              "inline-flex h-7 items-center rounded-full px-3 text-xs font-semibold",
+              buildingTag(result.building).className
+            )}
+          >
+            {buildingTag(result.building).text}
+          </span>
+        )}
+      </div>
+
+      {result.guest && (
+        <div className="mb-3 rounded-md border border-orange-200 bg-orange-50 px-3 py-2 text-xs dark:border-orange-900 dark:bg-orange-950/30">
+          <div className="font-semibold text-orange-700 dark:text-orange-300">
+            אורח מזוהה: {result.guest.guestName || "אורח ידוע"}
+          </div>
+          {(result.guest.apartmentNumber || result.guest.residentName) && (
+            <div className="mt-0.5 opacity-70">
+              {result.guest.apartmentNumber ? `דירה ${result.guest.apartmentNumber}` : ""}
+              {result.guest.apartmentNumber && result.guest.residentName ? " · " : ""}
+              {result.guest.residentName ?? ""}
+            </div>
+          )}
+        </div>
+      )}
+
+      {result.registeredCar && (
+        <div className="mb-3 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-xs dark:border-sky-900 dark:bg-sky-950/30">
+          <div className="font-semibold text-sky-700 dark:text-sky-300">
+            {result.registeredCar.isEmployee ? "רכב עובד רשום" : "רכב רשום"}:{" "}
+            {result.registeredCar.name}
+          </div>
+          <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 opacity-70">
+            {result.registeredCar.apartment && (
+              <span>דירה {result.registeredCar.apartment}</span>
+            )}
+            {result.registeredCar.phone && (
+              <span className="inline-flex items-center gap-1" dir="ltr">
+                <Phone size={11} />
+                {result.registeredCar.phone}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {!result.guest && !result.registeredCar && (
+        <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300">
+          רכב לא מוכר — אין רישום או אורח מזוהה. נראה במצלמות בלבד.
+        </div>
+      )}
+
+      {result.visitStats && (
+        <div className="mb-3 rounded-md border border-black/10 px-3 py-2 text-xs dark:border-white/10">
+          <div className="mb-1.5 font-semibold opacity-80">היסטוריית כניסות</div>
+          <div className="grid grid-cols-[1fr_auto] gap-y-1">
+            <span className="opacity-60">סה״כ כניסות</span>
+            <span className="text-end font-medium tabular-nums">
+              {result.visitStats.visits}
+            </span>
+            {result.visitStats.firstSeen && (
+              <>
+                <span className="opacity-60">נראה לראשונה</span>
+                <span className="text-end" dir="ltr">
+                  {formatEventTimeWithYear(result.visitStats.firstSeen)}
+                </span>
+              </>
+            )}
+            {result.visitStats.lastSeen && (
+              <>
+                <span className="opacity-60">נראה לאחרונה</span>
+                <span className="text-end" dir="ltr">
+                  {formatEventTimeWithYear(result.visitStats.lastSeen)}
+                </span>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {result.recentEvents.length > 0 && (
+        <div>
+          <div className="mb-1.5 text-xs font-semibold opacity-80">
+            כניסות אחרונות
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
+            {result.recentEvents.map((event) => {
+              const src = imageUrl(event.imagePath);
+              return (
+                <div
+                  key={event.id}
+                  className="overflow-hidden rounded-md border border-black/10 dark:border-white/10"
+                >
+                  {src ? (
+                    <NextImage
+                      src={src}
+                      alt={`תמונת רכב ${result.plate}`}
+                      width={280}
+                      height={160}
+                      unoptimized
+                      className="h-24 w-full bg-black object-contain"
+                    />
+                  ) : (
+                    <div className="flex h-24 w-full items-center justify-center bg-zinc-100 dark:bg-zinc-900">
+                      <ImageIcon size={20} className="text-zinc-500" />
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between gap-1 px-2 py-1 text-[10px] opacity-70">
+                    <span dir="ltr" title={event.eventTime}>
+                      {formatEventTime(event.eventTime)}
+                    </span>
+                    <span>{formatCamera(event.cameraId)}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 type CarsTabProps = {
   onUseForGuest: (plate: string, guestName?: string | null) => void;
 };
@@ -274,6 +455,11 @@ export function CarsTab({ onUseForGuest }: CarsTabProps) {
   // the now-redundant building column. Default OFF — show all lanes (incl. the
   // neighbour מנהטן); press the toggle to narrow to our own (בוטיק) cars.
   const [boutiqueOnly, setBoutiqueOnly] = useState(false);
+  // --- Plate-check lookup (type a plate -> consolidated "what we know" card) ---
+  const [lookupInput, setLookupInput] = useState("");
+  const [lookupResult, setLookupResult] = useState<PlateLookupResult | null>(null);
+  const [lookupLoading, setLookupLoading] = useState(false);
+  const [lookupError, setLookupError] = useState<string | null>(null);
   // Tracks the newest row id we've seen so we can auto-follow new arrivals
   // without overriding a manual selection between them.
   const lastTopIdRef = useRef<number | null>(null);
@@ -330,6 +516,29 @@ export function CarsTab({ onUseForGuest }: CarsTabProps) {
     }
   }, []);
 
+  const runLookup = useCallback(async () => {
+    const q = lookupInput.trim();
+    if (!q) return;
+    setLookupLoading(true);
+    setLookupError(null);
+    try {
+      const result = await lookupPlate(q);
+      setLookupResult(result);
+      if (!result) setLookupError("יש להזין מספר רישוי תקין");
+    } catch (err) {
+      setLookupResult(null);
+      setLookupError(err instanceof Error ? err.message : "בדיקת הרכב נכשלה");
+    } finally {
+      setLookupLoading(false);
+    }
+  }, [lookupInput]);
+
+  const clearLookup = useCallback(() => {
+    setLookupInput("");
+    setLookupResult(null);
+    setLookupError(null);
+  }, []);
+
   useEffect(() => {
     let active = true;
 
@@ -349,6 +558,60 @@ export function CarsTab({ onUseForGuest }: CarsTabProps) {
 
   return (
     <div className="space-y-4">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          runLookup();
+        }}
+        className="rounded-lg border border-black/10 bg-black/[0.015] p-3 dark:border-white/10 dark:bg-white/[0.025]"
+      >
+        <label
+          htmlFor="plate-lookup"
+          className="mb-2 flex items-center gap-1.5 text-sm font-medium opacity-80"
+        >
+          <Search size={15} />
+          בדיקת רכב לפי מספר רישוי
+        </label>
+        <div className="flex items-center gap-2">
+          <Input
+            id="plate-lookup"
+            value={lookupInput}
+            onChange={(e) => setLookupInput(e.target.value)}
+            placeholder="לדוגמה: 12-345-67"
+            dir="ltr"
+            autoComplete="off"
+            submitOnEnter
+            className="flex-1"
+          />
+          <Button
+            type="submit"
+            size="sm"
+            disabled={lookupLoading || !lookupInput.trim()}
+          >
+            {lookupLoading ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <Search size={14} />
+            )}
+            בדוק
+          </Button>
+          {(lookupResult || lookupError) && (
+            <Button type="button" variant="outline" size="sm" onClick={clearLookup}>
+              <X size={14} />
+              נקה
+            </Button>
+          )}
+        </div>
+        {lookupError && (
+          <p className="mt-2 text-xs text-red-600 dark:text-red-400">{lookupError}</p>
+        )}
+        {lookupResult && (
+          <div className="mt-3">
+            <PlateLookupCard result={lookupResult} onUseForGuest={onUseForGuest} />
+          </div>
+        )}
+      </form>
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-sm font-medium opacity-80">רכבים אחרונים</h2>

@@ -439,6 +439,180 @@ export async function getLastCarPlate(): Promise<string | null> {
   return rows[0]?.LP?.trim() || null;
 }
 
+/**
+ * The car's registered owner from the SLPR `customer` directory, with the extra
+ * contact fields the plate-check card shows (phone + employee flag) beyond the
+ * lightweight RegisteredOwner used in the live feed.
+ */
+export type PlateLookupRegisteredCar = {
+  plate: string;
+  name: string;
+  apartment: string | null;
+  phone: string | null;
+  isEmployee: boolean;
+};
+
+/** One historical camera read for the plate-check photo strip. */
+export type PlateLookupEvent = {
+  id: number;
+  eventTime: string;
+  status: string;
+  cameraId: number | null;
+  imagePath: string | null;
+};
+
+/**
+ * Everything we know about a single plate, consolidated from all three sources:
+ * the SLPR `customer` directory (registered owner), our local `resident_guests`
+ * memory (learned guest), and the SLPR `log` history (visits + lane + photos).
+ */
+export type PlateLookupResult = {
+  /** The normalized key we actually searched on. */
+  query: string;
+  /** Best canonical plate to display (from history/registration, else the input). */
+  plate: string;
+  /** True when the plate matched in at least one source. */
+  found: boolean;
+  registeredCar: PlateLookupRegisteredCar | null;
+  guest: RecognizedGuest | null;
+  visitStats: PlateVisitStats | null;
+  /** Lane classification — null when the plate has no camera history at all. */
+  building: CarBuilding | null;
+  recentEvents: PlateLookupEvent[];
+};
+
+/**
+ * SQL expression that normalizes a stored LP the same way normalizePlate() does
+ * on the JS side (strip dashes/spaces/dots, uppercase) so a hand-entered owner
+ * plate like "12-345-67" still matches the typed key.
+ */
+function normalizedLpSql(column: string): string {
+  return `UPPER(REPLACE(REPLACE(REPLACE(IFNULL(${column}, ''), '-', ''), ' ', ''), '.', ''))`;
+}
+
+const PLATE_LOOKUP_RECENT_LIMIT = 8;
+
+/**
+ * Plate-check lookup for the lobby: given a typed plate, return the full picture
+ * (registered owner, known guest, lifetime visits + lane, recent reads with
+ * photos). All reads — never writes to SLPR. The key is normalized to [0-9A-Z]
+ * so it's injection-safe by construction, but we still cap its length.
+ */
+export async function lookupPlate(
+  rawPlate: string
+): Promise<PlateLookupResult | null> {
+  const key = normalizePlate(rawPlate).slice(0, 20);
+  if (!key) return null;
+
+  // Camera-read plates are stored clean (no formatting), so an indexed `LP = key`
+  // is both correct and fast against the 65k-row log. The customer table is tiny,
+  // so there we normalize the stored side too (owner plates can carry dashes).
+  const [statsRows, eventRows, customerRows] = await Promise.all([
+    querySlpr<PlateStatsRow>(
+      `SELECT
+         LP,
+         COUNT(DISTINCT FLOOR(UNIX_TIMESTAMP(LOG_DATE) / 120)) AS visits,
+         MIN(LOG_DATE) AS firstSeen,
+         MAX(LOG_DATE) AS lastSeen,
+         SUM(CAM_ID = 3) AS cam3
+       FROM \`log\`
+       WHERE LP = ${sqlStr(key)}
+       GROUP BY LP`
+    ),
+    querySlpr<{
+      ID: string | null;
+      LP: string | null;
+      LOG_DATE: string | null;
+      STATUS: string | null;
+      CAM_ID: string | null;
+      FILE: string | null;
+    }>(
+      `SELECT ID, LP, LOG_DATE, STATUS, CAM_ID, FILE
+       FROM \`log\`
+       WHERE LP = ${sqlStr(key)}
+       ORDER BY LOG_DATE DESC, ID DESC
+       LIMIT ${PLATE_LOOKUP_RECENT_LIMIT}`
+    ),
+    querySlpr<{
+      LP: string | null;
+      First_Name: string | null;
+      Last_Name: string | null;
+      Apartment: string | null;
+      Phone: string | null;
+      isEmployee: string | null;
+    }>(
+      `SELECT LP, First_Name, Last_Name, Apartment, Phone, isEmployee
+       FROM customer
+       WHERE ${normalizedLpSql("LP")} = ${sqlStr(key)}
+          OR ${normalizedLpSql("additional_lps")} LIKE ${sqlStr(`%${key}%`)}
+       LIMIT 1`
+    ),
+  ]);
+
+  const guest = matchKnownGuests([key]).get(key) ?? null;
+
+  const statsRow = statsRows[0];
+  const cam3 = statsRow ? parseNullableNumber(statsRow.cam3) ?? 0 : 0;
+  const visitStats: PlateVisitStats | null = statsRow
+    ? {
+        visits: parseNullableNumber(statsRow.visits) ?? 0,
+        firstSeen: statsRow.firstSeen ?? "",
+        lastSeen: statsRow.lastSeen ?? "",
+      }
+    : null;
+  const building: CarBuilding | null = statsRow
+    ? cam3 > 0
+      ? "boutique"
+      : "manhattan"
+    : null;
+
+  const recentEvents: PlateLookupEvent[] = eventRows.map((row) => ({
+    id: parseNullableNumber(row.ID) ?? 0,
+    eventTime: row.LOG_DATE ?? "",
+    status: row.STATUS ?? "",
+    cameraId: parseNullableNumber(row.CAM_ID),
+    imagePath: row.FILE,
+  }));
+
+  const customer = customerRows[0];
+  let registeredCar: PlateLookupRegisteredCar | null = null;
+  if (customer) {
+    const name = [customer.First_Name, customer.Last_Name]
+      .map((part) => (part ?? "").trim())
+      .filter(Boolean)
+      .join(" ")
+      .trim();
+    if (name) {
+      registeredCar = {
+        plate: (customer.LP ?? "").trim(),
+        name,
+        apartment: (customer.Apartment ?? "").trim() || null,
+        phone: (customer.Phone ?? "").trim() || null,
+        isEmployee: customer.isEmployee === "1",
+      };
+    }
+  }
+
+  const found = Boolean(
+    registeredCar || guest || visitStats || recentEvents.length > 0
+  );
+  const plate =
+    eventRows[0]?.LP?.trim() ||
+    registeredCar?.plate ||
+    normalizePlate(rawPlate);
+
+  return {
+    query: key,
+    plate,
+    found,
+    registeredCar,
+    guest,
+    visitStats,
+    building,
+    recentEvents,
+  };
+}
+
 export async function getRecentCarEvents(
   days: number = 3
 ): Promise<SlprCarEventRow[]> {

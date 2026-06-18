@@ -53,7 +53,10 @@ export default async function RootLayout({
                 <Header lobbyistName={currentUser.lobbyist_name} isDark={isDark} />
                 <div className="flex-1 flex min-h-0">
                   <Sidebar />
-                  <main className="flex-1 overflow-auto p-6">{children}</main>
+                  {/* pb is extra-deep so the fixed bottom overlays (gate
+                      drawer + BackToTop) never sit over page content and eat
+                      its clicks (e.g. the pagination buttons). */}
+                  <main className="flex-1 overflow-auto p-6 pb-32">{children}</main>
                 </div>
                 {/* Top-left stack: system messages on top, the car notifier
                     below. StickyMessages renders null when empty, so the

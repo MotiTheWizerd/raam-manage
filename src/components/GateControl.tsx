@@ -165,7 +165,7 @@ export function GateControl() {
         )}
       </AnimatePresence>
 
-      <div className="fixed bottom-0 left-1/2 z-50 -translate-x-1/2">
+      <div className="fixed -bottom-7 left-1/2 z-50 -translate-x-1/2">
       {/* Peeking drawer: rests half-tucked below the edge at 50% opacity,
           glides fully into view on hover/focus. */}
       <div
@@ -173,8 +173,11 @@ export function GateControl() {
           "flex translate-y-[45%] flex-col items-center gap-2 px-3 pt-2 pb-3",
           "rounded-t-3xl border border-b-0 border-zinc-200/80 bg-white/80 opacity-50 shadow-2xl backdrop-blur-md",
           "transition-all duration-300 ease-out",
-          "hover:translate-y-0 hover:opacity-100",
-          "focus-within:translate-y-0 focus-within:opacity-100",
+          // The wrapper sits at -bottom-7 (28px below the edge) so the drawer
+          // hides less of the page at rest; lift by that same 7 on hover/focus
+          // so it still glides FULLY into view.
+          "hover:-translate-y-7 hover:opacity-100",
+          "focus-within:-translate-y-7 focus-within:opacity-100",
           "dark:border-zinc-800/80 dark:bg-zinc-900/80"
         )}
       >

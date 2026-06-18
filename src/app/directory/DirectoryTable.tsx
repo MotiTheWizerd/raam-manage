@@ -18,13 +18,18 @@ export type DirectoryPhone = {
   label: string | null;
 };
 
+export type DirectoryResident = {
+  id: number;
+  name: string;
+};
+
 export type DirectoryRow = {
   apartment_id: number;
   number: string;
   zone_name: string | null;
   floor: number | null;
-  owners: string[];
-  occupants: string[];
+  owners: DirectoryResident[];
+  occupants: DirectoryResident[];
   parking: string[];
   storage: string[];
   phones: DirectoryPhone[];
@@ -72,7 +77,10 @@ export function DirectoryTable({ rows }: Props) {
       if (!q) return true;
       if (r.number.toLowerCase().includes(q)) return true;
       if ((r.zone_name ?? "").toLowerCase().includes(q)) return true;
-      const people = [...r.owners, ...r.occupants].join(" ").toLowerCase();
+      const people = [...r.owners, ...r.occupants]
+        .map((p) => p.name)
+        .join(" ")
+        .toLowerCase();
       if (people.includes(q)) return true;
       if (
         qDigits &&
@@ -134,13 +142,13 @@ export function DirectoryTable({ rows }: Props) {
       key: "owners",
       header: "בעלי הדירות",
       maxWidth: "12rem",
-      render: (r) => <Lines items={r.owners} />,
+      render: (r) => <PeopleLines people={r.owners} />,
     },
     {
       key: "occupants",
       header: "רשימת דיירים",
       maxWidth: "12rem",
-      render: (r) => <Lines items={r.occupants} muted />,
+      render: (r) => <PeopleLines people={r.occupants} muted />,
     },
     {
       key: "parking",
@@ -205,8 +213,8 @@ export function DirectoryTable({ rows }: Props) {
         דירה: r.number,
         אגף: r.zone_name ?? "",
         קומה: r.floor ?? "",
-        "בעלי הדירות": r.owners.join(", "),
-        "רשימת דיירים": r.occupants.join(", "),
+        "בעלי הדירות": r.owners.map((o) => o.name).join(", "),
+        "רשימת דיירים": r.occupants.map((o) => o.name).join(", "),
         חנייה: r.parking.join(", "),
         מחסן: r.storage.join(", "),
         "ת.ד": r.po_boxes.join(", "),
@@ -302,6 +310,32 @@ function Lines({ items, muted }: { items: string[]; muted?: boolean }) {
       {items.map((it, i) => (
         <div key={i} className="whitespace-nowrap">
           {it}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Like Lines, but each person links to their resident page (same red-hover
+// style as the apartment-number link).
+function PeopleLines({
+  people,
+  muted,
+}: {
+  people: DirectoryResident[];
+  muted?: boolean;
+}) {
+  if (people.length === 0) return <span className="opacity-40">—</span>;
+  return (
+    <div className={cn("space-y-0.5", muted && "opacity-80")}>
+      {people.map((p) => (
+        <div key={p.id} className="whitespace-nowrap">
+          <Link
+            href={`/renters/${p.id}`}
+            className="transition-colors hover:text-red-600 dark:hover:text-red-400"
+          >
+            {p.name}
+          </Link>
         </div>
       ))}
     </div>

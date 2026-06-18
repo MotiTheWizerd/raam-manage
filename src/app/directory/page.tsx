@@ -12,6 +12,7 @@ type ApartmentRow = {
 };
 
 type ResidentRow = {
+  id: number;
   apartment_id: number;
   first_name: string;
   last_name: string;
@@ -47,7 +48,7 @@ export default async function DirectoryPage() {
   // Current residents only (move_out IS NULL), split by type downstream.
   const residents = db
     .prepare(
-      `SELECT apartment_id, first_name, last_name, type, po_box
+      `SELECT id, apartment_id, first_name, last_name, type, po_box
        FROM residents
        WHERE move_out IS NULL`
     )
@@ -93,9 +94,9 @@ export default async function DirectoryPage() {
   for (const r of residents) {
     const row = byApartment.get(r.apartment_id);
     if (!row) continue;
-    const name = `${r.first_name} ${r.last_name}`.trim();
-    if (r.type === "owner") row.owners.push(name);
-    else row.occupants.push(name);
+    const person = { id: r.id, name: `${r.first_name} ${r.last_name}`.trim() };
+    if (r.type === "owner") row.owners.push(person);
+    else row.occupants.push(person);
     const poBox = r.po_box?.trim();
     if (poBox && !row.po_boxes.includes(poBox)) row.po_boxes.push(poBox);
   }

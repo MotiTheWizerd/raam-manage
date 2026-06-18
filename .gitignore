@@ -46,6 +46,9 @@ next-env.d.ts
 *.db-shm
 *.db-wal
 
+# source spreadsheets — contain resident PII (names, phones), never commit
+*.xlsx
+
 # pm2 runtime logs
 /logs/
 

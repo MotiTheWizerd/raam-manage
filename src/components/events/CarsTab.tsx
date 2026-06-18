@@ -66,6 +66,14 @@ function imageUrl(path: string | null): string | null {
   return `/api/slpr/image?path=${encodeURIComponent(path)}`;
 }
 
+/** Local-date YYYY-MM-DD for an <input type="date"> value (not UTC). */
+function toYmd(d: Date): string {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 /**
  * Compact "DD/MM HH:MM" for the table — drops year and seconds. The full
  * timestamp stays available via the cell's title (hover). Falls back to the
@@ -279,19 +287,42 @@ function CarDetails({
  * panel (status pill, building tag, owner/guest blocks, visit history) and adds
  * a strip of recent camera reads.
  */
+function CloseLookupButton({ onClose }: { onClose: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClose}
+      aria-label="סגור"
+      title="סגור"
+      className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-black/10 text-foreground/60 transition-colors hover:bg-black/[0.04] hover:text-foreground dark:border-white/10 dark:hover:bg-white/[0.06]"
+    >
+      <X size={15} />
+    </button>
+  );
+}
+
 function PlateLookupCard({
   result,
+  ranged = false,
   onUseForGuest,
+  onClose,
 }: {
   result: PlateLookupResult;
+  ranged?: boolean;
   onUseForGuest: (plate: string, guestName?: string | null) => void;
+  onClose: () => void;
 }) {
   if (!result.found) {
     return (
-      <div className="rounded-lg border border-dashed border-black/15 bg-black/[0.015] p-6 text-center dark:border-white/15 dark:bg-white/[0.025]">
+      <div className="relative rounded-lg border border-dashed border-black/15 bg-black/[0.015] p-6 text-center dark:border-white/15 dark:bg-white/[0.025]">
+        <div className="absolute end-2 top-2">
+          <CloseLookupButton onClose={onClose} />
+        </div>
         <p className="text-sm font-semibold">לא נמצא מידע על הרכב</p>
         <p className="mt-1 text-xs opacity-60">
-          אין רישום, אורח מזוהה או היסטוריית כניסות עבור{" "}
+          {ranged
+            ? "אין רישום, אורח מזוהה או כניסות בטווח התאריכים שנבחר עבור "
+            : "אין רישום, אורח מזוהה או היסטוריית כניסות עבור "}
           <span dir="ltr" className="font-mono">
             {result.plate}
           </span>
@@ -317,16 +348,19 @@ function PlateLookupCard({
             <UserRoundPlus size={16} />
           </button>
         </div>
-        {result.building && (
-          <span
-            className={cn(
-              "inline-flex h-7 items-center rounded-full px-3 text-xs font-semibold",
-              buildingTag(result.building).className
-            )}
-          >
-            {buildingTag(result.building).text}
-          </span>
-        )}
+        <div className="flex items-center gap-2">
+          {result.building && (
+            <span
+              className={cn(
+                "inline-flex h-7 items-center rounded-full px-3 text-xs font-semibold",
+                buildingTag(result.building).className
+              )}
+            >
+              {buildingTag(result.building).text}
+            </span>
+          )}
+          <CloseLookupButton onClose={onClose} />
+        </div>
       </div>
 
       {result.guest && (
@@ -370,9 +404,17 @@ function PlateLookupCard({
         </div>
       )}
 
+      {ranged && !result.visitStats && (
+        <div className="mb-3 rounded-md border border-black/10 px-3 py-2 text-xs opacity-70 dark:border-white/10">
+          אין כניסות בטווח התאריכים שנבחר
+        </div>
+      )}
+
       {result.visitStats && (
         <div className="mb-3 rounded-md border border-black/10 px-3 py-2 text-xs dark:border-white/10">
-          <div className="mb-1.5 font-semibold opacity-80">היסטוריית כניסות</div>
+          <div className="mb-1.5 font-semibold opacity-80">
+            {ranged ? "כניסות בטווח שנבחר" : "היסטוריית כניסות"}
+          </div>
           <div className="grid grid-cols-[1fr_auto] gap-y-1">
             <span className="opacity-60">סה״כ כניסות</span>
             <span className="text-end font-medium tabular-nums">
@@ -401,7 +443,8 @@ function PlateLookupCard({
       {result.recentEvents.length > 0 && (
         <div>
           <div className="mb-1.5 text-xs font-semibold opacity-80">
-            כניסות אחרונות
+            {ranged ? "כניסות בטווח" : "כניסות אחרונות"}{" "}
+            <span className="font-normal opacity-60">({result.recentEvents.length})</span>
           </div>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
             {result.recentEvents.map((event) => {
@@ -457,7 +500,12 @@ export function CarsTab({ onUseForGuest }: CarsTabProps) {
   const [boutiqueOnly, setBoutiqueOnly] = useState(false);
   // --- Plate-check lookup (type a plate -> consolidated "what we know" card) ---
   const [lookupInput, setLookupInput] = useState("");
+  const [lookupFrom, setLookupFrom] = useState("");
+  const [lookupTo, setLookupTo] = useState("");
   const [lookupResult, setLookupResult] = useState<PlateLookupResult | null>(null);
+  // The range that produced the current result, so labels stay accurate even if
+  // the inputs are edited before the next search.
+  const [resultRanged, setResultRanged] = useState(false);
   const [lookupLoading, setLookupLoading] = useState(false);
   const [lookupError, setLookupError] = useState<string | null>(null);
   // Tracks the newest row id we've seen so we can auto-follow new arrivals
@@ -516,26 +564,60 @@ export function CarsTab({ onUseForGuest }: CarsTabProps) {
     }
   }, []);
 
-  const runLookup = useCallback(async () => {
-    const q = lookupInput.trim();
-    if (!q) return;
-    setLookupLoading(true);
-    setLookupError(null);
-    try {
-      const result = await lookupPlate(q);
-      setLookupResult(result);
-      if (!result) setLookupError("יש להזין מספר רישוי תקין");
-    } catch (err) {
-      setLookupResult(null);
-      setLookupError(err instanceof Error ? err.message : "בדיקת הרכב נכשלה");
-    } finally {
-      setLookupLoading(false);
-    }
-  }, [lookupInput]);
+  const runLookup = useCallback(
+    async (override?: { from: string; to: string }) => {
+      const q = lookupInput.trim();
+      if (!q) return;
+      const from = override ? override.from : lookupFrom;
+      const to = override ? override.to : lookupTo;
+      if (from && to && from > to) {
+        setLookupError('טווח התאריכים אינו תקין ("מתאריך" מאוחר מ"עד")');
+        return;
+      }
+      setLookupLoading(true);
+      setLookupError(null);
+      try {
+        const result = await lookupPlate(q, { from, to });
+        setLookupResult(result);
+        setResultRanged(Boolean(from || to));
+        if (!result) setLookupError("יש להזין מספר רישוי תקין");
+      } catch (err) {
+        setLookupResult(null);
+        setLookupError(err instanceof Error ? err.message : "בדיקת הרכב נכשלה");
+      } finally {
+        setLookupLoading(false);
+      }
+    },
+    [lookupInput, lookupFrom, lookupTo]
+  );
+
+  // Quick-range presets: week / month / all-time. Set the inputs and, if a plate
+  // is already typed, immediately re-run the check on the new range.
+  const applyPreset = useCallback(
+    (kind: "week" | "month" | "all") => {
+      let from = "";
+      let to = "";
+      if (kind !== "all") {
+        const today = new Date();
+        const start = new Date(today);
+        if (kind === "week") start.setDate(start.getDate() - 7);
+        else start.setMonth(start.getMonth() - 1);
+        from = toYmd(start);
+        to = toYmd(today);
+      }
+      setLookupFrom(from);
+      setLookupTo(to);
+      if (lookupInput.trim()) runLookup({ from, to });
+    },
+    [lookupInput, runLookup]
+  );
 
   const clearLookup = useCallback(() => {
     setLookupInput("");
+    setLookupFrom("");
+    setLookupTo("");
     setLookupResult(null);
+    setResultRanged(false);
     setLookupError(null);
   }, []);
 
@@ -595,19 +677,62 @@ export function CarsTab({ onUseForGuest }: CarsTabProps) {
             )}
             בדוק
           </Button>
-          {(lookupResult || lookupError) && (
+          {lookupError && !lookupResult && (
             <Button type="button" variant="outline" size="sm" onClick={clearLookup}>
               <X size={14} />
               נקה
             </Button>
           )}
         </div>
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+          <span className="opacity-60">טווח תאריכים (אופציונלי):</span>
+          <label className="flex items-center gap-1">
+            <span className="opacity-60">מתאריך</span>
+            <Input
+              type="date"
+              value={lookupFrom}
+              onChange={(e) => setLookupFrom(e.target.value)}
+              max={lookupTo || undefined}
+              dir="ltr"
+              submitOnEnter
+              className="h-8 w-auto"
+            />
+          </label>
+          <label className="flex items-center gap-1">
+            <span className="opacity-60">עד</span>
+            <Input
+              type="date"
+              value={lookupTo}
+              onChange={(e) => setLookupTo(e.target.value)}
+              min={lookupFrom || undefined}
+              dir="ltr"
+              submitOnEnter
+              className="h-8 w-auto"
+            />
+          </label>
+          <div className="flex items-center gap-1">
+            <Button type="button" variant="outline" size="sm" onClick={() => applyPreset("week")}>
+              שבוע
+            </Button>
+            <Button type="button" variant="outline" size="sm" onClick={() => applyPreset("month")}>
+              חודש
+            </Button>
+            <Button type="button" variant="outline" size="sm" onClick={() => applyPreset("all")}>
+              הכל
+            </Button>
+          </div>
+        </div>
         {lookupError && (
           <p className="mt-2 text-xs text-red-600 dark:text-red-400">{lookupError}</p>
         )}
         {lookupResult && (
           <div className="mt-3">
-            <PlateLookupCard result={lookupResult} onUseForGuest={onUseForGuest} />
+            <PlateLookupCard
+              result={lookupResult}
+              ranged={resultRanged}
+              onUseForGuest={onUseForGuest}
+              onClose={clearLookup}
+            />
           </div>
         )}
       </form>

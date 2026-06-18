@@ -490,7 +490,27 @@ function normalizedLpSql(column: string): string {
   return `UPPER(REPLACE(REPLACE(REPLACE(IFNULL(${column}, ''), '-', ''), ' ', ''), '.', ''))`;
 }
 
-const PLATE_LOOKUP_RECENT_LIMIT = 8;
+/** An optional from/to window for scoping a plate's camera history. */
+export type PlateDateRange = { from?: string | null; to?: string | null };
+
+/** True only for a strict YYYY-MM-DD date string (from an <input type="date">). */
+function isIsoDate(value: string | null | undefined): value is string {
+  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+/**
+ * Build a safe `AND LOG_DATE ...` clause from a date range. Only well-formed
+ * YYYY-MM-DD bounds are used (each is validated, so it can't inject); the `to`
+ * day is inclusive through 23:59:59.
+ */
+function buildLogDateClause(range?: PlateDateRange): string {
+  const parts: string[] = [];
+  if (isIsoDate(range?.from)) parts.push(`LOG_DATE >= '${range.from} 00:00:00'`);
+  if (isIsoDate(range?.to)) parts.push(`LOG_DATE <= '${range.to} 23:59:59'`);
+  return parts.length > 0 ? ` AND ${parts.join(" AND ")}` : "";
+}
+
+const PLATE_LOOKUP_RECENT_LIMIT = 20;
 
 /**
  * Plate-check lookup for the lobby: given a typed plate, return the full picture
@@ -499,10 +519,15 @@ const PLATE_LOOKUP_RECENT_LIMIT = 8;
  * so it's injection-safe by construction, but we still cap its length.
  */
 export async function lookupPlate(
-  rawPlate: string
+  rawPlate: string,
+  range?: PlateDateRange
 ): Promise<PlateLookupResult | null> {
   const key = normalizePlate(rawPlate).slice(0, 20);
   if (!key) return null;
+
+  // Optional date window — scopes the camera history (visits + reads) only; the
+  // owner/guest identity below is not date-dependent.
+  const dateClause = buildLogDateClause(range);
 
   // Camera-read plates are stored clean (no formatting), so an indexed `LP = key`
   // is both correct and fast against the 65k-row log. The customer table is tiny,
@@ -516,7 +541,7 @@ export async function lookupPlate(
          MAX(LOG_DATE) AS lastSeen,
          SUM(CAM_ID = 3) AS cam3
        FROM \`log\`
-       WHERE LP = ${sqlStr(key)}
+       WHERE LP = ${sqlStr(key)}${dateClause}
        GROUP BY LP`
     ),
     querySlpr<{
@@ -529,7 +554,7 @@ export async function lookupPlate(
     }>(
       `SELECT ID, LP, LOG_DATE, STATUS, CAM_ID, FILE
        FROM \`log\`
-       WHERE LP = ${sqlStr(key)}
+       WHERE LP = ${sqlStr(key)}${dateClause}
        ORDER BY LOG_DATE DESC, ID DESC
        LIMIT ${PLATE_LOOKUP_RECENT_LIMIT}`
     ),

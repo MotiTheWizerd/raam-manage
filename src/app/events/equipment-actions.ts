@@ -1,5 +1,6 @@
 "use server";
 
+import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 
@@ -27,6 +28,7 @@ export type EquipmentLoanRow = {
   lobbyist_name: string;
   is_returned: number;
   returned_at: string | null;
+  returned_by: string;
   comment: string | null;
   created_at: string;
 };
@@ -60,7 +62,7 @@ const LOAN_SELECT = `
     a.id            AS apartment_id,
     a.number        AS apartment_number,
     el.type, el.quantity, el.lobbyist_name,
-    el.is_returned, el.returned_at, el.comment, el.created_at
+    el.is_returned, el.returned_at, el.returned_by, el.comment, el.created_at
   FROM equipment_loans el
   LEFT JOIN residents r ON r.id = el.resident_id
   LEFT JOIN apartments a ON a.id = r.apartment_id
@@ -215,7 +217,12 @@ export async function createEquipmentLoan(
     return fail("כמות לא חוקית");
   }
 
-  const lobbyistName = String(formData.get("lobbyist_name") ?? "").trim();
+  // Pre-filled client-side with the current lobbyist; fall back to the session
+  // user so the acting lobbyist is always recorded even if the field is blank.
+  const lobbyistName =
+    String(formData.get("lobbyist_name") ?? "").trim() ||
+    (await getCurrentUser())?.lobbyist_name?.trim() ||
+    "";
   if (!lobbyistName) return fail("שם הפקיד נדרש");
 
   const comment = String(formData.get("comment") ?? "").trim() || null;
@@ -245,14 +252,18 @@ export async function markEquipmentReturned(
   const id = parseInt(idRaw, 10);
   if (Number.isNaN(id)) return fail("השאלה לא חוקית");
 
+  // Stamp the lobbyist who processed the return — from the session, automatic.
+  const returnedBy = (await getCurrentUser())?.lobbyist_name?.trim() ?? "";
+
   const result = db
     .prepare(
       `UPDATE equipment_loans
        SET is_returned = 1,
-           returned_at = CURRENT_TIMESTAMP
+           returned_at = CURRENT_TIMESTAMP,
+           returned_by = ?
        WHERE id = ? AND is_returned = 0`
     )
-    .run(id);
+    .run(returnedBy, id);
 
   if (result.changes === 0) return fail("ההשאלה לא נמצאה או כבר הוחזרה");
 

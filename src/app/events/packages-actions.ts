@@ -1,5 +1,6 @@
 "use server";
 
+import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 
@@ -28,6 +29,7 @@ export type PackageRow = {
   delivered_by: string;
   received_by: string;
   delivered_to: string | null;
+  delivered_by_lobbyist: string;
   is_delivered: number;
   comment: string | null;
   created_at: string;
@@ -63,6 +65,7 @@ const PACKAGE_SELECT = `
     a.id            AS apartment_id,
     a.number        AS apartment_number,
     p.type, p.direction, p.delivered_by, p.received_by, p.delivered_to,
+    p.delivered_by_lobbyist,
     p.is_delivered, p.comment,
     p.created_at, p.delivered_at
   FROM packages p
@@ -226,7 +229,12 @@ export async function createPackage(
   const deliveredBy =
     String(formData.get("delivered_by") ?? "").trim() || "שליח";
 
-  const receivedBy = String(formData.get("received_by") ?? "").trim();
+  // Pre-filled client-side with the current lobbyist; fall back to the session
+  // user so the acting lobbyist is always recorded even if the field is blank.
+  const receivedBy =
+    String(formData.get("received_by") ?? "").trim() ||
+    (await getCurrentUser())?.lobbyist_name?.trim() ||
+    "";
   if (!receivedBy) return fail("שם הפקיד שקיבל את החבילה נדרש");
 
   const comment = String(formData.get("comment") ?? "").trim() || null;
@@ -267,15 +275,19 @@ export async function markPackageDelivered(
   const deliveredTo = String(formData.get("delivered_to") ?? "").trim();
   if (!deliveredTo) return fail("שם מקבל החבילה נדרש");
 
+  // Stamp the lobbyist who handed it out — taken from the session, automatic.
+  const handedBy = (await getCurrentUser())?.lobbyist_name?.trim() ?? "";
+
   const result = db
     .prepare(
       `UPDATE packages
        SET is_delivered = 1,
            delivered_to = ?,
+           delivered_by_lobbyist = ?,
            delivered_at = CURRENT_TIMESTAMP
        WHERE id = ? AND is_delivered = 0`
     )
-    .run(deliveredTo, id);
+    .run(deliveredTo, handedBy, id);
 
   if (result.changes === 0) return fail("החבילה לא נמצאה או כבר נמסרה");
 

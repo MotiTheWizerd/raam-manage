@@ -1,5 +1,6 @@
 "use server";
 
+import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 
@@ -225,7 +226,12 @@ export async function logKeyEvent(
     residentId = parsed;
   }
 
-  const lobbyistName = String(formData.get("lobbyist_name") ?? "").trim();
+  // Pre-filled client-side with the current lobbyist; fall back to the session
+  // user so the acting lobbyist is always recorded even if the field is blank.
+  const lobbyistName =
+    String(formData.get("lobbyist_name") ?? "").trim() ||
+    (await getCurrentUser())?.lobbyist_name?.trim() ||
+    "";
   if (!lobbyistName) return fail("שם הפקיד נדרש");
 
   const commentRaw = String(formData.get("comment") ?? "").trim();

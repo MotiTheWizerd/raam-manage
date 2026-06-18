@@ -149,6 +149,7 @@ CREATE TABLE IF NOT EXISTS packages (
   delivered_by    TEXT NOT NULL DEFAULT 'שליח',
   received_by     TEXT NOT NULL DEFAULT '',
   delivered_to    TEXT,
+  delivered_by_lobbyist TEXT NOT NULL DEFAULT '',
   is_delivered    INTEGER NOT NULL DEFAULT 0,
   comment         TEXT,
   created_at      TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -329,6 +330,8 @@ function applySchemaEvolution(db: Database.Database) {
   ensureColumn(db, "apartment_keys", "is_in_lobby", "INTEGER NOT NULL DEFAULT 1");
   ensureColumn(db, "packages", "received_by", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "packages", "delivered_to", "TEXT");
+  ensureColumn(db, "packages", "delivered_by_lobbyist", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "equipment_loans", "returned_by", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "guest_parking", "lobbyist_name", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "guest_parking", "guest_name", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "guest_parking", "comment", "TEXT");
@@ -350,6 +353,7 @@ function applySchemaEvolution(db: Database.Database) {
       lobbyist_name   TEXT NOT NULL DEFAULT '',
       is_returned     INTEGER NOT NULL DEFAULT 0,
       returned_at     TEXT,
+      returned_by     TEXT NOT NULL DEFAULT '',
       comment         TEXT,
       created_at      TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );

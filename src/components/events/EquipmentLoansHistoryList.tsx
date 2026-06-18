@@ -117,6 +117,9 @@ export function EquipmentLoansHistoryList({
                         · הוחזרה: {formatTimestamp(r.returned_at)}
                       </span>
                     )}
+                    {returned && r.returned_by && (
+                      <span>· קיבל בחזרה: {r.returned_by}</span>
+                    )}
                     {!returned && (
                       <span className="text-amber-700 dark:text-amber-300">
                         · פתוחה

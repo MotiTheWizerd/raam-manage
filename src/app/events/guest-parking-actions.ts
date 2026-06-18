@@ -1,5 +1,6 @@
 "use server";
 
+import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { normalizePlate } from "@/lib/plate";
 import { revalidatePath } from "next/cache";
@@ -147,7 +148,12 @@ export async function createGuestParking(
   const guestName = String(formData.get("guest_name") ?? "").trim();
   if (!guestName) return fail("שם האורח נדרש");
 
-  const lobbyistName = String(formData.get("lobbyist_name") ?? "").trim();
+  // Pre-filled client-side with the current lobbyist; fall back to the session
+  // user so the acting lobbyist is always recorded even if the field is blank.
+  const lobbyistName =
+    String(formData.get("lobbyist_name") ?? "").trim() ||
+    (await getCurrentUser())?.lobbyist_name?.trim() ||
+    "";
   if (!lobbyistName) return fail("שם הפקיד נדרש");
 
   const comment = String(formData.get("comment") ?? "").trim() || null;

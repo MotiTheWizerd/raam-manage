@@ -129,6 +129,9 @@ export function PackagesHistoryList({ rows, onDeleted, onMarkDelivered }: Props)
                     {delivered && r.delivered_to && (
                       <span>· נמסרה ל: {r.delivered_to}</span>
                     )}
+                    {delivered && r.delivered_by_lobbyist && (
+                      <span>· מסר: {r.delivered_by_lobbyist}</span>
+                    )}
                     {!delivered && (
                       <span className="text-amber-700 dark:text-amber-300">
                         · ממתינה

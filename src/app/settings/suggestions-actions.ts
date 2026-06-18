@@ -1,5 +1,6 @@
 "use server";
 
+import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 
 export type SuggestionFormState = {
@@ -65,14 +66,15 @@ function parseStatus(v: unknown): SuggestionStatus | null {
     : null;
 }
 
-function parseFields(formData: FormData):
+async function parseFields(formData: FormData): Promise<
   | {
       title: string;
       body: string;
       category: SuggestionCategory;
       submitted_by: string;
     }
-  | { error: string } {
+  | { error: string }
+> {
   const title = String(formData.get("title") ?? "").trim();
   if (!title) return { error: "כותרת נדרשת" };
 
@@ -82,7 +84,12 @@ function parseFields(formData: FormData):
   const category = parseCategory(formData.get("category"));
   if (!category) return { error: "קטגוריה לא חוקית" };
 
-  const submitted_by = String(formData.get("submitted_by") ?? "").trim();
+  // Pre-filled client-side with the current lobbyist; fall back to the session
+  // user so the submitter is always recorded even if the field is blank.
+  const submitted_by =
+    String(formData.get("submitted_by") ?? "").trim() ||
+    (await getCurrentUser())?.lobbyist_name?.trim() ||
+    "";
   if (!submitted_by) return { error: "שם המגיש נדרש" };
 
   return { title, body, category, submitted_by };
@@ -92,7 +99,7 @@ export async function createSuggestion(
   _prev: SuggestionFormState,
   formData: FormData
 ): Promise<SuggestionFormState> {
-  const parsed = parseFields(formData);
+  const parsed = await parseFields(formData);
   if ("error" in parsed) return fail(parsed.error);
 
   db.prepare(

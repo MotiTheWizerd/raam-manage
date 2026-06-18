@@ -9,6 +9,7 @@ import {
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type ReactNode,
@@ -36,6 +37,8 @@ export type SheetColumn<T> = {
   align?: "start" | "center" | "end";
   /** Optional fixed width (e.g. "8rem" or 120). */
   width?: number | string;
+  /** Cap how wide the column grows; content wraps instead of stretching. */
+  maxWidth?: number | string;
   /** Extra classes for the body cells in this column. */
   cellClassName?: string;
   /** When true (and onSort is provided), the header is a sort button. */
@@ -57,7 +60,18 @@ type Props<T> = {
   className?: string;
   /** Shown when there are no rows. */
   emptyText?: string;
+  /**
+   * Rows whose content is taller than this (px) collapse to it with a fade and
+   * a one-click expand toggle. Set to 0 to disable clamping. Default 100.
+   */
+  maxCellHeight?: number;
 };
+
+function setsEqual(a: Set<number>, b: Set<number>): boolean {
+  if (a.size !== b.size) return false;
+  for (const x of a) if (!b.has(x)) return false;
+  return true;
+}
 
 const ALIGN_CLASS: Record<NonNullable<SheetColumn<unknown>["align"]>, string> = {
   start: "text-start",
@@ -79,16 +93,67 @@ export function SheetTable<T>({
   onSort,
   className,
   emptyText = "אין נתונים להצגה",
+  maxCellHeight = 100,
 }: Props<T>) {
   // Selected cell as [rowIndex, colIndex]; null = nothing selected.
   const [selected, setSelected] = useState<{ r: number; c: number } | null>(
     null
   );
+  // Rows tall enough to be clamped, and which of those the user has opened.
+  const [overflowing, setOverflowing] = useState<Set<number>>(new Set());
+  const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const scrollRef = useRef<HTMLDivElement>(null);
   const selectedCellRef = useRef<HTMLTableCellElement>(null);
+  const tableRef = useRef<HTMLTableElement>(null);
 
   const colCount = columns.length;
   const rowCount = rows.length;
+  const clampEnabled = maxCellHeight > 0;
+
+  const toggleExpand = useCallback((r: number) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(r)) next.delete(r);
+      else next.add(r);
+      return next;
+    });
+  }, []);
+
+  // Detect which rows have any cell taller than the clamp. scrollHeight reports
+  // the FULL content height regardless of the clamp, so this stays correct
+  // whether a row is currently collapsed or expanded.
+  const measure = useCallback(() => {
+    if (!clampEnabled) return;
+    const root = tableRef.current;
+    if (!root) return;
+    const next = new Set<number>();
+    root.querySelectorAll<HTMLElement>("[data-sheet-cell]").forEach((el) => {
+      if (el.scrollHeight - maxCellHeight > 1) {
+        const r = Number(el.dataset.row);
+        if (!Number.isNaN(r)) next.add(r);
+      }
+    });
+    setOverflowing((prev) => (setsEqual(prev, next) ? prev : next));
+  }, [clampEnabled, maxCellHeight]);
+
+  useLayoutEffect(() => {
+    measure();
+  }, [measure, rows]);
+
+  // Re-measure on resize (wrapping changes cell heights).
+  useEffect(() => {
+    if (!clampEnabled) return;
+    let raf = 0;
+    const onResize = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(measure);
+    };
+    window.addEventListener("resize", onResize);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", onResize);
+    };
+  }, [clampEnabled, measure]);
 
   // Keyboard navigation. In RTL the columns run right-to-left, so the visual
   // ArrowRight moves toward column 0 and ArrowLeft toward the last column.
@@ -146,7 +211,7 @@ export function SheetTable<T>({
         className
       )}
     >
-      <table className="border-separate border-spacing-0 text-sm">
+      <table ref={tableRef} className="border-separate border-spacing-0 text-sm">
         <thead>
           <tr>
             {/* Corner cell above the row numbers. */}
@@ -202,17 +267,40 @@ export function SheetTable<T>({
           </tr>
         </thead>
         <tbody>
-          {rows.map((row, r) => (
+          {rows.map((row, r) => {
+            const isOverflowing = overflowing.has(r);
+            const isExpanded = expanded.has(r);
+            const clamp = clampEnabled && isOverflowing && !isExpanded;
+            return (
             <tr key={rowKey(row, r)} className="group">
-              {/* Row number — sticky grey header column, like Excel. */}
+              {/* Row number — sticky grey header column, like Excel. Doubles as
+                  the expand toggle when the row is clamped. */}
               <td
                 className={cn(
-                  "sticky start-0 z-10 select-none px-2 py-2 text-center text-xs tabular-nums text-zinc-500",
+                  "sticky start-0 z-10 select-none px-1 py-2 align-top text-center text-xs tabular-nums text-zinc-500",
                   CELL_BORDER,
                   HEADER_BG
                 )}
               >
-                {r + 1}
+                <div className="flex flex-col items-center gap-0.5">
+                  <span>{r + 1}</span>
+                  {isOverflowing && (
+                    <button
+                      type="button"
+                      onClick={() => toggleExpand(r)}
+                      aria-label={isExpanded ? "כווץ שורה" : "הרחב שורה"}
+                      aria-expanded={isExpanded}
+                      title={isExpanded ? "כווץ" : "הצג הכול"}
+                      className="inline-flex h-5 w-5 items-center justify-center rounded text-zinc-500 transition-colors hover:bg-zinc-200 hover:text-zinc-800"
+                    >
+                      {isExpanded ? (
+                        <ChevronUp size={14} />
+                      ) : (
+                        <ChevronDown size={14} />
+                      )}
+                    </button>
+                  )}
+                </div>
               </td>
               {columns.map((col, c) => {
                 const isSelected = selected?.r === r && selected?.c === c;
@@ -238,12 +326,29 @@ export function SheetTable<T>({
                         "bg-blue-50 ring-2 ring-inset ring-blue-500 group-hover:bg-blue-50"
                     )}
                   >
-                    {content}
+                    <div
+                      data-sheet-cell
+                      data-row={r}
+                      className={cn(
+                        "relative break-words",
+                        clamp && "overflow-hidden"
+                      )}
+                      style={{
+                        ...(col.maxWidth ? { maxWidth: col.maxWidth } : null),
+                        ...(clamp ? { maxHeight: maxCellHeight } : null),
+                      }}
+                    >
+                      {content}
+                      {clamp && (
+                        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-6 bg-gradient-to-t from-white to-transparent group-hover:from-zinc-50" />
+                      )}
+                    </div>
                   </td>
                 );
               })}
             </tr>
-          ))}
+            );
+          })}
         </tbody>
       </table>
     </div>

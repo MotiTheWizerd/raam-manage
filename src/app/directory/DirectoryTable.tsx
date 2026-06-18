@@ -133,11 +133,13 @@ export function DirectoryTable({ rows }: Props) {
     {
       key: "owners",
       header: "בעלי הדירות",
+      maxWidth: "12rem",
       render: (r) => <Lines items={r.owners} />,
     },
     {
       key: "occupants",
       header: "רשימת דיירים",
+      maxWidth: "12rem",
       render: (r) => <Lines items={r.occupants} muted />,
     },
     {
@@ -161,6 +163,7 @@ export function DirectoryTable({ rows }: Props) {
     {
       key: "phones",
       header: "רשימת טלפונים",
+      maxWidth: "16rem",
       cellClassName: "text-xs",
       render: (r) =>
         r.phones.length === 0 ? (
@@ -182,7 +185,8 @@ export function DirectoryTable({ rows }: Props) {
     {
       key: "notes",
       header: "מידע נוסף",
-      cellClassName: "max-w-[16rem] text-xs opacity-70",
+      maxWidth: "16rem",
+      cellClassName: "text-xs opacity-70",
       render: (r) =>
         r.notes ? (
           <div className="whitespace-pre-wrap">{r.notes}</div>

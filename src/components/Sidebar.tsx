@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Building2, Cctv, ClipboardList, Crown, Home, MessageCircle, Settings, UserCog, Users } from "lucide-react";
+import { Building2, Cctv, ClipboardList, Crown, Home, MessageCircle, Rows3, Settings, UserCog, Users } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/cn";
@@ -23,6 +23,7 @@ const items: Item[] = [
   { label: "דירות", href: "/apartments", icon: Building2 },
   { label: "דיירים", href: "/renters", icon: Users },
   { label: "בעלי דירות", href: "/owners", icon: Crown },
+  { label: "מדריך הבניין", href: "/directory", icon: Rows3 },
   { label: "פקידי לובי", href: "/users", icon: UserCog, managerOnly: true },
   { label: "ווטסאפ", href: "/test/whatsapp", icon: MessageCircle },
   { label: "הגדרות", href: "/settings", icon: Settings, managerOnly: true },

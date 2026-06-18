@@ -14,7 +14,7 @@ import { VehiclesTab } from "./VehiclesTab";
 
 const TABS: TabItem[] = [
   { value: "vehicles", label: "ניהול אורחים" },
-  { value: "cars", label: "רכבים" },
+  { value: "cars", label: "ניהול רכבים" },
   { value: "packages", label: "ניהול חבילות" },
   { value: "keys", label: "ניהול מפתחות" },
   { value: "equipment", label: "השאלת ציוד" },

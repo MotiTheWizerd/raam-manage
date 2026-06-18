@@ -1,6 +1,6 @@
 "use client";
 
-import { Home, Search, Star, X } from "lucide-react";
+import { Home, KeyRound, Search, Star, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import {
   getApartmentKeysComment,
@@ -166,9 +166,20 @@ function KeysComment({ comment }: { comment: string | null }) {
   if (!comment) return null;
 
   return (
-    <section className="rounded-lg border border-black/10 dark:border-white/10 p-4 space-y-1">
-      <h2 className="text-sm font-medium opacity-80">הערת מפתחות</h2>
-      <p className="text-sm whitespace-pre-wrap opacity-80">{comment}</p>
+    <section className="flex gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4">
+      <KeyRound
+        size={18}
+        aria-hidden="true"
+        className="mt-0.5 shrink-0 text-amber-600 dark:text-amber-400"
+      />
+      <div className="space-y-0.5">
+        <h2 className="text-sm font-semibold text-amber-800 dark:text-amber-200">
+          הערת מפתחות
+        </h2>
+        <p className="text-sm whitespace-pre-wrap text-amber-900/90 dark:text-amber-100">
+          {comment}
+        </p>
+      </div>
     </section>
   );
 }

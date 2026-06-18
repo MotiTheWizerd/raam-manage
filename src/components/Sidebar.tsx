@@ -31,11 +31,21 @@ const items: Item[] = [
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 
+// Routes that force the sidebar collapsed for more horizontal room (e.g. the
+// wide Excel-style directory). Derived from the path, so the user's saved
+// preference is left untouched and restored automatically on leaving.
+const FORCE_COLLAPSE_ROUTES = ["/directory"];
+
 export function Sidebar() {
   const pathname = usePathname();
-  const collapsed = useSidebarCollapsed();
+  const collapsedPref = useSidebarCollapsed();
   const isManager = useIsManager();
   const visibleItems = items.filter((it) => !it.managerOnly || isManager);
+
+  const forceCollapsed = FORCE_COLLAPSE_ROUTES.some((r) =>
+    pathname.startsWith(r)
+  );
+  const collapsed = forceCollapsed || collapsedPref;
 
   return (
     <motion.aside
@@ -50,7 +60,9 @@ export function Sidebar() {
           collapsed ? "justify-center" : "justify-end px-1"
         )}
       >
-        <SidebarToggle />
+        {/* While a route forces the sidebar collapsed, the toggle would be
+            inert — hide it. It returns automatically off the route. */}
+        {!forceCollapsed && <SidebarToggle />}
       </div>
 
       <nav className="flex flex-col gap-1 text-sm">

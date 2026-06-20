@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { ChevronLeft, ChevronRight, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import NextImage from "next/image";
@@ -139,19 +139,7 @@ export function Gallery({ images, open, onClose, startIndex = 0 }: Props) {
                 transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
                 onClick={(e) => e.stopPropagation()}
               >
-                <NextImage
-                  src={current.src}
-                  alt={current.alt ?? "תמונה"}
-                  width={1600}
-                  height={1200}
-                  unoptimized
-                  className="max-h-[78vh] w-auto max-w-full object-contain"
-                />
-                {current.caption && (
-                  <div className="absolute inset-x-0 bottom-0 flex flex-col items-center bg-black/35 px-3 py-2 text-center text-white backdrop-blur-md">
-                    {current.caption}
-                  </div>
-                )}
+                <GalleryStageImage image={current} />
               </motion.div>
             </AnimatePresence>
           </div>
@@ -191,5 +179,41 @@ export function Gallery({ images, open, onClose, startIndex = 0 }: Props) {
       )}
     </AnimatePresence>,
     document.body
+  );
+}
+
+/**
+ * A single stage image with its own load state. Lives inside the per-index
+ * keyed wrapper, so it remounts on navigation and the spinner shows again for
+ * each new image until it's decoded.
+ */
+function GalleryStageImage({ image }: { image: GalleryImage }) {
+  const [loaded, setLoaded] = useState(false);
+
+  return (
+    <>
+      {!loaded && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <Loader2 size={40} className="animate-spin text-white/70" />
+        </div>
+      )}
+      <NextImage
+        src={image.src}
+        alt={image.alt ?? "תמונה"}
+        width={1600}
+        height={1200}
+        unoptimized
+        onLoad={() => setLoaded(true)}
+        className={cn(
+          "max-h-[78vh] w-auto max-w-full object-contain transition-opacity duration-300",
+          loaded ? "opacity-100" : "opacity-0"
+        )}
+      />
+      {image.caption && loaded && (
+        <div className="absolute inset-x-0 bottom-0 flex flex-col items-center bg-black/35 px-3 py-2 text-center text-white backdrop-blur-md">
+          {image.caption}
+        </div>
+      )}
+    </>
   );
 }

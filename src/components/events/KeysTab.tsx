@@ -1,6 +1,6 @@
 "use client";
 
-import { Home, KeyRound, Pencil, Plus, Search, Star, X } from "lucide-react";
+import { Home, KeyRound, Pencil, Plus, Search, Star, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -15,6 +15,7 @@ import {
   type KeyHistoryRow,
 } from "@/app/events/actions";
 import { Button } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { ResidentLink } from "@/components/entity-links";
 import { Input } from "@/components/ui/Input";
 import { Pagination } from "@/components/ui/Pagination";
@@ -180,6 +181,8 @@ function KeysComment({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(comment ?? "");
   const [saving, setSaving] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   // Keep the draft aligned with the live value while not editing (e.g. when
   // the selected apartment changes).
@@ -203,6 +206,20 @@ function KeysComment({
   function startEditing() {
     setDraft(comment ?? "");
     setEditing(true);
+  }
+
+  async function handleDelete() {
+    setDeleting(true);
+    const res = await updateApartmentKeysComment(apartmentId, "");
+    setDeleting(false);
+    if ("error" in res) {
+      toast.error(res.error);
+      return;
+    }
+    onChange(null);
+    setConfirmingDelete(false);
+    setEditing(false);
+    toast.success("הערת המפתחות נמחקה");
   }
 
   if (editing) {
@@ -268,20 +285,41 @@ function KeysComment({
           <h2 className="text-sm font-semibold text-amber-800 dark:text-amber-200">
             הערת מפתחות
           </h2>
-          <button
-            type="button"
-            onClick={startEditing}
-            aria-label="עריכת הערת מפתחות"
-            title="עריכה"
-            className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-amber-700/70 transition-colors hover:bg-amber-500/15 hover:text-amber-800 dark:text-amber-300/70 dark:hover:text-amber-200"
-          >
-            <Pencil size={14} />
-          </button>
+          <div className="flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              onClick={startEditing}
+              aria-label="עריכת הערת מפתחות"
+              title="עריכה"
+              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-amber-700/70 transition-colors hover:bg-amber-500/15 hover:text-amber-800 dark:text-amber-300/70 dark:hover:text-amber-200"
+            >
+              <Pencil size={14} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirmingDelete(true)}
+              aria-label="מחיקת הערת מפתחות"
+              title="מחיקה"
+              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-amber-700/70 transition-colors hover:bg-red-500/15 hover:text-red-700 dark:text-amber-300/70 dark:hover:text-red-300"
+            >
+              <Trash2 size={14} />
+            </button>
+          </div>
         </div>
         <p className="text-sm whitespace-pre-wrap text-amber-900/90 dark:text-amber-100">
           {comment}
         </p>
       </div>
+
+      <ConfirmDialog
+        open={confirmingDelete}
+        onClose={() => setConfirmingDelete(false)}
+        onConfirm={handleDelete}
+        title="מחיקת הערת מפתחות"
+        description="למחוק את הערת המפתחות של הדירה?"
+        confirmLabel="מחק"
+        pending={deleting}
+      />
     </section>
   );
 }

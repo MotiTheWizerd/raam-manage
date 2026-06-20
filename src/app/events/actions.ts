@@ -63,6 +63,27 @@ export async function getApartmentKeysComment(
   return row?.keys_comment ?? null;
 }
 
+// Edit the apartment's keys comment straight from the events Keys tab. Writes
+// the same apartments.keys_comment column the apartment page edits, so both
+// stay in sync.
+export async function updateApartmentKeysComment(
+  apartmentId: number,
+  comment: string
+): Promise<{ ok: true } | { error: string }> {
+  const value = comment.trim() || null;
+
+  const result = db
+    .prepare(
+      `UPDATE apartments SET keys_comment = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
+    )
+    .run(value, apartmentId);
+  if (result.changes === 0) return { error: "דירה לא נמצאה" };
+
+  revalidatePath("/events");
+  revalidatePath(`/apartments/${apartmentId}`);
+  return { ok: true };
+}
+
 export type KeyHistoryRow = {
   id: number;
   created_at: string;

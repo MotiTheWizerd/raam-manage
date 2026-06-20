@@ -1,13 +1,15 @@
 "use client";
 
-import { Home, KeyRound, Search, Star, X } from "lucide-react";
+import { Home, KeyRound, Pencil, Plus, Search, Star, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
 import {
   getApartmentKeysComment,
   getApartmentKeysForEvents,
   getApartmentResidents,
   getKeysHistoryPage,
   searchKeysHistory,
+  updateApartmentKeysComment,
   type ApartmentResidentOption,
   type EventsKeyRow,
   type KeyHistoryRow,
@@ -92,7 +94,11 @@ export function KeysTab({ apartmentId }: Props) {
     <div className="space-y-6">
       {apartmentId !== null ? (
         <>
-          <KeysComment comment={keysComment} />
+          <KeysComment
+            comment={keysComment}
+            apartmentId={apartmentId}
+            onChange={setKeysComment}
+          />
           <KeysSection
             keys={keys}
             onLogEvent={setActiveKey}
@@ -162,8 +168,93 @@ export function KeysTab({ apartmentId }: Props) {
   );
 }
 
-function KeysComment({ comment }: { comment: string | null }) {
-  if (!comment) return null;
+function KeysComment({
+  comment,
+  apartmentId,
+  onChange,
+}: {
+  comment: string | null;
+  apartmentId: number;
+  onChange: (next: string | null) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(comment ?? "");
+  const [saving, setSaving] = useState(false);
+
+  // Keep the draft aligned with the live value while not editing (e.g. when
+  // the selected apartment changes).
+  useEffect(() => {
+    if (!editing) setDraft(comment ?? "");
+  }, [comment, editing]);
+
+  async function handleSave() {
+    setSaving(true);
+    const res = await updateApartmentKeysComment(apartmentId, draft);
+    setSaving(false);
+    if ("error" in res) {
+      toast.error(res.error);
+      return;
+    }
+    onChange(draft.trim() || null);
+    setEditing(false);
+    toast.success("הערת המפתחות נשמרה");
+  }
+
+  function startEditing() {
+    setDraft(comment ?? "");
+    setEditing(true);
+  }
+
+  if (editing) {
+    return (
+      <section className="flex gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4">
+        <KeyRound
+          size={18}
+          aria-hidden="true"
+          className="mt-0.5 shrink-0 text-amber-600 dark:text-amber-400"
+        />
+        <div className="flex-1 space-y-2">
+          <h2 className="text-sm font-semibold text-amber-800 dark:text-amber-200">
+            הערת מפתחות
+          </h2>
+          <textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            autoFocus
+            rows={3}
+            placeholder="הערה לגבי המפתחות של הדירה"
+            className="w-full resize-y rounded-md border border-amber-500/40 bg-white/70 px-3 py-2 text-sm text-amber-900 placeholder:text-amber-900/40 focus:outline-none focus:ring-2 focus:ring-amber-500/40 dark:bg-black/20 dark:text-amber-100 dark:placeholder:text-amber-100/40"
+          />
+          <div className="flex items-center gap-2">
+            <Button size="sm" onClick={handleSave} disabled={saving}>
+              {saving ? "שומר..." : "שמירה"}
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setEditing(false)}
+              disabled={saving}
+            >
+              ביטול
+            </Button>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  if (!comment) {
+    return (
+      <button
+        type="button"
+        onClick={startEditing}
+        className="flex w-full items-center gap-2 rounded-lg border border-dashed border-amber-500/40 px-4 py-2.5 text-sm text-amber-700/80 transition-colors hover:bg-amber-500/10 dark:text-amber-300/80"
+      >
+        <Plus size={15} aria-hidden="true" />
+        הוסף הערת מפתחות
+      </button>
+    );
+  }
 
   return (
     <section className="flex gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4">
@@ -172,10 +263,21 @@ function KeysComment({ comment }: { comment: string | null }) {
         aria-hidden="true"
         className="mt-0.5 shrink-0 text-amber-600 dark:text-amber-400"
       />
-      <div className="space-y-0.5">
-        <h2 className="text-sm font-semibold text-amber-800 dark:text-amber-200">
-          הערת מפתחות
-        </h2>
+      <div className="flex-1 space-y-0.5">
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold text-amber-800 dark:text-amber-200">
+            הערת מפתחות
+          </h2>
+          <button
+            type="button"
+            onClick={startEditing}
+            aria-label="עריכת הערת מפתחות"
+            title="עריכה"
+            className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-amber-700/70 transition-colors hover:bg-amber-500/15 hover:text-amber-800 dark:text-amber-300/70 dark:hover:text-amber-200"
+          >
+            <Pencil size={14} />
+          </button>
+        </div>
         <p className="text-sm whitespace-pre-wrap text-amber-900/90 dark:text-amber-100">
           {comment}
         </p>

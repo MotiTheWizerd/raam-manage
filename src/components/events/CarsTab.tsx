@@ -161,6 +161,60 @@ function CarDetails({
         </div>
       </div>
 
+      {src ? (
+        <div className="mb-3 space-y-2">
+          <div className="mx-auto h-8 max-w-40 overflow-hidden rounded border border-black/10 bg-black dark:border-white/10">
+            <NextImage
+              src={src}
+              alt={`לוחית רישוי ${row.plate}`}
+              width={192}
+              height={32}
+              unoptimized
+              className="h-full w-full object-cover"
+            />
+          </div>
+          <div className="relative overflow-hidden rounded-md border border-black/10 bg-black dark:border-white/10">
+            <NextImage
+              src={src}
+              alt={`תמונת רכב ${row.plate}`}
+              width={560}
+              height={360}
+              unoptimized
+              className="max-h-[240px] w-full object-contain"
+            />
+            {(row.guest || row.registeredOwner) && (
+              <div className="absolute inset-x-0 bottom-0 flex flex-col items-center bg-black/35 px-3 py-1.5 text-center text-white backdrop-blur-md">
+                <span className="text-sm font-semibold leading-tight">
+                  {row.guest
+                    ? `אורח מזוהה: ${row.guest.guestName || "אורח ידוע"}`
+                    : `רכב רשום: ${row.registeredOwner!.name}`}
+                </span>
+                {(row.guest
+                  ? row.guest.apartmentNumber || row.guest.residentName
+                  : row.registeredOwner!.apartment) && (
+                  <span className="text-xs leading-tight opacity-80">
+                    {row.guest
+                      ? [
+                          row.guest.apartmentNumber
+                            ? `דירה ${row.guest.apartmentNumber}`
+                            : null,
+                          row.guest.residentName,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")
+                      : `דירה ${row.registeredOwner!.apartment}`}
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="mb-3 rounded-md border border-dashed border-black/10 p-6 text-center text-sm opacity-60 dark:border-white/10">
+          אין תמונה לאירוע הזה
+        </div>
+      )}
+
       <div className="mb-3 grid grid-cols-[1fr_4.5rem] gap-2">
         <div className="space-y-2">
           <DetailRow label="מספר רישוי" value={<span dir="ltr">{row.plate}</span>} />
@@ -242,35 +296,6 @@ function CarDetails({
               </>
             )}
           </div>
-        </div>
-      )}
-
-      {src ? (
-        <div className="space-y-2">
-          <div className="mx-auto h-8 max-w-40 overflow-hidden rounded border border-black/10 bg-black dark:border-white/10">
-            <NextImage
-              src={src}
-              alt={`לוחית רישוי ${row.plate}`}
-              width={192}
-              height={32}
-              unoptimized
-              className="h-full w-full object-cover"
-            />
-          </div>
-          <div className="overflow-hidden rounded-md border border-black/10 bg-black dark:border-white/10">
-            <NextImage
-              src={src}
-              alt={`תמונת רכב ${row.plate}`}
-              width={560}
-              height={360}
-              unoptimized
-              className="max-h-[240px] w-full object-contain"
-            />
-          </div>
-        </div>
-      ) : (
-        <div className="rounded-md border border-dashed border-black/10 p-6 text-center text-sm opacity-60 dark:border-white/10">
-          אין תמונה לאירוע הזה
         </div>
       )}
 

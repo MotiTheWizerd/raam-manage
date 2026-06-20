@@ -63,6 +63,19 @@ export async function getApartmentKeysComment(
   return row?.keys_comment ?? null;
 }
 
+// Whether this apartment's residents must be phoned for approval before a
+// delivery/guest is sent up. Fetched fresh (not from the persisted selection)
+// so the events-page indicator never shows a stale flag.
+export async function getApartmentMustCall(
+  apartmentId: number
+): Promise<boolean> {
+  const row = db
+    .prepare("SELECT must_call FROM apartments WHERE id = ?")
+    .get(apartmentId) as { must_call: number } | undefined;
+
+  return row?.must_call === 1;
+}
+
 // Edit the apartment's keys comment straight from the events Keys tab. Writes
 // the same apartments.keys_comment column the apartment page edits, so both
 // stay in sync.

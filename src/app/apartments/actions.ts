@@ -59,6 +59,7 @@ type ParsedFields = {
   zone_id: number | null;
   notes: string | null;
   keys_comment: string | null;
+  must_call: 0 | 1;
   parking: CleanedAsset[];
   storage: CleanedAsset[];
   keys: CleanedKey[];
@@ -124,6 +125,7 @@ function parseFields(formData: FormData): ParsedFields | { error: string } {
   const notes = String(formData.get("notes") ?? "").trim() || null;
   const keys_comment =
     String(formData.get("keys_comment") ?? "").trim() || null;
+  const must_call: 0 | 1 = formData.get("must_call") ? 1 : 0;
 
   if (!number) return { error: "מספר דירה נדרש" };
 
@@ -154,6 +156,7 @@ function parseFields(formData: FormData): ParsedFields | { error: string } {
     zone_id,
     notes,
     keys_comment,
+    must_call,
     parking,
     storage,
     keys,
@@ -246,8 +249,8 @@ export async function createApartment(
 
   try {
     const insertApt = db.prepare(
-      `INSERT INTO apartments (number, floor, zone_id, notes, keys_comment)
-       VALUES (?, ?, ?, ?, ?) RETURNING id`
+      `INSERT INTO apartments (number, floor, zone_id, notes, keys_comment, must_call)
+       VALUES (?, ?, ?, ?, ?, ?) RETURNING id`
     );
 
     const tx = db.transaction(() => {
@@ -256,7 +259,8 @@ export async function createApartment(
         parsed.floor,
         parsed.zone_id,
         parsed.notes,
-        parsed.keys_comment
+        parsed.keys_comment,
+        parsed.must_call
       ) as { id: number };
       insertAssets(id, "parking", parsed.parking);
       insertAssets(id, "storage", parsed.storage);
@@ -297,7 +301,7 @@ export async function updateApartment(
     const updateApt = db.prepare(
       `UPDATE apartments
        SET number = ?, floor = ?, zone_id = ?, notes = ?, keys_comment = ?,
-           updated_at = CURRENT_TIMESTAMP
+           must_call = ?, updated_at = CURRENT_TIMESTAMP
        WHERE id = ?`
     );
     const deleteAssets = db.prepare(
@@ -317,6 +321,7 @@ export async function updateApartment(
         parsed.zone_id,
         parsed.notes,
         parsed.keys_comment,
+        parsed.must_call,
         id
       );
       if (result.changes === 0) {

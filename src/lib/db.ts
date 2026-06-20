@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS apartments (
   zone_id    INTEGER REFERENCES zones(id) ON DELETE SET NULL,
   notes      TEXT,
   keys_comment TEXT,
+  must_call  INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -324,6 +325,7 @@ function ensureColumn(
 
 function applySchemaEvolution(db: Database.Database) {
   ensureColumn(db, "apartments", "keys_comment", "TEXT");
+  ensureColumn(db, "apartments", "must_call", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "phones", "comment", "TEXT");
   ensureColumn(db, "apartment_keys", "is_default", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "apartment_keys", "is_active", "INTEGER NOT NULL DEFAULT 1");

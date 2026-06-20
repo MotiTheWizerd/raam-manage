@@ -19,6 +19,7 @@ export type ApartmentFormValues = {
   floor?: string;
   zone_id?: string;
   notes?: string;
+  must_call?: boolean;
 };
 
 type Props = {
@@ -121,6 +122,27 @@ export function ApartmentForm({
           defaultValue={initialValues?.notes ?? ""}
         />
       </Field>
+
+      <label
+        htmlFor="apt-must-call"
+        className="flex items-start gap-3 rounded-lg border border-red-500/40 bg-red-500/[0.06] p-3 cursor-pointer"
+      >
+        <input
+          id="apt-must-call"
+          name="must_call"
+          type="checkbox"
+          defaultChecked={initialValues?.must_call ?? false}
+          className="mt-0.5 h-4 w-4 shrink-0 accent-red-600"
+        />
+        <span className="space-y-0.5">
+          <span className="block text-sm font-semibold text-red-800 dark:text-red-200">
+            חובה להתקשר לדייר
+          </span>
+          <span className="block text-xs text-red-900/80 dark:text-red-100/80">
+            יש להתקשר לדייר ולקבל אישור לפני שמעלים שליח או אורח לדירה.
+          </span>
+        </span>
+      </label>
 
       {state.error && (
         <p className="text-sm text-red-600 dark:text-red-400">{state.error}</p>

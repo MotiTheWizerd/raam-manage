@@ -19,6 +19,7 @@ type Apartment = {
   zone_name: string | null;
   notes: string | null;
   keys_comment: string | null;
+  must_call: number;
 };
 
 type Asset = {
@@ -106,6 +107,7 @@ export function ApartmentDetail({
             zone_id:
               apartment.zone_id !== null ? String(apartment.zone_id) : "",
             notes: apartment.notes ?? "",
+            must_call: apartment.must_call === 1,
           }}
           initialParking={toAssetInit(parking)}
           initialStorage={toAssetInit(storage)}
@@ -127,6 +129,7 @@ export function ApartmentDetail({
                 zone_id:
                   apartment.zone_id !== null ? String(apartment.zone_id) : "",
                 notes: apartment.notes ?? "",
+                must_call: apartment.must_call === 1,
               }}
               initialParking={toAssetInit(parking)}
               initialStorage={toAssetInit(storage)}

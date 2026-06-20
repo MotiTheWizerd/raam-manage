@@ -2,8 +2,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { PhoneCall } from "lucide-react";
 import { ApartmentLink, ResidentLink } from "@/components/entity-links";
 import { useSelectedResident } from "@/components/PreferencesProvider";
+import { getApartmentMustCall } from "@/app/events/actions";
 import { Tabs, type TabItem } from "@/components/ui/Tabs";
 import { CarsTab } from "./CarsTab";
 import { EquipmentTab } from "./EquipmentTab";
@@ -51,6 +53,24 @@ export function EventsView() {
     const urlTab = searchParams.get("tab");
     if (urlTab && TAB_VALUES.has(urlTab) && urlTab !== tab) setTab(urlTab);
   }, [searchParams, tab]);
+
+  // Fetch the "must call the resident" flag fresh per apartment so the warning
+  // banner is never stale (the persisted selection could lag a flag change).
+  const apartmentId = resident?.apartment_id ?? null;
+  const [mustCall, setMustCall] = useState(false);
+  useEffect(() => {
+    if (apartmentId === null) {
+      setMustCall(false);
+      return;
+    }
+    let active = true;
+    getApartmentMustCall(apartmentId).then((flag) => {
+      if (active) setMustCall(flag);
+    });
+    return () => {
+      active = false;
+    };
+  }, [apartmentId]);
 
   const [guestPlatePrefill, setGuestPlatePrefill] = useState<{
     plate: string;
@@ -118,6 +138,24 @@ export function EventsView() {
           </p>
         )}
       </header>
+
+      {mustCall && resident && (
+        <div
+          role="alert"
+          className="flex items-center gap-3 rounded-lg border border-red-500/50 bg-red-500/10 p-4 text-red-800 dark:text-red-200"
+        >
+          <PhoneCall size={20} aria-hidden="true" className="shrink-0 text-red-600 dark:text-red-400" />
+          <div className="space-y-0.5">
+            <p className="text-sm font-semibold">
+              חובה להתקשר לדייר לפני העלאת שליח או אורח
+            </p>
+            <p className="text-xs opacity-80">
+              דירה {resident.apartment_number} — יש לקבל אישור טלפוני מהדייר לפני
+              שמעלים שליח או אורח.
+            </p>
+          </div>
+        </div>
+      )}
 
       <Tabs tabs={TABS} value={tab} onChange={selectTab} />
 

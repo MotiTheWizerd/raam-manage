@@ -325,7 +325,6 @@ function CarDetails({
             {
               src,
               alt: `תמונת רכב ${row.plate}`,
-              caption: identityCaption,
             },
           ]}
         />

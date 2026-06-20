@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { Loader2, Search } from "lucide-react";
+import { Loader2, PhoneCall, Search } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import {
   searchResidents,
@@ -102,6 +102,7 @@ export function SearchBar({ className }: Props) {
       apartment_number: r.apartment_number,
       floor: r.floor,
       zone_name: r.zone_name,
+      must_call: r.must_call,
     });
     setOpen(false);
     setQ("");
@@ -202,8 +203,23 @@ export function SearchBar({ className }: Props) {
                           : "text-foreground"
                       )}
                     >
-                      <span className="truncate font-medium">
-                        {r.first_name} {r.last_name}
+                      <span className="flex min-w-0 items-center gap-2">
+                        <span className="truncate font-medium">
+                          {r.first_name} {r.last_name}
+                        </span>
+                        {r.must_call === 1 && (
+                          <span
+                            className={cn(
+                              "inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold",
+                              isActive
+                                ? "bg-white/25 text-white"
+                                : "bg-red-500/15 text-red-700 dark:text-red-300"
+                            )}
+                          >
+                            <PhoneCall size={11} aria-hidden="true" />
+                            חייבים להתקשר
+                          </span>
+                        )}
                       </span>
                       <span
                         className={cn(

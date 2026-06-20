@@ -22,6 +22,7 @@ export type ResidentSearchResult = {
   apartment_number: string;
   floor: number | null;
   zone_name: string | null;
+  must_call: number;
 };
 
 export async function searchResidents(
@@ -36,6 +37,7 @@ export async function searchResidents(
               a.id     AS apartment_id,
               a.number AS apartment_number,
               a.floor  AS floor,
+              a.must_call AS must_call,
               z.name   AS zone_name
          FROM residents r
          JOIN apartments a ON a.id = r.apartment_id

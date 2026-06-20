@@ -1,6 +1,6 @@
 "use client";
 
-import { X } from "lucide-react";
+import { PhoneCall, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { inputBase } from "@/components/ui/Input";
 import {
@@ -28,8 +28,16 @@ export function SelectedResidentChip({ className }: Props) {
       role="status"
       aria-label="דייר נבחר"
     >
-      <span className="truncate font-medium">
-        {resident.first_name} {resident.last_name}
+      <span className="flex min-w-0 items-center gap-2">
+        <span className="truncate font-medium">
+          {resident.first_name} {resident.last_name}
+        </span>
+        {resident.must_call === 1 && (
+          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-red-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-red-700 dark:text-red-300">
+            <PhoneCall size={11} aria-hidden="true" />
+            חייבים להתקשר
+          </span>
+        )}
       </span>
       <span className="flex items-center gap-2 shrink-0">
         <span className="text-xs opacity-70">

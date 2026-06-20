@@ -10,6 +10,8 @@ export type SelectedResident = {
   apartment_number: string;
   floor: number | null;
   zone_name: string | null;
+  // Optional so previously-persisted selections (without it) still parse.
+  must_call?: number;
 };
 
 export type ActiveLobbyist = {

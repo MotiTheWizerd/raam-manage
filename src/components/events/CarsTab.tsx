@@ -22,6 +22,7 @@ import {
   type SlprCarEventRow,
 } from "@/app/events/cars-actions";
 import { Button } from "@/components/ui/Button";
+import { Gallery } from "@/components/ui/Gallery";
 import { Input } from "@/components/ui/Input";
 import { DeleteEventButton } from "@/components/events/DeleteEventButton";
 import { Pagination } from "@/components/ui/Pagination";
@@ -117,6 +118,34 @@ function CarDetails({
   onForgetGuest: () => void;
 }) {
   const src = imageUrl(row?.imagePath ?? null);
+  const [galleryOpen, setGalleryOpen] = useState(false);
+
+  const identityCaption =
+    row && (row.guest || row.registeredOwner) ? (
+      <>
+        <span className="text-sm font-semibold leading-tight">
+          {row.guest
+            ? `אורח מזוהה: ${row.guest.guestName || "אורח ידוע"}`
+            : `רכב רשום: ${row.registeredOwner!.name}`}
+        </span>
+        {(row.guest
+          ? row.guest.apartmentNumber || row.guest.residentName
+          : row.registeredOwner!.apartment) && (
+          <span className="text-xs leading-tight opacity-80">
+            {row.guest
+              ? [
+                  row.guest.apartmentNumber
+                    ? `דירה ${row.guest.apartmentNumber}`
+                    : null,
+                  row.guest.residentName,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")
+              : `דירה ${row.registeredOwner!.apartment}`}
+          </span>
+        )}
+      </>
+    ) : null;
 
   if (!row) {
     return (
@@ -173,41 +202,26 @@ function CarDetails({
               className="h-full w-full object-cover"
             />
           </div>
-          <div className="relative overflow-hidden rounded-md border border-black/10 bg-black dark:border-white/10">
+          <button
+            type="button"
+            onClick={() => setGalleryOpen(true)}
+            aria-label="הגדל תמונה"
+            className="group relative block w-full cursor-zoom-in overflow-hidden rounded-md border border-black/10 bg-black dark:border-white/10"
+          >
             <NextImage
               src={src}
               alt={`תמונת רכב ${row.plate}`}
               width={560}
               height={360}
               unoptimized
-              className="max-h-[240px] w-full object-contain"
+              className="max-h-[240px] w-full object-contain transition-transform duration-200 group-hover:scale-[1.02]"
             />
-            {(row.guest || row.registeredOwner) && (
+            {identityCaption && (
               <div className="absolute inset-x-0 bottom-0 flex flex-col items-center bg-black/35 px-3 py-1.5 text-center text-white backdrop-blur-md">
-                <span className="text-sm font-semibold leading-tight">
-                  {row.guest
-                    ? `אורח מזוהה: ${row.guest.guestName || "אורח ידוע"}`
-                    : `רכב רשום: ${row.registeredOwner!.name}`}
-                </span>
-                {(row.guest
-                  ? row.guest.apartmentNumber || row.guest.residentName
-                  : row.registeredOwner!.apartment) && (
-                  <span className="text-xs leading-tight opacity-80">
-                    {row.guest
-                      ? [
-                          row.guest.apartmentNumber
-                            ? `דירה ${row.guest.apartmentNumber}`
-                            : null,
-                          row.guest.residentName,
-                        ]
-                          .filter(Boolean)
-                          .join(" · ")
-                      : `דירה ${row.registeredOwner!.apartment}`}
-                  </span>
-                )}
+                {identityCaption}
               </div>
             )}
-          </div>
+          </button>
         </div>
       ) : (
         <div className="mb-3 rounded-md border border-dashed border-black/10 p-6 text-center text-sm opacity-60 dark:border-white/10">
@@ -302,6 +316,20 @@ function CarDetails({
       <div className="mt-2 truncate rounded-md border border-black/10 px-2 py-1.5 text-[11px] opacity-70 dark:border-white/10" dir="ltr">
         {row.imagePath || "-"}
       </div>
+
+      {src && (
+        <Gallery
+          open={galleryOpen}
+          onClose={() => setGalleryOpen(false)}
+          images={[
+            {
+              src,
+              alt: `תמונת רכב ${row.plate}`,
+              caption: identityCaption,
+            },
+          ]}
+        />
+      )}
     </aside>
   );
 }

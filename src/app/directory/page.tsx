@@ -16,8 +16,17 @@ type ResidentRow = {
   apartment_id: number;
   first_name: string;
   last_name: string;
-  type: "owner" | "renter";
   po_box: string | null;
+};
+
+// Authoritative apartment owners live in their own registry (the /owners page),
+// NOT in the residents table. These ids are apartment_owners ids, so they are
+// rendered as plain names (no resident link).
+type OwnerRow = {
+  id: number;
+  apartment_id: number;
+  first_name: string;
+  last_name: string;
 };
 
 type AssetRow = {
@@ -45,14 +54,23 @@ export default async function DirectoryPage() {
     )
     .all() as ApartmentRow[];
 
-  // Current residents only (move_out IS NULL), split by type downstream.
+  // Current residents only (move_out IS NULL) = everyone living in the apartment.
   const residents = db
     .prepare(
-      `SELECT id, apartment_id, first_name, last_name, type, po_box
+      `SELECT id, apartment_id, first_name, last_name, po_box
        FROM residents
        WHERE move_out IS NULL`
     )
     .all() as ResidentRow[];
+
+  // Registered owners from the dedicated apartment_owners registry.
+  const owners = db
+    .prepare(
+      `SELECT id, apartment_id, first_name, last_name
+       FROM apartment_owners
+       WHERE apartment_id IS NOT NULL`
+    )
+    .all() as OwnerRow[];
 
   const assets = db
     .prepare(
@@ -91,12 +109,16 @@ export default async function DirectoryPage() {
     });
   }
 
+  for (const o of owners) {
+    const row = byApartment.get(o.apartment_id);
+    if (!row) continue;
+    row.owners.push({ id: o.id, name: `${o.first_name} ${o.last_name}`.trim() });
+  }
+
   for (const r of residents) {
     const row = byApartment.get(r.apartment_id);
     if (!row) continue;
-    const person = { id: r.id, name: `${r.first_name} ${r.last_name}`.trim() };
-    if (r.type === "owner") row.owners.push(person);
-    else row.occupants.push(person);
+    row.occupants.push({ id: r.id, name: `${r.first_name} ${r.last_name}`.trim() });
     const poBox = r.po_box?.trim();
     if (poBox && !row.po_boxes.includes(poBox)) row.po_boxes.push(poBox);
   }

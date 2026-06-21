@@ -142,7 +142,9 @@ export function DirectoryTable({ rows }: Props) {
       key: "owners",
       header: "בעלי הדירות",
       maxWidth: "12rem",
-      render: (r) => <PeopleLines people={r.owners} />,
+      // Owners come from the apartment_owners registry (not residents), so they
+      // are plain names — there is no per-owner detail page to link to.
+      render: (r) => <Lines items={r.owners.map((o) => o.name)} />,
     },
     {
       key: "occupants",

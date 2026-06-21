@@ -111,7 +111,7 @@ export function Gallery({ images, open, onClose, startIndex = 0 }: Props) {
                     prev();
                   }}
                   aria-label="הקודם"
-                  className="absolute end-2 top-1/2 z-10 -translate-y-1/2 inline-flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
+                  className="absolute start-2 top-1/2 z-10 -translate-y-1/2 inline-flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
                 >
                   <ChevronRight size={26} />
                 </button>
@@ -122,7 +122,7 @@ export function Gallery({ images, open, onClose, startIndex = 0 }: Props) {
                     next();
                   }}
                   aria-label="הבא"
-                  className="absolute start-2 top-1/2 z-10 -translate-y-1/2 inline-flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
+                  className="absolute end-2 top-1/2 z-10 -translate-y-1/2 inline-flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
                 >
                   <ChevronLeft size={26} />
                 </button>

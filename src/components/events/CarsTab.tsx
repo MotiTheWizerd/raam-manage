@@ -2,7 +2,10 @@
 
 import {
   Building2,
+  ChevronLeft,
+  ChevronRight,
   ImageIcon,
+  Images,
   Loader2,
   Phone,
   RefreshCw,
@@ -15,9 +18,11 @@ import NextImage from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   forgetResidentGuest,
+  getCarPassageImages,
   getRecentCarEvents,
   lookupPlate,
   type CarBuilding,
+  type CarPassageImage,
   type PlateLookupResult,
   type SlprCarEventRow,
 } from "@/app/events/cars-actions";
@@ -120,6 +125,62 @@ function CarDetails({
   const src = imageUrl(row?.imagePath ?? null);
   const [galleryOpen, setGalleryOpen] = useState(false);
 
+  // All shots of this one car passage (the displayed event + sibling reads from
+  // other cameras within ~2 min), so a plate the gate cam missed can be read off
+  // another angle. Fetched per selected row; the SLPR query is tiny + indexed.
+  const [passage, setPassage] = useState<CarPassageImage[]>([]);
+  useEffect(() => {
+    let active = true;
+    setPassage([]);
+    const id = row?.id;
+    const plate = row?.plate;
+    if (!id || !plate) return;
+    getCarPassageImages(id, plate)
+      .then((imgs) => {
+        if (active) setPassage(imgs);
+      })
+      .catch(() => {
+        /* leave empty -> the gallery falls back to the single event image */
+      });
+    return () => {
+      active = false;
+    };
+  }, [row?.id, row?.plate]);
+
+  // Gallery sources: every passage shot when we have them, else just the event's
+  // own image. Each captioned with its camera + timestamp.
+  const galleryImages = useMemo(() => {
+    if (passage.length > 0) {
+      return passage
+        .map((e) => ({ url: imageUrl(e.imagePath), e }))
+        .filter((x): x is { url: string; e: CarPassageImage } => Boolean(x.url))
+        .map(({ url, e }) => ({
+          src: url,
+          alt: `תמונת רכב ${row?.plate ?? ""}`,
+          caption: `${formatCamera(e.cameraId)} · ${e.eventTime}`,
+        }));
+    }
+    return src ? [{ src, alt: `תמונת רכב ${row?.plate ?? ""}` }] : [];
+  }, [passage, src, row?.plate]);
+
+  // Open the gallery on the shot the lobby was already looking at.
+  const galleryStart = useMemo(() => {
+    const i = passage.findIndex((e) => e.id === row?.id);
+    return i >= 0 ? i : 0;
+  }, [passage, row?.id]);
+
+  // Which passage shot is shown inline; starts on the selected event, the hover
+  // arrows flip through the others without opening the full gallery.
+  const [viewIndex, setViewIndex] = useState(0);
+  useEffect(() => {
+    setViewIndex(galleryStart);
+  }, [galleryStart]);
+
+  const viewSrc =
+    passage.length > 0
+      ? imageUrl(passage[Math.min(viewIndex, passage.length - 1)]?.imagePath ?? null)
+      : src;
+
   const identityCaption =
     row && (row.guest || row.registeredOwner) ? (
       <>
@@ -190,11 +251,11 @@ function CarDetails({
         </div>
       </div>
 
-      {src ? (
+      {viewSrc ? (
         <div className="mb-3 space-y-2">
           <div className="mx-auto h-8 max-w-40 overflow-hidden rounded border border-black/10 bg-black dark:border-white/10">
             <NextImage
-              src={src}
+              src={viewSrc}
               alt={`לוחית רישוי ${row.plate}`}
               width={192}
               height={32}
@@ -202,26 +263,55 @@ function CarDetails({
               className="h-full w-full object-cover"
             />
           </div>
-          <button
-            type="button"
-            onClick={() => setGalleryOpen(true)}
-            aria-label="הגדל תמונה"
-            className="group relative block w-full cursor-zoom-in overflow-hidden rounded-md border border-black/10 bg-black dark:border-white/10"
-          >
-            <NextImage
-              src={src}
-              alt={`תמונת רכב ${row.plate}`}
-              width={560}
-              height={360}
-              unoptimized
-              className="max-h-[240px] w-full object-contain transition-transform duration-200 group-hover:scale-[1.02]"
-            />
+          <div className="group relative w-full overflow-hidden rounded-md border border-black/10 bg-black dark:border-white/10">
+            <button
+              type="button"
+              onClick={() => setGalleryOpen(true)}
+              aria-label="הגדל תמונה"
+              className="block w-full cursor-zoom-in"
+            >
+              <NextImage
+                src={viewSrc}
+                alt={`תמונת רכב ${row.plate}`}
+                width={560}
+                height={360}
+                unoptimized
+                className="max-h-[240px] w-full object-contain transition-transform duration-200 group-hover:scale-[1.02]"
+              />
+            </button>
             {identityCaption && (
-              <div className="absolute inset-x-0 bottom-0 flex flex-col items-center bg-black/35 px-3 py-1.5 text-center text-white backdrop-blur-md">
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col items-center bg-black/35 px-3 py-1.5 text-center text-white backdrop-blur-md">
                 {identityCaption}
               </div>
             )}
-          </button>
+            {passage.length > 1 && (
+              <>
+                <div className="pointer-events-none absolute end-2 top-2 inline-flex items-center gap-1 rounded-full bg-black/55 px-2 py-1 text-[11px] font-medium text-white backdrop-blur-md">
+                  <Images size={12} />
+                  {passage.length} תמונות
+                </div>
+                {/* RTL: previous = right edge (►), next = left edge (◄) */}
+                <button
+                  type="button"
+                  onClick={() =>
+                    setViewIndex((i) => (i - 1 + passage.length) % passage.length)
+                  }
+                  aria-label="התמונה הקודמת"
+                  className="absolute start-1 top-1/2 z-10 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white opacity-0 transition-opacity hover:bg-black/70 group-hover:opacity-100"
+                >
+                  <ChevronRight size={16} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewIndex((i) => (i + 1) % passage.length)}
+                  aria-label="התמונה הבאה"
+                  className="absolute end-1 top-1/2 z-10 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white opacity-0 transition-opacity hover:bg-black/70 group-hover:opacity-100"
+                >
+                  <ChevronLeft size={16} />
+                </button>
+              </>
+            )}
+          </div>
         </div>
       ) : (
         <div className="mb-3 rounded-md border border-dashed border-black/10 p-6 text-center text-sm opacity-60 dark:border-white/10">
@@ -317,16 +407,12 @@ function CarDetails({
         {row.imagePath || "-"}
       </div>
 
-      {src && (
+      {galleryImages.length > 0 && (
         <Gallery
           open={galleryOpen}
           onClose={() => setGalleryOpen(false)}
-          images={[
-            {
-              src,
-              alt: `תמונת רכב ${row.plate}`,
-            },
-          ]}
+          images={galleryImages}
+          startIndex={passage.length > 0 ? viewIndex : 0}
         />
       )}
     </aside>

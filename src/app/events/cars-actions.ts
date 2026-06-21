@@ -638,6 +638,72 @@ export async function lookupPlate(
   };
 }
 
+/** One camera shot of a single car passage (for the multi-angle gallery). */
+export type CarPassageImage = {
+  id: number;
+  eventTime: string;
+  cameraId: number | null;
+  status: string;
+  imagePath: string | null;
+};
+
+/** How wide a window counts as the "same passage" — matches the 2-min visit dedup. */
+const PASSAGE_WINDOW_SECONDS = 120;
+
+/**
+ * Every camera read of the SAME plate within ~2 minutes of a given event — i.e.
+ * all the shots of this one car passage, across all cameras (the outdoor gate
+ * cam 1, the inside-ramp cam 3, ...). Lets the lobby read a plate off a sibling
+ * camera's photo when the displayed shot missed it.
+ *
+ * Read-only against SLPR. The plate key is normalized to [0-9A-Z] (injection
+ * safe by construction) and the time window is anchored from the event row by
+ * its numeric id — never a client-supplied timestamp.
+ */
+export async function getCarPassageImages(
+  eventId: number,
+  plate: string
+): Promise<CarPassageImage[]> {
+  const id = Math.floor(Number(eventId));
+  if (!Number.isFinite(id) || id <= 0) return [];
+  const key = normalizePlate(plate).slice(0, 20);
+  if (!key) return [];
+
+  const rows = await querySlpr<{
+    ID: string | null;
+    LOG_DATE: string | null;
+    CAM_ID: string | null;
+    STATUS: string | null;
+    FILE: string | null;
+  }>(
+    `SELECT l.ID, l.LOG_DATE, l.CAM_ID, l.STATUS, l.FILE
+     FROM \`log\` l
+     JOIN (SELECT LOG_DATE FROM \`log\` WHERE ID = ${id}) a
+     WHERE l.LP = ${sqlStr(key)}
+       AND l.FILE IS NOT NULL AND l.FILE <> ''
+       AND l.LOG_DATE BETWEEN a.LOG_DATE - INTERVAL ${PASSAGE_WINDOW_SECONDS} SECOND
+                          AND a.LOG_DATE + INTERVAL ${PASSAGE_WINDOW_SECONDS} SECOND
+     ORDER BY l.LOG_DATE, l.ID`
+  );
+
+  // De-dup by image path (a camera occasionally logs the same shot twice).
+  const seen = new Set<string>();
+  const images: CarPassageImage[] = [];
+  for (const row of rows) {
+    const file = (row.FILE ?? "").trim();
+    if (!file || seen.has(file)) continue;
+    seen.add(file);
+    images.push({
+      id: parseNullableNumber(row.ID) ?? 0,
+      eventTime: row.LOG_DATE ?? "",
+      cameraId: parseNullableNumber(row.CAM_ID),
+      status: row.STATUS ?? "",
+      imagePath: file,
+    });
+  }
+  return images;
+}
+
 export async function getRecentCarEvents(
   days: number = 3
 ): Promise<SlprCarEventRow[]> {

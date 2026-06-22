@@ -1,11 +1,14 @@
 "use client";
 
+import { MessageSquare, PhoneCall, PhoneOff } from "lucide-react";
 import { useActionState, useEffect } from "react";
 import { Button } from "@/components/ui/Button";
 import { Dropdown } from "@/components/ui/Dropdown";
 import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
+import { type CallPolicy } from "@/lib/call-policy";
+import { cn } from "@/lib/cn";
 import { useFormToasts } from "@/lib/hooks/useFormToasts";
 import { AssetsFields, type AssetInit } from "./AssetsFields";
 import { KeysFields, type KeyInit } from "./KeysFields";
@@ -19,8 +22,39 @@ export type ApartmentFormValues = {
   floor?: string;
   zone_id?: string;
   notes?: string;
-  must_call?: boolean;
+  call_policy?: CallPolicy;
 };
+
+// The three contact policies, ascending in urgency. The peer-checked classes
+// are literal strings so Tailwind keeps them in the build.
+const CALL_POLICY_OPTIONS: {
+  value: CallPolicy;
+  label: string;
+  Icon: typeof PhoneCall;
+  checkedClass: string;
+}[] = [
+  {
+    value: "none",
+    label: "אין צורך להתקשר/לעדכן",
+    Icon: PhoneOff,
+    checkedClass:
+      "peer-checked:border-zinc-400 peer-checked:bg-zinc-500/10 peer-checked:opacity-100 dark:peer-checked:border-zinc-500",
+  },
+  {
+    value: "message",
+    label: "לעדכן רק בהודעה",
+    Icon: MessageSquare,
+    checkedClass:
+      "peer-checked:border-sky-500/60 peer-checked:bg-sky-500/10 peer-checked:opacity-100 peer-checked:text-sky-800 dark:peer-checked:text-sky-200",
+  },
+  {
+    value: "call",
+    label: "חייבים להתקשר",
+    Icon: PhoneCall,
+    checkedClass:
+      "peer-checked:border-red-500/60 peer-checked:bg-red-500/10 peer-checked:opacity-100 peer-checked:text-red-800 dark:peer-checked:text-red-200",
+  },
+];
 
 type Props = {
   zones: Zone[];
@@ -123,26 +157,41 @@ export function ApartmentForm({
         />
       </Field>
 
-      <label
-        htmlFor="apt-must-call"
-        className="flex items-start gap-3 rounded-lg border border-red-500/40 bg-red-500/[0.06] p-3 cursor-pointer"
-      >
-        <input
-          id="apt-must-call"
-          name="must_call"
-          type="checkbox"
-          defaultChecked={initialValues?.must_call ?? false}
-          className="mt-0.5 h-4 w-4 shrink-0 accent-red-600"
-        />
-        <span className="space-y-0.5">
-          <span className="block text-sm font-semibold text-red-800 dark:text-red-200">
-            חובה להתקשר לדייר
-          </span>
-          <span className="block text-xs text-red-900/80 dark:text-red-100/80">
-            יש להתקשר לדייר ולקבל אישור לפני שמעלים שליח או אורח לדירה.
-          </span>
-        </span>
-      </label>
+      <fieldset className="space-y-2 rounded-lg border border-black/10 dark:border-white/10 p-3">
+        <legend className="px-1 text-sm font-semibold">יצירת קשר עם הדייר</legend>
+        <p className="-mt-1 px-1 text-xs opacity-70">
+          מה לעשות לפני שמעלים שליח או אורח לדירה
+        </p>
+        <div className="grid gap-2 sm:grid-cols-3">
+          {CALL_POLICY_OPTIONS.map((opt) => {
+            const Icon = opt.Icon;
+            return (
+              <label key={opt.value} className="cursor-pointer">
+                <input
+                  type="radio"
+                  name="call_policy"
+                  value={opt.value}
+                  defaultChecked={
+                    (initialValues?.call_policy ?? "none") === opt.value
+                  }
+                  className="peer sr-only"
+                />
+                <div
+                  className={cn(
+                    "flex h-full items-center gap-2 rounded-lg border p-2.5 text-sm transition-colors",
+                    "border-black/10 opacity-70 dark:border-white/10",
+                    "peer-focus-visible:ring-2 peer-focus-visible:ring-red-500/40",
+                    opt.checkedClass
+                  )}
+                >
+                  <Icon size={16} className="shrink-0" aria-hidden="true" />
+                  <span className="font-medium">{opt.label}</span>
+                </div>
+              </label>
+            );
+          })}
+        </div>
+      </fieldset>
 
       {state.error && (
         <p className="text-sm text-red-600 dark:text-red-400">{state.error}</p>

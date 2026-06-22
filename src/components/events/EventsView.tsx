@@ -2,10 +2,12 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { PhoneCall } from "lucide-react";
+import { MessageSquare, PhoneCall } from "lucide-react";
 import { ApartmentLink, ResidentLink } from "@/components/entity-links";
 import { useSelectedResident } from "@/components/PreferencesProvider";
-import { getApartmentMustCall } from "@/app/events/actions";
+import { getApartmentCallPolicy } from "@/app/events/actions";
+import { type CallPolicy } from "@/lib/call-policy";
+import { cn } from "@/lib/cn";
 import { Tabs, type TabItem } from "@/components/ui/Tabs";
 import { CarsTab } from "./CarsTab";
 import { EquipmentTab } from "./EquipmentTab";
@@ -57,15 +59,15 @@ export function EventsView() {
   // Fetch the "must call the resident" flag fresh per apartment so the warning
   // banner is never stale (the persisted selection could lag a flag change).
   const apartmentId = resident?.apartment_id ?? null;
-  const [mustCall, setMustCall] = useState(false);
+  const [callPolicy, setCallPolicy] = useState<CallPolicy>("none");
   useEffect(() => {
     if (apartmentId === null) {
-      setMustCall(false);
+      setCallPolicy("none");
       return;
     }
     let active = true;
-    getApartmentMustCall(apartmentId).then((flag) => {
-      if (active) setMustCall(flag);
+    getApartmentCallPolicy(apartmentId).then((policy) => {
+      if (active) setCallPolicy(policy);
     });
     return () => {
       active = false;
@@ -91,6 +93,26 @@ export function EventsView() {
     },
     [selectTab]
   );
+
+  // Per-policy banner shown above the tabs when a resident is selected.
+  const callBanner =
+    resident && callPolicy !== "none"
+      ? callPolicy === "call"
+        ? {
+            Icon: PhoneCall,
+            box: "border-red-500/50 bg-red-500/10 text-red-800 dark:text-red-200",
+            iconColor: "text-red-600 dark:text-red-400",
+            title: "חובה להתקשר לדייר לפני העלאת שליח או אורח",
+            sub: `דירה ${resident.apartment_number} — יש לקבל אישור טלפוני מהדייר לפני שמעלים שליח או אורח.`,
+          }
+        : {
+            Icon: MessageSquare,
+            box: "border-sky-500/50 bg-sky-500/10 text-sky-800 dark:text-sky-200",
+            iconColor: "text-sky-600 dark:text-sky-400",
+            title: "יש לעדכן את הדייר בהודעה לפני העלאת שליח או אורח",
+            sub: `דירה ${resident.apartment_number} — יש לשלוח הודעה לדייר לפני שמעלים שליח או אורח.`,
+          }
+      : null;
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
@@ -139,20 +161,22 @@ export function EventsView() {
         )}
       </header>
 
-      {mustCall && resident && (
+      {callBanner && (
         <div
           role="alert"
-          className="flex items-center gap-3 rounded-lg border border-red-500/50 bg-red-500/10 p-4 text-red-800 dark:text-red-200"
+          className={cn(
+            "flex items-center gap-3 rounded-lg border p-4",
+            callBanner.box
+          )}
         >
-          <PhoneCall size={20} aria-hidden="true" className="shrink-0 text-red-600 dark:text-red-400" />
+          <callBanner.Icon
+            size={20}
+            aria-hidden="true"
+            className={cn("shrink-0", callBanner.iconColor)}
+          />
           <div className="space-y-0.5">
-            <p className="text-sm font-semibold">
-              חובה להתקשר לדייר לפני העלאת שליח או אורח
-            </p>
-            <p className="text-xs opacity-80">
-              דירה {resident.apartment_number} — יש לקבל אישור טלפוני מהדייר לפני
-              שמעלים שליח או אורח.
-            </p>
+            <p className="text-sm font-semibold">{callBanner.title}</p>
+            <p className="text-xs opacity-80">{callBanner.sub}</p>
           </div>
         </div>
       )}

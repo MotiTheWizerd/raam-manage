@@ -1,6 +1,7 @@
 "use server";
 
 import { getCurrentUser } from "@/lib/auth";
+import { callPolicyFromCode, type CallPolicy } from "@/lib/call-policy";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 
@@ -63,17 +64,17 @@ export async function getApartmentKeysComment(
   return row?.keys_comment ?? null;
 }
 
-// Whether this apartment's residents must be phoned for approval before a
-// delivery/guest is sent up. Fetched fresh (not from the persisted selection)
-// so the events-page indicator never shows a stale flag.
-export async function getApartmentMustCall(
+// The apartment's contact policy before a delivery/guest is sent up (call /
+// message / none). Fetched fresh (not from the persisted selection) so the
+// events-page indicator never shows a stale flag.
+export async function getApartmentCallPolicy(
   apartmentId: number
-): Promise<boolean> {
+): Promise<CallPolicy> {
   const row = db
     .prepare("SELECT must_call FROM apartments WHERE id = ?")
     .get(apartmentId) as { must_call: number } | undefined;
 
-  return row?.must_call === 1;
+  return callPolicyFromCode(row?.must_call);
 }
 
 // Edit the apartment's keys comment straight from the events Keys tab. Writes

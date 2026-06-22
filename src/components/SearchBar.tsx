@@ -1,13 +1,14 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { Loader2, PhoneCall, Search } from "lucide-react";
+import { Loader2, Search } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import {
   searchResidents,
   type ResidentSearchResult,
 } from "@/app/renters/actions";
 import { useDebouncedValue } from "@/lib/hooks/useDebouncedValue";
+import { CallPolicyBadge } from "@/components/CallPolicyBadge";
 import { cn } from "@/lib/cn";
 import { inputBase } from "@/components/ui/Input";
 import {
@@ -207,19 +208,7 @@ export function SearchBar({ className }: Props) {
                         <span className="truncate font-medium">
                           {r.first_name} {r.last_name}
                         </span>
-                        {r.must_call === 1 && (
-                          <span
-                            className={cn(
-                              "inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold",
-                              isActive
-                                ? "bg-white/25 text-white"
-                                : "bg-red-500/15 text-red-700 dark:text-red-300"
-                            )}
-                          >
-                            <PhoneCall size={11} aria-hidden="true" />
-                            חייבים להתקשר
-                          </span>
-                        )}
+                        <CallPolicyBadge code={r.must_call} active={isActive} />
                       </span>
                       <span
                         className={cn(

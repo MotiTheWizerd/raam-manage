@@ -1,5 +1,6 @@
 "use server";
 
+import { CALL_POLICY_CODES, parseCallPolicy } from "@/lib/call-policy";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 
@@ -59,7 +60,8 @@ type ParsedFields = {
   zone_id: number | null;
   notes: string | null;
   keys_comment: string | null;
-  must_call: 0 | 1;
+  // Contact-policy code stored in apartments.must_call (0=none,1=call,2=message).
+  must_call: number;
   parking: CleanedAsset[];
   storage: CleanedAsset[];
   keys: CleanedKey[];
@@ -125,7 +127,7 @@ function parseFields(formData: FormData): ParsedFields | { error: string } {
   const notes = String(formData.get("notes") ?? "").trim() || null;
   const keys_comment =
     String(formData.get("keys_comment") ?? "").trim() || null;
-  const must_call: 0 | 1 = formData.get("must_call") ? 1 : 0;
+  const must_call = CALL_POLICY_CODES[parseCallPolicy(formData.get("call_policy"))];
 
   if (!number) return { error: "מספר דירה נדרש" };
 

@@ -9,6 +9,7 @@ import type { VehicleInit } from "../VehiclesFields";
 import { useActionState } from "react";
 import { Button } from "@/components/ui/Button";
 import { useFormToasts } from "@/lib/hooks/useFormToasts";
+import { callPolicyFromCode } from "@/lib/call-policy";
 import type { ApartmentFormState } from "../actions";
 
 type Apartment = {
@@ -107,7 +108,7 @@ export function ApartmentDetail({
             zone_id:
               apartment.zone_id !== null ? String(apartment.zone_id) : "",
             notes: apartment.notes ?? "",
-            must_call: apartment.must_call === 1,
+            call_policy: callPolicyFromCode(apartment.must_call),
           }}
           initialParking={toAssetInit(parking)}
           initialStorage={toAssetInit(storage)}
@@ -129,7 +130,7 @@ export function ApartmentDetail({
                 zone_id:
                   apartment.zone_id !== null ? String(apartment.zone_id) : "",
                 notes: apartment.notes ?? "",
-                must_call: apartment.must_call === 1,
+                call_policy: callPolicyFromCode(apartment.must_call),
               }}
               initialParking={toAssetInit(parking)}
               initialStorage={toAssetInit(storage)}

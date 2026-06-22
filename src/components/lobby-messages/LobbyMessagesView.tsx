@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import {
   getAllSystemMessages,
   type SystemMessageRow,
-} from "@/app/settings/actions";
+} from "@/app/lobby-messages/actions";
 import { useIsManager } from "@/components/AuthProvider";
 import { cn } from "@/lib/cn";
 import { onSystemMessagesChanged } from "@/lib/system-messages-events";
@@ -61,7 +61,7 @@ function formatRange(iso: string): string {
   return `${d}/${m}/${y} ${time}`;
 }
 
-export function SystemMessagesTab() {
+export function LobbyMessagesView() {
   const isManager = useIsManager();
   const [messages, setMessages] = useState<SystemMessageRow[] | null>(null);
   const [refreshTick, setRefreshTick] = useState(0);
@@ -109,7 +109,9 @@ export function SystemMessagesTab() {
 
       {messages.length === 0 ? (
         <div className="rounded-lg border border-dashed border-black/10 dark:border-white/10 p-8 text-center text-sm opacity-60">
-          אין הודעות מערכת. צור את ההודעה הראשונה.
+          {isManager
+            ? "אין הודעות לובי. צור את ההודעה הראשונה."
+            : "אין הודעות לובי כרגע."}
         </div>
       ) : (
         <div className="rounded-lg border border-black/10 dark:border-white/10 overflow-hidden">

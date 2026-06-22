@@ -5,7 +5,7 @@ import { useState } from "react";
 import {
   updateSystemMessage,
   type SystemMessageRow,
-} from "@/app/settings/actions";
+} from "@/app/lobby-messages/actions";
 import { Modal } from "@/components/Modal";
 import { Button } from "@/components/ui/Button";
 import { SystemMessageForm } from "./SystemMessageForm";

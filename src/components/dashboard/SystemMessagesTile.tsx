@@ -39,7 +39,7 @@ export function SystemMessagesTile({
 
   return (
     <ChartCard
-      title="הודעות מערכת פעילות"
+      title="הודעות לובי פעילות"
       subtitle="לפי דחיפות"
       value={data.total}
       accent="amber"
@@ -48,7 +48,7 @@ export function SystemMessagesTile({
     >
       {data.total === 0 ? (
         <div className="h-full flex items-center justify-center text-sm opacity-50">
-          אין הודעות מערכת פעילות
+          אין הודעות לובי פעילות
         </div>
       ) : (
         <ResponsiveContainer width="100%" height={140}>

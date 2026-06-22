@@ -58,16 +58,17 @@ export default async function RootLayout({
                       its clicks (e.g. the pagination buttons). */}
                   <main className="flex-1 overflow-auto p-6 pb-32">{children}</main>
                 </div>
-                {/* Top-left stack: system messages on top, the car notifier
-                    below. StickyMessages renders null when empty, so the
-                    notifier rises to the top with no gap. */}
+                {/* Top-left stack: transient notifiers (recognized face, then
+                    the new-car notifier). */}
                 <div className="pointer-events-none fixed top-20 left-4 z-50 flex w-80 max-w-[calc(100vw-2rem)] flex-col gap-2">
-                  <StickyMessages />
                   <FaceNotifier />
                   <Suspense fallback={null}>
                     <NewCarNotifier />
                   </Suspense>
                 </div>
+                {/* Lobby messages — self-positioned left-edge drawer that tucks
+                    itself into a grip handle and peeks open on hover. */}
+                <StickyMessages />
                 <GateControl />
                 <BackToTop />
               </>

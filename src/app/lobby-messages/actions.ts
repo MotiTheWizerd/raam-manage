@@ -1,5 +1,6 @@
 "use server";
 
+import { isManager } from "@/lib/auth";
 import { db } from "@/lib/db";
 
 export type SystemMessageFormState = {
@@ -94,6 +95,11 @@ export async function createSystemMessage(
   _prev: SystemMessageFormState,
   formData: FormData
 ): Promise<SystemMessageFormState> {
+  // Lobby messages are visible to every logged-in user, but only managers
+  // may create/edit/delete — enforced here because the page is no longer
+  // behind the manager-only /settings gate.
+  if (!(await isManager())) return fail("אין הרשאה");
+
   const parsed = parseFields(formData);
   if ("error" in parsed) return fail(parsed.error);
 
@@ -115,6 +121,8 @@ export async function updateSystemMessage(
   _prev: SystemMessageFormState,
   formData: FormData
 ): Promise<SystemMessageFormState> {
+  if (!(await isManager())) return fail("אין הרשאה");
+
   const idRaw = String(formData.get("id") ?? "").trim();
   const id = parseInt(idRaw, 10);
   if (Number.isNaN(id)) return fail("מזהה לא חוקי");
@@ -146,6 +154,8 @@ export async function deleteSystemMessage(
   _prev: SystemMessageFormState,
   formData: FormData
 ): Promise<SystemMessageFormState> {
+  if (!(await isManager())) return fail("אין הרשאה");
+
   const idRaw = String(formData.get("id") ?? "").trim();
   const id = parseInt(idRaw, 10);
   if (Number.isNaN(id)) return fail("מזהה לא חוקי");

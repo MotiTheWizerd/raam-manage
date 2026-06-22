@@ -2,7 +2,7 @@
 
 import { Plus } from "lucide-react";
 import { useState } from "react";
-import { createSystemMessage } from "@/app/settings/actions";
+import { createSystemMessage } from "@/app/lobby-messages/actions";
 import { Modal } from "@/components/Modal";
 import { Button } from "@/components/ui/Button";
 import { SystemMessageForm } from "./SystemMessageForm";
@@ -20,7 +20,7 @@ export function AddSystemMessageButton() {
       <Modal
         open={open}
         onClose={() => setOpen(false)}
-        title="הודעת מערכת חדשה"
+        title="הודעת לובי חדשה"
         size="md"
       >
         {open && (

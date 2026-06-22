@@ -5,7 +5,7 @@ import { useActionState, useEffect } from "react";
 import {
   deleteSystemMessage,
   type SystemMessageFormState,
-} from "@/app/settings/actions";
+} from "@/app/lobby-messages/actions";
 import { Button } from "@/components/ui/Button";
 import { useFormToasts } from "@/lib/hooks/useFormToasts";
 import { notifySystemMessagesChanged } from "@/lib/system-messages-events";

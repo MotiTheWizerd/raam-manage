@@ -4,7 +4,7 @@ import { useActionState, useEffect } from "react";
 import type {
   SystemMessageFormState,
   SystemMessagePriority,
-} from "@/app/settings/actions";
+} from "@/app/lobby-messages/actions";
 import { Button } from "@/components/ui/Button";
 import { Dropdown } from "@/components/ui/Dropdown";
 import { Field } from "@/components/ui/Field";

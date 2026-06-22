@@ -8,11 +8,10 @@ import { BackupTab } from "./BackupTab";
 import { FaceRecTab } from "./face-rec";
 import { RegisteredCarsTab } from "./RegisteredCarsTab";
 import { SuggestionsTab } from "./SuggestionsTab";
-import { SystemMessagesTab } from "./SystemMessagesTab";
 import { ZonesTab } from "./ZonesTab";
 
 export function SettingsView() {
-  const [tab, setTab] = useState<string>("system-messages");
+  const [tab, setTab] = useState<string>("suggestions");
   const [openCount, setOpenCount] = useState<number>(0);
   const [refreshTick, setRefreshTick] = useState(0);
 
@@ -37,7 +36,6 @@ export function SettingsView() {
   }, []);
 
   const tabs: TabItem[] = [
-    { value: "system-messages", label: "הודעות מערכת" },
     { value: "suggestions", label: "הצעות ייעול", badge: openCount },
     { value: "zones", label: "אזורים" },
     { value: "registered-cars", label: "רכבים רשומים" },
@@ -54,7 +52,6 @@ export function SettingsView() {
       <Tabs tabs={tabs} value={tab} onChange={setTab} />
 
       <section>
-        {tab === "system-messages" && <SystemMessagesTab />}
         {tab === "suggestions" && <SuggestionsTab />}
         {tab === "zones" && <ZonesTab />}
         {tab === "registered-cars" && <RegisteredCarsTab />}

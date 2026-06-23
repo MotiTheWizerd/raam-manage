@@ -1,10 +1,10 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { ChevronUp, DoorOpen } from "lucide-react";
+import { ChevronUp, DoorOpen, EllipsisVertical, Lock, LockOpen } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { openDoor } from "@/app/doors/actions";
+import { getDoorHold, holdDoorOpen, openDoor, releaseDoorHold } from "@/app/doors/actions";
 import { openGate } from "@/app/gates/actions";
 import { GateLiveView } from "@/components/GateLiveView";
 import { GateSequenceView } from "@/components/gate-escort";
@@ -84,6 +84,12 @@ export function GateControl() {
   const [sequenceOpen, setSequenceOpen] = useState(false);
   // The expandable list of (non-lobby) doors.
   const [doorsOpen, setDoorsOpen] = useState(false);
+  // The lobby pill's ⋮ options menu (hold-open etc.).
+  const [lobbyMenuOpen, setLobbyMenuOpen] = useState(false);
+  // Whether the lobby door is currently latched open (drives the pulsing glow).
+  const [lobbyHeld, setLobbyHeld] = useState(false);
+  // In-flight lock for the hold/release toggle.
+  const [holdBusy, setHoldBusy] = useState(false);
 
   async function fire(gate: Gate) {
     if (busy) return;
@@ -112,6 +118,41 @@ export function GateControl() {
       toast.error(result.error ?? "פתיחת הדלת נכשלה");
     }
   }
+
+  // Latch the lobby door open / release it back to normal. Mirrors the live
+  // GeoVision work mode so the menu label + glow always match reality.
+  async function toggleLobbyHold() {
+    if (holdBusy) return;
+    setHoldBusy(true);
+    const result = lobbyHeld
+      ? await releaseDoorHold("lobby")
+      : await holdDoorOpen("lobby");
+    setHoldBusy(false);
+    setLobbyMenuOpen(false);
+    if (result.ok) {
+      setLobbyHeld(!!result.held);
+      toast.success(result.held ? "דלת הלובי מוחזקת פתוחה" : "דלת הלובי שוחררה");
+    } else {
+      toast.error(result.error ?? "הפעולה נכשלה");
+    }
+  }
+
+  // Keep the held-open indicator honest — poll the live door state so it also
+  // reflects a hold set elsewhere (the GeoVision GUI) or one still active after
+  // a page refresh.
+  useEffect(() => {
+    let alive = true;
+    async function check() {
+      const r = await getDoorHold("lobby");
+      if (alive && r.ok) setLobbyHeld(!!r.held);
+    }
+    void check();
+    const timer = setInterval(check, 15000);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
+  }, []);
 
   // Global shortcut: double-tap Space anywhere in the app to open the lobby door
   // (it's the most-opened door). A ref keeps the handler pointed at the latest
@@ -224,18 +265,105 @@ export function GateControl() {
             </button>
           ))}
 
-          {/* Lobby — unlocks the lobby door (GeoVision, ctrl 4) + pops its
-              "Outdoor Loby" live view. */}
-          <button
-            type="button"
-            onClick={() => fireDoor("lobby", "לובי", "lobby")}
-            disabled={doorBusy === "lobby"}
-            className={BUTTON_CLASS}
-            title="פתיחה מהירה: הקשה כפולה על מקש הרווח"
-          >
-            <DoorOpen className="size-5 transition-transform duration-200 ease-out group-hover/gate:scale-110" />
-            לובי
-          </button>
+          {/* Lobby — split pill: the wide part does a momentary open (+ pops the
+              "Outdoor Loby" live view); the ⋮ cap opens the options menu
+              (hold-open). The ⋮ is the FIRST child so under RTL it sits on the
+              right cap. A pulsing red halo marks the door as latched open. */}
+          <div className="relative">
+            {lobbyHeld && (
+              <motion.span
+                aria-hidden
+                className="pointer-events-none absolute -inset-1 rounded-full ring-2 ring-red-400 shadow-[0_0_18px_5px_rgba(248,113,113,0.85)]"
+                animate={{ opacity: [0.2, 1, 0.2] }}
+                transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
+              />
+            )}
+
+            <div
+              className={cn(
+                "group/gate relative inline-flex items-stretch overflow-hidden rounded-full whitespace-nowrap",
+                "bg-linear-to-b from-red-500 to-red-700 font-semibold text-white",
+                "shadow-[inset_0_1px_0_rgba(255,255,255,0.3),0_2px_8px_rgba(127,29,29,0.35)]",
+                "transition-all duration-200 ease-out",
+                "hover:-translate-y-0.5 hover:from-red-500 hover:to-red-600",
+                "hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_10px_26px_rgba(220,38,38,0.45)]"
+              )}
+            >
+              {/* ⋮ options (right cap under RTL) */}
+              <button
+                type="button"
+                onClick={() => setLobbyMenuOpen((v) => !v)}
+                aria-haspopup="menu"
+                aria-expanded={lobbyMenuOpen}
+                aria-label="אפשרויות דלת הלובי"
+                className="flex items-center justify-center px-3 transition-colors duration-200 ease-out hover:bg-white/10"
+              >
+                <EllipsisVertical className="size-5" />
+              </button>
+
+              <span aria-hidden className="my-2 w-px self-stretch bg-white/30" />
+
+              {/* main: momentary open */}
+              <button
+                type="button"
+                onClick={() => fireDoor("lobby", "לובי", "lobby")}
+                disabled={doorBusy === "lobby"}
+                className="flex items-center justify-center gap-2 px-6 py-3 transition-colors duration-200 ease-out hover:bg-white/10 disabled:opacity-60"
+                title="פתיחה מהירה: הקשה כפולה על מקש הרווח"
+              >
+                <DoorOpen className="size-5 transition-transform duration-200 ease-out group-hover/gate:scale-110" />
+                לובי
+              </button>
+            </div>
+
+            {/* options menu — opens upward over the drawer */}
+            <AnimatePresence>
+              {lobbyMenuOpen && (
+                <>
+                  <button
+                    type="button"
+                    aria-hidden
+                    tabIndex={-1}
+                    onClick={() => setLobbyMenuOpen(false)}
+                    className="fixed inset-0 z-40 cursor-default"
+                  />
+                  <motion.div
+                    role="menu"
+                    initial={{ opacity: 0, y: 6, scale: 0.96 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 6, scale: 0.96 }}
+                    transition={{ duration: 0.15, ease: "easeOut" }}
+                    className={cn(
+                      "absolute right-0 bottom-full z-50 mb-2 min-w-56 overflow-hidden rounded-2xl p-1.5",
+                      "border border-zinc-200/80 bg-white/95 shadow-2xl backdrop-blur-md",
+                      "dark:border-zinc-700/80 dark:bg-zinc-900/95"
+                    )}
+                  >
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={toggleLobbyHold}
+                      disabled={holdBusy}
+                      className={cn(
+                        "flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium",
+                        "transition-colors duration-150 disabled:opacity-60",
+                        lobbyHeld
+                          ? "text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                          : "text-red-700 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-950/40"
+                      )}
+                    >
+                      {lobbyHeld ? (
+                        <Lock className="size-4 shrink-0" />
+                      ) : (
+                        <LockOpen className="size-4 shrink-0" />
+                      )}
+                      {lobbyHeld ? "שחרר דלת (חזרה לרגיל)" : "החזק דלת פתוחה"}
+                    </button>
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
+          </div>
 
           {/* Toggle the rest of the building doors. Hidden for now via
               SHOW_DOORS_MENU (code kept). */}

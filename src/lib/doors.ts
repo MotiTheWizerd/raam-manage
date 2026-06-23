@@ -158,10 +158,20 @@ function safeJson(text: string): Record<string, unknown> | null {
 
 export type DoorResult = { ok: boolean; error?: string };
 
-// Sends ONE momentary unlock to a door. Re-authenticates once and retries if the
+// GeoVision DOOR_OPERATION command values (verified live session 20 + 36 against
+// the local ASWeb API / GeoVision's own WebSDK sample):
+//   UNLOCK_DOOR             momentary strike release (open, then auto-relock)
+//   FORCE_UNLOCK            latch the door OPEN until cleared (כפה פתיחה)
+//   CLEAR_FORCE_LOCKUNLOCK  clear a force-lock/unlock → back to the card schedule
+type DoorOperation = "UNLOCK_DOOR" | "FORCE_UNLOCK" | "CLEAR_FORCE_LOCKUNLOCK";
+
+// Sends ONE DOOR_OPERATION to a door. Re-authenticates once and retries if the
 // first attempt fails (covers an expired session) — safe because a failed first
-// attempt means the door did not open.
-export async function unlockDoor(door: DoorDef): Promise<DoorResult> {
+// attempt means nothing changed at the door.
+async function runDoorOperation(
+  door: DoorDef,
+  operation: DoorOperation
+): Promise<DoorResult> {
   for (let attempt = 0; attempt < 2; attempt++) {
     let s: Session;
     try {
@@ -180,7 +190,7 @@ export async function unlockDoor(door: DoorDef): Promise<DoorResult> {
           dvg_id: "0",
           ctrl_id: String(door.ctrlId),
           dr_id: String(door.drId),
-          operation: "UNLOCK_DOOR",
+          operation,
           client_guid: s.guid,
           reason: "raam",
         },
@@ -201,5 +211,65 @@ export async function unlockDoor(door: DoorDef): Promise<DoorResult> {
       }
     }
   }
-  return { ok: false, error: "פתיחת הדלת נכשלה" };
+  return { ok: false, error: "הפעולה על הדלת נכשלה" };
+}
+
+// Momentary unlock — the door can be pushed, then auto-relocks on its timer.
+export function unlockDoor(door: DoorDef): Promise<DoorResult> {
+  return runDoorOperation(door, "UNLOCK_DOOR");
+}
+
+// Latch the door OPEN until released (GeoVision "force unlock"). Stays open
+// across the relock timer — use releaseDoor() to return to normal.
+export function holdDoorOpen(door: DoorDef): Promise<DoorResult> {
+  return runDoorOperation(door, "FORCE_UNLOCK");
+}
+
+// Clear a force-unlock/lock → the door resumes its normal card schedule.
+export function releaseDoor(door: DoorDef): Promise<DoorResult> {
+  return runDoorOperation(door, "CLEAR_FORCE_LOCKUNLOCK");
+}
+
+export type DoorState = { ok: boolean; held?: boolean; mode?: string; error?: string };
+
+// Reads the door's live work mode from GeoVision (GET_ALL_DEVICES). `held` is
+// true while it's force-unlocked (latched open) — LOCAL/REMOTE_FORCE_UNLOCK_MODE.
+export async function getDoorWorkMode(door: DoorDef): Promise<DoorState> {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    let s: Session;
+    try {
+      s = await ensureSession();
+    } catch (e) {
+      session = null;
+      return { ok: false, error: e instanceof Error ? e.message : "תקלת תקשורת" };
+    }
+
+    try {
+      const res = await postForm(
+        ENDPOINT,
+        { action: "GET_ALL_DEVICES", module: "monitor", client_guid: s.guid },
+        s.cookie
+      );
+      const json = safeJson(res.body) as {
+        ctrl?: Array<{
+          ctrl_id: number;
+          door?: Array<{ dr_id: number; dr_work_mode?: string }>;
+        }>;
+      } | null;
+      if (json?.ctrl) {
+        const ctrl = json.ctrl.find((c) => c.ctrl_id === door.ctrlId);
+        const dr = ctrl?.door?.find((d) => d.dr_id === door.drId);
+        const mode = dr?.dr_work_mode;
+        return { ok: true, mode, held: mode ? /FORCE_UNLOCK/.test(mode) : false };
+      }
+      session = null;
+      if (attempt === 1) return { ok: false, error: "קריאת מצב הדלת נכשלה" };
+    } catch (e) {
+      session = null;
+      if (attempt === 1) {
+        return { ok: false, error: e instanceof Error ? e.message : "תקלת תקשורת לבקר הדלת" };
+      }
+    }
+  }
+  return { ok: false, error: "קריאת מצב הדלת נכשלה" };
 }

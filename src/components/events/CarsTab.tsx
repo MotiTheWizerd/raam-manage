@@ -72,6 +72,21 @@ function imageUrl(path: string | null): string | null {
   return `/api/slpr/image?path=${encodeURIComponent(path)}`;
 }
 
+/**
+ * The LPR camera saves TWO files per read: the wide scene ("<base>.jpeg", the
+ * only path stored in the DB) and a tight license-plate crop
+ * ("<base>_plate.jpeg", not in the DB). Derive the crop's proxy URL from the
+ * scene path by inserting "_plate" before the extension. Returns null when the
+ * final path segment has no extension to splice into.
+ */
+function plateCropUrl(path: string | null): string | null {
+  if (!path) return null;
+  const dot = path.lastIndexOf(".");
+  const slash = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
+  if (dot <= slash) return null;
+  return imageUrl(`${path.slice(0, dot)}_plate${path.slice(dot)}`);
+}
+
 /** Local-date YYYY-MM-DD for an <input type="date"> value (not UTC). */
 function toYmd(d: Date): string {
   const year = d.getFullYear();
@@ -111,6 +126,43 @@ function DetailRow({ label, value }: { label: string; value: React.ReactNode }) 
       <span className="min-h-7 rounded-md border border-black/10 bg-black/[0.02] px-2 py-1.5 dark:border-white/10 dark:bg-white/[0.04]">
         {value || "-"}
       </span>
+    </div>
+  );
+}
+
+/**
+ * The zoomed license-plate crop the LPR camera saved next to the scene. Renders
+ * nothing when the sibling "_plate" file is missing (older reads / no-match
+ * shots) — pass a `key` tied to the source so the failed state resets on change.
+ */
+function PlateCrop({
+  path,
+  plate,
+  className,
+}: {
+  path: string | null;
+  plate: string;
+  className?: string;
+}) {
+  const src = plateCropUrl(path);
+  const [failed, setFailed] = useState(false);
+  if (!src || failed) return null;
+  return (
+    <div
+      className={cn(
+        "w-fit overflow-hidden rounded border border-black/10 bg-black dark:border-white/10",
+        className
+      )}
+    >
+      <NextImage
+        src={src}
+        alt={`לוחית רישוי ${plate}`}
+        width={160}
+        height={120}
+        unoptimized
+        onError={() => setFailed(true)}
+        className="h-full w-auto object-contain"
+      />
     </div>
   );
 }
@@ -176,10 +228,11 @@ function CarDetails({
     setViewIndex(galleryStart);
   }, [galleryStart]);
 
-  const viewSrc =
+  const viewPath =
     passage.length > 0
-      ? imageUrl(passage[Math.min(viewIndex, passage.length - 1)]?.imagePath ?? null)
-      : src;
+      ? passage[Math.min(viewIndex, passage.length - 1)]?.imagePath ?? null
+      : row?.imagePath ?? null;
+  const viewSrc = imageUrl(viewPath);
 
   const identityCaption =
     row && (row.guest || row.registeredOwner) ? (
@@ -253,16 +306,12 @@ function CarDetails({
 
       {viewSrc ? (
         <div className="mb-3 space-y-2">
-          <div className="mx-auto h-8 max-w-40 overflow-hidden rounded border border-black/10 bg-black dark:border-white/10">
-            <NextImage
-              src={viewSrc}
-              alt={`לוחית רישוי ${row.plate}`}
-              width={192}
-              height={32}
-              unoptimized
-              className="h-full w-full object-cover"
-            />
-          </div>
+          <PlateCrop
+            key={viewPath ?? "none"}
+            path={viewPath}
+            plate={row.plate}
+            className="mx-auto h-12"
+          />
           <div className="group relative w-full overflow-hidden rounded-md border border-black/10 bg-black dark:border-white/10">
             <button
               type="button"
@@ -592,6 +641,11 @@ function PlateLookupCard({
                   key={event.id}
                   className="overflow-hidden rounded-md border border-black/10 dark:border-white/10"
                 >
+                  <PlateCrop
+                    path={event.imagePath}
+                    plate={result.plate}
+                    className="mx-auto mt-1 h-7"
+                  />
                   {src ? (
                     <NextImage
                       src={src}

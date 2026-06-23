@@ -31,10 +31,16 @@ import { Gallery } from "@/components/ui/Gallery";
 import { Input } from "@/components/ui/Input";
 import { DeleteEventButton } from "@/components/events/DeleteEventButton";
 import { Pagination } from "@/components/ui/Pagination";
+import { Tabs, type TabItem } from "@/components/ui/Tabs";
 import { cn } from "@/lib/cn";
 
 const AUTO_REFRESH_MS = 10000;
 const PAGE_SIZE = 10;
+
+const SUB_TABS: TabItem[] = [
+  { value: "history", label: "היסטוריה אחרונה" },
+  { value: "search", label: "חיפוש רכבים" },
+];
 
 function formatCamera(cameraId: number | null): string {
   if (cameraId === null) return "-";
@@ -681,6 +687,10 @@ type CarsTabProps = {
 };
 
 export function CarsTab({ onUseForGuest }: CarsTabProps) {
+  // Inner view: the live "recent history" feed vs the plate-check search. Both
+  // states live here so switching tabs preserves the search result, and the
+  // feed keeps auto-refreshing in the background while the search tab is shown.
+  const [subTab, setSubTab] = useState<string>("history");
   const [rows, setRows] = useState<SlprCarEventRow[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
@@ -832,6 +842,9 @@ export function CarsTab({ onUseForGuest }: CarsTabProps) {
 
   return (
     <div className="space-y-4">
+      <Tabs tabs={SUB_TABS} value={subTab} onChange={setSubTab} />
+
+      {subTab === "search" && (
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -928,7 +941,10 @@ export function CarsTab({ onUseForGuest }: CarsTabProps) {
           </div>
         )}
       </form>
+      )}
 
+      {subTab === "history" && (
+      <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-sm font-medium opacity-80">רכבים אחרונים</h2>
@@ -1158,6 +1174,8 @@ export function CarsTab({ onUseForGuest }: CarsTabProps) {
 
         <CarDetails row={selectedRow} onForgetGuest={load} />
       </div>
+      </div>
+      )}
     </div>
   );
 }

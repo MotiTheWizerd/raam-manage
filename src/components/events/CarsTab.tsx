@@ -850,7 +850,7 @@ export function CarsTab({ onUseForGuest }: CarsTabProps) {
           e.preventDefault();
           runLookup();
         }}
-        className="rounded-lg border border-black/10 bg-black/[0.015] p-3 dark:border-white/10 dark:bg-white/[0.025]"
+        className="max-w-2xl rounded-lg border border-black/10 bg-black/[0.015] p-3 dark:border-white/10 dark:bg-white/[0.025]"
       >
         <label
           htmlFor="plate-lookup"
@@ -900,7 +900,7 @@ export function CarsTab({ onUseForGuest }: CarsTabProps) {
               max={lookupTo || undefined}
               dir="ltr"
               submitOnEnter
-              className="h-8 w-auto"
+              className="h-8 w-36"
             />
           </label>
           <label className="flex items-center gap-1">
@@ -912,7 +912,7 @@ export function CarsTab({ onUseForGuest }: CarsTabProps) {
               min={lookupFrom || undefined}
               dir="ltr"
               submitOnEnter
-              className="h-8 w-auto"
+              className="h-8 w-36"
             />
           </label>
           <div className="flex items-center gap-1">

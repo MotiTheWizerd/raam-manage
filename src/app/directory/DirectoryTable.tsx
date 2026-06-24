@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { Download, Printer, Search, X } from "lucide-react";
+import { Download, Pencil, Printer, Search, X } from "lucide-react";
 import { useMemo, useState } from "react";
+import { useIsManager } from "@/components/AuthProvider";
+import { DirectoryRowEditor } from "@/components/directory/DirectoryRowEditor";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import {
@@ -59,6 +61,8 @@ export function DirectoryTable({ rows }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>("apartment");
   const [sortDir, setSortDir] = useState<SheetSortDir>("asc");
   const [exporting, setExporting] = useState(false);
+  const [editing, setEditing] = useState<DirectoryRow | null>(null);
+  const isManager = useIsManager();
 
   function toggleSort(key: string) {
     const k = key as SortKey;
@@ -206,6 +210,29 @@ export function DirectoryTable({ rows }: Props) {
     },
   ];
 
+  if (isManager) {
+    columns.push({
+      key: "actions",
+      header: "",
+      align: "center",
+      width: "3rem",
+      render: (r) => (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setEditing(r);
+          }}
+          aria-label={`ערוך דירה ${r.number}`}
+          title="ערוך"
+          className="inline-flex h-7 w-7 items-center justify-center rounded text-zinc-500 transition-colors hover:bg-zinc-200 hover:text-zinc-800"
+        >
+          <Pencil size={14} />
+        </button>
+      ),
+    });
+  }
+
   async function exportToExcel() {
     if (visible.length === 0) return;
     setExporting(true);
@@ -301,6 +328,15 @@ export function DirectoryTable({ rows }: Props) {
           emptyText="לא נמצאו דירות תואמות"
         />
       </div>
+
+      {isManager && editing && (
+        <DirectoryRowEditor
+          apartmentId={editing.apartment_id}
+          apartmentNumber={editing.number}
+          open={editing !== null}
+          onClose={() => setEditing(null)}
+        />
+      )}
     </div>
   );
 }

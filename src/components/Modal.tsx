@@ -10,7 +10,7 @@ type Props = {
   open: boolean;
   onClose: () => void;
   title: string;
-  size?: "sm" | "md" | "lg";
+  size?: "sm" | "md" | "lg" | "xl";
   children: React.ReactNode;
 };
 
@@ -18,6 +18,7 @@ const sizeClass = {
   sm: "max-w-sm",
   md: "max-w-md",
   lg: "max-w-lg",
+  xl: "max-w-3xl",
 };
 
 export function Modal({ open, onClose, title, size = "md", children }: Props) {

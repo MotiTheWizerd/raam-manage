@@ -31,26 +31,32 @@ body {
   cursor: pointer;
 }
 
-/* Print: when the building directory is on screen, print ONLY its table —
-   scoped via :has so every other page prints normally. */
+/* Print: when a printable block (the building directory, or a report) is on
+   screen, print ONLY that block — scoped via :has so every other page prints
+   normally. */
 @media print {
   @page {
     size: A4 landscape;
     margin: 1cm;
   }
-  body:has(#directory-print) * {
+  body:has(#directory-print) *,
+  body:has(#report-print) * {
     visibility: hidden;
   }
   #directory-print,
-  #directory-print * {
+  #directory-print *,
+  #report-print,
+  #report-print * {
     visibility: visible;
   }
-  #directory-print {
+  #directory-print,
+  #report-print {
     position: absolute;
     inset-block-start: 0;
     inset-inline: 0;
   }
-  #directory-print table {
+  #directory-print table,
+  #report-print table {
     font-size: 10px;
   }
 }

@@ -21,6 +21,7 @@ import {
   onSuggestionsChanged,
 } from "@/lib/suggestions-events";
 import { AddSuggestionButton } from "./AddSuggestionButton";
+import { SuggestionComments } from "./SuggestionComments";
 import { SuggestionForm } from "./SuggestionForm";
 
 const CATEGORY_LABEL: Record<SuggestionCategory, string> = {
@@ -222,6 +223,9 @@ function SuggestionCard({
                   submitLabel="שמור שינויים"
                 />
               </fieldset>
+
+              <SuggestionComments suggestionId={suggestion.id} />
+
               <div className="flex items-center justify-between pt-2 border-t border-black/5 dark:border-white/5">
                 <div className="text-xs opacity-50">
                   {suggestion.resolved_at

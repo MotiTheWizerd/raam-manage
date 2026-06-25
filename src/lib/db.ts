@@ -5,7 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 const DB_PATH = path.join(process.cwd(), "data", "raam.db");
-const SCHEMA_EVOLUTION_VERSION = 11;
+const SCHEMA_EVOLUTION_VERSION = 12;
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS zones (
@@ -422,6 +422,19 @@ function applySchemaEvolution(db: Database.Database) {
       created_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
     CREATE INDEX IF NOT EXISTS idx_face_events_created ON face_events(created_at);
+
+    -- Progress thread on a suggestion/bug: each comment optionally carries the
+    -- status the post was moved TO with that comment (NULL = comment only).
+    CREATE TABLE IF NOT EXISTS suggestion_comments (
+      id            INTEGER PRIMARY KEY,
+      suggestion_id INTEGER NOT NULL REFERENCES suggestions(id) ON DELETE CASCADE,
+      body          TEXT NOT NULL,
+      status        TEXT CHECK (status IS NULL OR status IN ('open','in_progress','done','wont_fix')),
+      lobbyist_name TEXT NOT NULL DEFAULT '',
+      created_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_suggestion_comments_suggestion
+      ON suggestion_comments(suggestion_id);
   `);
 
   // Migration v10: face_enrollments grew a 'kind' (resident|staff) + 'name' so

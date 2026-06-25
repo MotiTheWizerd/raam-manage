@@ -29,6 +29,17 @@ export type SuggestionRow = {
   resolved_at: string | null;
 };
 
+// A single entry in a suggestion's progress thread. `status` is the status the
+// post was moved TO with this comment (null = comment only, no status change).
+export type SuggestionComment = {
+  id: number;
+  suggestion_id: number;
+  body: string;
+  status: SuggestionStatus | null;
+  lobbyist_name: string;
+  created_at: string;
+};
+
 const STATUS_ORDER = `
   CASE status
     WHEN 'open'        THEN 0
@@ -175,5 +186,71 @@ export async function deleteSuggestion(
 
   const result = db.prepare(`DELETE FROM suggestions WHERE id = ?`).run(id);
   if (result.changes === 0) return fail("ההצעה לא נמצאה");
+  return { submittedAt: Date.now() };
+}
+
+// --- Progress thread (comments) ---------------------------------------------
+
+export async function getSuggestionComments(
+  suggestionId: number
+): Promise<SuggestionComment[]> {
+  return db
+    .prepare(
+      `SELECT id, suggestion_id, body, status, lobbyist_name, created_at
+       FROM suggestion_comments
+       WHERE suggestion_id = ?
+       ORDER BY created_at ASC, id ASC`
+    )
+    .all(suggestionId) as SuggestionComment[];
+}
+
+// Add a progress comment. If a status is chosen that differs from the post's
+// current status, the comment records that new status AND the parent post is
+// moved to it (mirroring updateSuggestion's resolved_at handling).
+export async function addSuggestionComment(
+  _prev: SuggestionFormState,
+  formData: FormData
+): Promise<SuggestionFormState> {
+  const id = parseInt(String(formData.get("suggestion_id") ?? "").trim(), 10);
+  if (Number.isNaN(id)) return fail("מזהה לא חוקי");
+
+  const body = String(formData.get("body") ?? "").trim();
+  if (!body) return fail("תוכן נדרש");
+
+  const lobbyist_name =
+    String(formData.get("lobbyist_name") ?? "").trim() ||
+    (await getCurrentUser())?.lobbyist_name?.trim() ||
+    "";
+  if (!lobbyist_name) return fail("שם הפקיד נדרש");
+
+  const current = db
+    .prepare(`SELECT status FROM suggestions WHERE id = ?`)
+    .get(id) as { status: SuggestionStatus } | undefined;
+  if (!current) return fail("ההצעה לא נמצאה");
+
+  // Only treat it as a status change when the choice actually differs.
+  const chosen = parseStatus(formData.get("status"));
+  const changed = chosen && chosen !== current.status ? chosen : null;
+
+  db.prepare(
+    `INSERT INTO suggestion_comments (suggestion_id, body, status, lobbyist_name)
+     VALUES (?, ?, ?, ?)`
+  ).run(id, body, changed, lobbyist_name);
+
+  if (changed) {
+    const isResolved = changed === "done" || changed === "wont_fix";
+    db.prepare(
+      `UPDATE suggestions
+       SET status = ?,
+           resolved_at = CASE
+             WHEN ? = 1 AND resolved_at IS NULL THEN CURRENT_TIMESTAMP
+             WHEN ? = 0 THEN NULL
+             ELSE resolved_at
+           END,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`
+    ).run(changed, isResolved ? 1 : 0, isResolved ? 1 : 0, id);
+  }
+
   return { submittedAt: Date.now() };
 }

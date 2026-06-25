@@ -74,24 +74,46 @@ export function DirectoryTable({ rows }: Props) {
     }
   }
 
+  // One searchable blob per row covering EVERY column (apartment, zone, floor,
+  // owners, occupants, parking, storage, po-boxes, phone name/number/label,
+  // notes) so the search box matches anything visible in the table. The
+  // digits-only variant lets a phone/parking/po-box number match regardless of
+  // separators (spaces, dashes).
+  const haystacks = useMemo(() => {
+    const map = new Map<number, { text: string; digits: string }>();
+    for (const r of rows) {
+      const parts = [
+        r.number,
+        r.zone_name ?? "",
+        r.floor != null ? String(r.floor) : "",
+        ...r.owners.map((o) => o.name),
+        ...r.occupants.map((o) => o.name),
+        ...r.parking,
+        ...r.storage,
+        ...r.po_boxes,
+        ...r.phones.flatMap((p) => [p.name, p.number, p.label ?? ""]),
+        r.notes ?? "",
+      ];
+      const text = parts.join(" ").toLowerCase();
+      // Keep EACH value's digits as a separate, space-delimited token. A numeric
+      // query (e.g. "66") then only matches within a single field — never across
+      // the boundary between two concatenated numbers (which would otherwise make
+      // a short query match almost every row).
+      const digits = parts.map((p) => p.replace(/\D/g, "")).join(" ");
+      map.set(r.apartment_id, { text, digits });
+    }
+    return map;
+  }, [rows]);
+
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
     const qDigits = q.replace(/\D/g, "");
     const filtered = rows.filter((r) => {
       if (!q) return true;
-      if (r.number.toLowerCase().includes(q)) return true;
-      if ((r.zone_name ?? "").toLowerCase().includes(q)) return true;
-      const people = [...r.owners, ...r.occupants]
-        .map((p) => p.name)
-        .join(" ")
-        .toLowerCase();
-      if (people.includes(q)) return true;
-      if (
-        qDigits &&
-        r.phones.some((p) => p.number.replace(/\D/g, "").includes(qDigits))
-      ) {
-        return true;
-      }
+      const hay = haystacks.get(r.apartment_id);
+      if (!hay) return false;
+      if (hay.text.includes(q)) return true;
+      if (qDigits && hay.digits.includes(qDigits)) return true;
       return false;
     });
 
@@ -110,7 +132,7 @@ export function DirectoryTable({ rows }: Props) {
     });
 
     return sorted;
-  }, [rows, query, sortKey, sortDir]);
+  }, [rows, query, sortKey, sortDir, haystacks]);
 
   const columns: SheetColumn<DirectoryRow>[] = [
     {
@@ -299,7 +321,7 @@ export function DirectoryTable({ rows }: Props) {
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="חיפוש לפי דירה, שם, אגף או טלפון"
+          placeholder="חיפוש חופשי בכל העמודות"
           className="ps-9 pe-9"
         />
         {query && (

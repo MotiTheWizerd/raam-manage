@@ -53,6 +53,12 @@ function statusFor(m: SystemMessageRow): {
   };
 }
 
+// Expired = the end time is already in the past (wall-clock). Mirrors the
+// "פגה" branch in statusFor; used to keep expired messages sorted to the end.
+function isExpired(m: SystemMessageRow): boolean {
+  return formatLocalNow() > m.end_at;
+}
+
 function formatRange(iso: string): string {
   // Stored as "YYYY-MM-DDTHH:MM" wall-clock.
   const [date, time] = iso.split("T");
@@ -98,6 +104,13 @@ export function LobbyMessagesView() {
     return <div className="text-sm opacity-60 py-8 text-center">טוען...</div>;
   }
 
+  // Keep expired messages at the end regardless of their (possibly newer) start
+  // date. Array.sort is stable, so non-expired rows keep the DB order (start_at
+  // DESC) and expired rows sink below them.
+  const sorted = [...messages].sort(
+    (a, b) => Number(isExpired(a)) - Number(isExpired(b))
+  );
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -126,7 +139,7 @@ export function LobbyMessagesView() {
               </tr>
             </thead>
             <tbody className="divide-y divide-black/5 dark:divide-white/5">
-              {messages.map((m) => {
+              {sorted.map((m) => {
                 const status = statusFor(m);
                 return (
                   <tr

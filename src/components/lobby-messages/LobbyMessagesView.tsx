@@ -117,14 +117,13 @@ export function LobbyMessagesView() {
         <h2 className="text-sm font-medium opacity-80">
           {messages.length === 0 ? "אין הודעות" : `${messages.length} הודעות`}
         </h2>
-        {isManager && <AddSystemMessageButton />}
+        <AddSystemMessageButton />
+
       </div>
 
       {messages.length === 0 ? (
         <div className="rounded-lg border border-dashed border-black/10 dark:border-white/10 p-8 text-center text-sm opacity-60">
-          {isManager
-            ? "אין הודעות לובי. צור את ההודעה הראשונה."
-            : "אין הודעות לובי כרגע."}
+          אין הודעות לובי. צור את ההודעה הראשונה.
         </div>
       ) : (
         <div className="rounded-lg border border-black/10 dark:border-white/10 overflow-hidden">

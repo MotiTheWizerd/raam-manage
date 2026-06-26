@@ -1,6 +1,6 @@
 "use server";
 
-import { isManager } from "@/lib/auth";
+import { getCurrentUser, isManager } from "@/lib/auth";
 import { db } from "@/lib/db";
 
 export type SystemMessageFormState = {
@@ -95,10 +95,9 @@ export async function createSystemMessage(
   _prev: SystemMessageFormState,
   formData: FormData
 ): Promise<SystemMessageFormState> {
-  // Lobby messages are visible to every logged-in user, but only managers
-  // may create/edit/delete — enforced here because the page is no longer
-  // behind the manager-only /settings gate.
-  if (!(await isManager())) return fail("אין הרשאה");
+  // Any logged-in lobby user may POST a message (they man the desk and need to
+  // share notices). Editing/deleting stays manager-only (curation) below.
+  if (!(await getCurrentUser())) return fail("אין הרשאה");
 
   const parsed = parseFields(formData);
   if ("error" in parsed) return fail(parsed.error);

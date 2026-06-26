@@ -8,12 +8,12 @@ import {
   activateEmergencyOpen,
   clearEmergencyOpen,
   getDoorHold,
-  getEmergencyStatus,
   holdDoorOpen,
   openDoor,
   releaseDoorHold,
 } from "@/app/doors/actions";
 import { openGate } from "@/app/gates/actions";
+import { useEmergency } from "@/components/EmergencyProvider";
 import { GateLiveView } from "@/components/GateLiveView";
 import { GateSequenceView } from "@/components/gate-escort";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -101,8 +101,9 @@ export function GateControl() {
   const [holdBusy, setHoldBusy] = useState(false);
   // The global commands ⋮ menu (building-wide ops).
   const [globalMenuOpen, setGlobalMenuOpen] = useState(false);
-  // Emergency "all doors open" active (every door force-unlocked).
-  const [emergencyActive, setEmergencyActive] = useState(false);
+  // Emergency "all doors open" — shared so the header logo's alarm beacon stays
+  // in sync with this trigger (poll + read-lag recheck live in the provider).
+  const { active: emergencyActive, setActive: setEmergencyActive, refreshSoon: recheckEmergencySoon } = useEmergency();
   // In-flight lock for the emergency open/release.
   const [emergencyBusy, setEmergencyBusy] = useState(false);
   // Confirm dialog before opening the whole building at once.
@@ -170,30 +171,6 @@ export function GateControl() {
       clearInterval(timer);
     };
   }, []);
-
-  // Same honest-state poll for the building-wide emergency (all doors open).
-  useEffect(() => {
-    let alive = true;
-    async function check() {
-      const r = await getEmergencyStatus();
-      if (alive && r.ok) setEmergencyActive(r.active);
-    }
-    void check();
-    const timer = setInterval(check, 15000);
-    return () => {
-      alive = false;
-      clearInterval(timer);
-    };
-  }, []);
-
-  // GeoVision's GET_ALL_DEVICES lags DOOR_OPERATION by ~1-2s, so re-read the
-  // live state a beat after firing a command (the immediate read is stale).
-  function recheckEmergencySoon() {
-    setTimeout(async () => {
-      const r = await getEmergencyStatus();
-      if (r.ok) setEmergencyActive(r.active);
-    }, 2500);
-  }
 
   // Emergency: open (force-unlock) every building door at once.
   async function doEmergencyOpen() {
@@ -344,18 +321,10 @@ export function GateControl() {
 
         <div className="flex flex-row gap-2">
           {/* Global commands ⋮ — building-wide ops (emergency open-all). First
-              DOM child so under RTL it sits at the drawer's RIGHT edge. A pulsing
-              red halo marks an active building-wide emergency. */}
+              DOM child so under RTL it sits at the drawer's RIGHT edge. The
+              active-emergency signal now lives on the header logo (siren beacon),
+              not here. */}
           <div className="relative flex items-center">
-            {emergencyActive && (
-              <motion.span
-                aria-hidden
-                className="pointer-events-none absolute -inset-1 rounded-full ring-2 ring-red-400 shadow-[0_0_18px_5px_rgba(248,113,113,0.85)]"
-                animate={{ opacity: [0.2, 1, 0.2] }}
-                transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
-              />
-            )}
-
             <button
               type="button"
               onClick={() => {

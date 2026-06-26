@@ -31,6 +31,17 @@ export function BrandLogo() {
                 animate={{ opacity: [0.3, 0.75, 0.3] }}
                 transition={{ duration: 1.2, repeat: Infinity, ease: "easeInOut" }}
               />
+              {/* full red+blue gradient disk spinning behind the logo — the
+                  two-tone wheel rotates around the mark, counter to the cone */}
+              <motion.div
+                className="absolute left-1/2 top-1/2 h-16 w-48 -translate-x-1/2 -translate-y-1/2 rounded-full blur-[2px]"
+                style={{
+                  background:
+                    "conic-gradient(from 0deg, rgba(239,68,68,0.95), rgba(59,130,246,0.95), rgba(239,68,68,0.95))",
+                }}
+                animate={{ rotate: -360 }}
+                transition={{ duration: 2.2, repeat: Infinity, ease: "linear" }}
+              />
               {/* sweeping light cone, centered behind the logo */}
               <motion.div
                 className="absolute size-16 rounded-full blur-[2px]"

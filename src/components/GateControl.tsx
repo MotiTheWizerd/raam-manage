@@ -1,13 +1,22 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { ChevronUp, DoorOpen, EllipsisVertical, Lock, LockOpen } from "lucide-react";
+import { ChevronUp, DoorOpen, EllipsisVertical, Lock, LockOpen, ShieldAlert, ShieldCheck } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { getDoorHold, holdDoorOpen, openDoor, releaseDoorHold } from "@/app/doors/actions";
+import {
+  activateEmergencyOpen,
+  clearEmergencyOpen,
+  getDoorHold,
+  getEmergencyStatus,
+  holdDoorOpen,
+  openDoor,
+  releaseDoorHold,
+} from "@/app/doors/actions";
 import { openGate } from "@/app/gates/actions";
 import { GateLiveView } from "@/components/GateLiveView";
 import { GateSequenceView } from "@/components/gate-escort";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { cn } from "@/lib/cn";
 
 type Gate = { id: "upper" | "lower"; name: string; short: string };
@@ -90,6 +99,14 @@ export function GateControl() {
   const [lobbyHeld, setLobbyHeld] = useState(false);
   // In-flight lock for the hold/release toggle.
   const [holdBusy, setHoldBusy] = useState(false);
+  // The global commands ⋮ menu (building-wide ops).
+  const [globalMenuOpen, setGlobalMenuOpen] = useState(false);
+  // Emergency "all doors open" active (every door force-unlocked).
+  const [emergencyActive, setEmergencyActive] = useState(false);
+  // In-flight lock for the emergency open/release.
+  const [emergencyBusy, setEmergencyBusy] = useState(false);
+  // Confirm dialog before opening the whole building at once.
+  const [confirmEmergency, setConfirmEmergency] = useState(false);
 
   async function fire(gate: Gate) {
     if (busy) return;
@@ -154,6 +171,68 @@ export function GateControl() {
     };
   }, []);
 
+  // Same honest-state poll for the building-wide emergency (all doors open).
+  useEffect(() => {
+    let alive = true;
+    async function check() {
+      const r = await getEmergencyStatus();
+      if (alive && r.ok) setEmergencyActive(r.active);
+    }
+    void check();
+    const timer = setInterval(check, 15000);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
+  }, []);
+
+  // GeoVision's GET_ALL_DEVICES lags DOOR_OPERATION by ~1-2s, so re-read the
+  // live state a beat after firing a command (the immediate read is stale).
+  function recheckEmergencySoon() {
+    setTimeout(async () => {
+      const r = await getEmergencyStatus();
+      if (r.ok) setEmergencyActive(r.active);
+    }, 2500);
+  }
+
+  // Emergency: open (force-unlock) every building door at once.
+  async function doEmergencyOpen() {
+    if (emergencyBusy) return;
+    setEmergencyBusy(true);
+    const r = await activateEmergencyOpen();
+    setEmergencyBusy(false);
+    setConfirmEmergency(false);
+    setGlobalMenuOpen(false);
+    if (r.ok) {
+      setEmergencyActive(true);
+      toast.success(`🚨 מצב חירום: כל הדלתות נפתחו (${r.okCount}/${r.total})`);
+    } else if (r.okCount > 0) {
+      setEmergencyActive(true);
+      toast.error(`נפתחו ${r.okCount} מתוך ${r.total} דלתות — בדקו את השאר`);
+    } else {
+      toast.error(r.error ?? "פתיחת החירום נכשלה");
+    }
+    recheckEmergencySoon();
+  }
+
+  // Emergency all-clear: release the forced-open on every door (back to normal).
+  async function doEmergencyClear() {
+    if (emergencyBusy) return;
+    setEmergencyBusy(true);
+    const r = await clearEmergencyOpen();
+    setEmergencyBusy(false);
+    setGlobalMenuOpen(false);
+    if (r.ok) {
+      setEmergencyActive(false);
+      toast.success(`מצב חירום בוטל — כל הדלתות חזרו לרגיל (${r.okCount}/${r.total})`);
+    } else if (r.okCount > 0) {
+      toast.error(`שוחררו ${r.okCount} מתוך ${r.total} דלתות — בדקו את השאר`);
+    } else {
+      toast.error(r.error ?? "ביטול מצב החירום נכשל");
+    }
+    recheckEmergencySoon();
+  }
+
   // Global shortcut: double-tap Space anywhere in the app to open the lobby door
   // (it's the most-opened door). A ref keeps the handler pointed at the latest
   // fireDoor so its doorBusy in-flight guard stays current without re-binding.
@@ -206,6 +285,18 @@ export function GateControl() {
         )}
       </AnimatePresence>
 
+      <ConfirmDialog
+        open={confirmEmergency}
+        onClose={() => setConfirmEmergency(false)}
+        onConfirm={doEmergencyOpen}
+        title="פתיחת חירום — כל הדלתות"
+        description="פעולה זו תפתח בו-זמנית את כל דלתות הבניין ותשאיר אותן פתוחות עד לביטול ידני. להמשיך?"
+        confirmLabel="כן, פתח את הכל"
+        pendingLabel="פותח..."
+        variant="destructive"
+        pending={emergencyBusy}
+      />
+
       <div className="fixed -bottom-7 left-1/2 z-50 -translate-x-1/2">
       {/* Peeking drawer: rests half-tucked below the edge at 50% opacity,
           glides fully into view on hover/focus. */}
@@ -252,6 +343,105 @@ export function GateControl() {
         </AnimatePresence>
 
         <div className="flex flex-row gap-2">
+          {/* Global commands ⋮ — building-wide ops (emergency open-all). First
+              DOM child so under RTL it sits at the drawer's RIGHT edge. A pulsing
+              red halo marks an active building-wide emergency. */}
+          <div className="relative flex items-center">
+            {emergencyActive && (
+              <motion.span
+                aria-hidden
+                className="pointer-events-none absolute -inset-1 rounded-full ring-2 ring-red-400 shadow-[0_0_18px_5px_rgba(248,113,113,0.85)]"
+                animate={{ opacity: [0.2, 1, 0.2] }}
+                transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
+              />
+            )}
+
+            <button
+              type="button"
+              onClick={() => {
+                setLobbyMenuOpen(false);
+                setGlobalMenuOpen((v) => !v);
+              }}
+              aria-haspopup="menu"
+              aria-expanded={globalMenuOpen}
+              aria-label="פקודות גלובליות"
+              className={cn(
+                "relative flex size-9 items-center justify-center rounded-full",
+                "bg-linear-to-b from-red-500 to-red-700 text-white",
+                "shadow-[inset_0_1px_0_rgba(255,255,255,0.3),0_2px_8px_rgba(127,29,29,0.35)]",
+                "transition-all duration-200 ease-out hover:-translate-y-0.5 hover:from-red-500 hover:to-red-600",
+                "active:translate-y-0 active:scale-[0.97]"
+              )}
+            >
+              <EllipsisVertical className="size-5" />
+            </button>
+
+            {/* upward popup — global commands */}
+            <AnimatePresence>
+              {globalMenuOpen && (
+                <>
+                  <button
+                    type="button"
+                    aria-hidden
+                    tabIndex={-1}
+                    onClick={() => setGlobalMenuOpen(false)}
+                    className="fixed inset-0 z-40 cursor-default"
+                  />
+                  <motion.div
+                    role="menu"
+                    initial={{ opacity: 0, y: 6, scale: 0.96 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 6, scale: 0.96 }}
+                    transition={{ duration: 0.15, ease: "easeOut" }}
+                    className={cn(
+                      "absolute right-0 bottom-full z-50 mb-2 min-w-64 overflow-hidden rounded-2xl p-1.5",
+                      "border border-zinc-200/80 bg-white/95 shadow-2xl backdrop-blur-md",
+                      "dark:border-zinc-700/80 dark:bg-zinc-900/95"
+                    )}
+                  >
+                    <p className="px-3 pt-1.5 pb-1 text-xs font-medium text-zinc-400 dark:text-zinc-500">
+                      פקודות גלובליות
+                    </p>
+                    {emergencyActive ? (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={doEmergencyClear}
+                        disabled={emergencyBusy}
+                        className={cn(
+                          "flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium",
+                          "text-emerald-700 transition-colors duration-150 hover:bg-emerald-50 disabled:opacity-60",
+                          "dark:text-emerald-300 dark:hover:bg-emerald-950/40"
+                        )}
+                      >
+                        <ShieldCheck className="size-4 shrink-0" />
+                        סיום מצב חירום — שחרר את כל הדלתות
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          setGlobalMenuOpen(false);
+                          setConfirmEmergency(true);
+                        }}
+                        disabled={emergencyBusy}
+                        className={cn(
+                          "flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-semibold",
+                          "text-red-700 transition-colors duration-150 hover:bg-red-50 disabled:opacity-60",
+                          "dark:text-red-300 dark:hover:bg-red-950/40"
+                        )}
+                      >
+                        <ShieldAlert className="size-4 shrink-0" />
+                        חירום — פתח את כל הדלתות
+                      </button>
+                    )}
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
+          </div>
+
           {GATES.map((gate) => (
             <button
               key={gate.id}
@@ -292,7 +482,10 @@ export function GateControl() {
               {/* ⋮ options (right cap under RTL) */}
               <button
                 type="button"
-                onClick={() => setLobbyMenuOpen((v) => !v)}
+                onClick={() => {
+                  setGlobalMenuOpen(false);
+                  setLobbyMenuOpen((v) => !v);
+                }}
                 aria-haspopup="menu"
                 aria-expanded={lobbyMenuOpen}
                 aria-label="אפשרויות דלת הלובי"

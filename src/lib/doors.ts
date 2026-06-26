@@ -115,6 +115,7 @@ function postForm(
 
 type Session = { cookie: string; guid: string };
 let session: Session | null = null;
+let loginInFlight: Promise<Session> | null = null;
 
 async function login(): Promise<Session> {
   // 1. Authenticate -> GvWebSessionID cookie.
@@ -143,9 +144,22 @@ async function login(): Promise<Session> {
   return { cookie, guid };
 }
 
+// Returns the cached session, logging in once if needed. Concurrent callers
+// (e.g. the emergency fan-out across all doors) share a SINGLE in-flight login
+// instead of each kicking off their own.
 async function ensureSession(): Promise<Session> {
-  if (!session) session = await login();
-  return session;
+  if (session) return session;
+  if (!loginInFlight) {
+    loginInFlight = login()
+      .then((s) => {
+        session = s;
+        return s;
+      })
+      .finally(() => {
+        loginInFlight = null;
+      });
+  }
+  return loginInFlight;
 }
 
 function safeJson(text: string): Record<string, unknown> | null {
@@ -230,46 +244,115 @@ export function releaseDoor(door: DoorDef): Promise<DoorResult> {
   return runDoorOperation(door, "CLEAR_FORCE_LOCKUNLOCK");
 }
 
+// --- Emergency: every door at once -----------------------------------------
+// For a missile/alert "open everything" — fan a single operation across all
+// DOORS concurrently and report each door's outcome (a life-safety feature must
+// KNOW which door, if any, didn't respond). The callers share one login (see
+// ensureSession), so this is just a handful of parallel POSTs.
+
+export type DoorOutcome = { id: DoorId; name: string; ok: boolean; error?: string };
+export type AllDoorsResult = { results: DoorOutcome[]; okCount: number; total: number };
+
+async function runOnAllDoors(operation: DoorOperation): Promise<AllDoorsResult> {
+  // Warm the session once so the parallel calls below don't race to log in.
+  try {
+    await ensureSession();
+  } catch {
+    /* let the per-door calls surface the failure individually */
+  }
+  const results = await Promise.all(
+    DOORS.map(async (door): Promise<DoorOutcome> => {
+      const r = await runDoorOperation(door, operation);
+      return { id: door.id, name: door.name, ok: r.ok, error: r.error };
+    })
+  );
+  return {
+    results,
+    okCount: results.filter((r) => r.ok).length,
+    total: results.length,
+  };
+}
+
+// Latch EVERY door open (FORCE_UNLOCK) — the emergency "open all".
+export function holdAllDoorsOpen(): Promise<AllDoorsResult> {
+  return runOnAllDoors("FORCE_UNLOCK");
+}
+
+// Clear the force on EVERY door (CLEAR_FORCE_LOCKUNLOCK) → back to the normal
+// card schedule. This RELEASES the forced-open state; it is NOT a lock-down.
+export function releaseAllDoorHolds(): Promise<AllDoorsResult> {
+  return runOnAllDoors("CLEAR_FORCE_LOCKUNLOCK");
+}
+
 export type DoorState = { ok: boolean; held?: boolean; mode?: string; error?: string };
 
-// Reads the door's live work mode from GeoVision (GET_ALL_DEVICES). `held` is
-// true while it's force-unlocked (latched open) — LOCAL/REMOTE_FORCE_UNLOCK_MODE.
-export async function getDoorWorkMode(door: DoorDef): Promise<DoorState> {
+type DeviceTree = {
+  ctrl?: Array<{
+    ctrl_id: number;
+    door?: Array<{ dr_id: number; dr_work_mode?: string }>;
+  }>;
+};
+
+// One GET_ALL_DEVICES read of the whole controller tree (re-auth + retry once).
+// Shared by the single-door and all-doors status reads.
+async function fetchDeviceTree(): Promise<DeviceTree | null> {
   for (let attempt = 0; attempt < 2; attempt++) {
     let s: Session;
     try {
       s = await ensureSession();
-    } catch (e) {
+    } catch {
       session = null;
-      return { ok: false, error: e instanceof Error ? e.message : "תקלת תקשורת" };
+      return null;
     }
-
     try {
       const res = await postForm(
         ENDPOINT,
         { action: "GET_ALL_DEVICES", module: "monitor", client_guid: s.guid },
         s.cookie
       );
-      const json = safeJson(res.body) as {
-        ctrl?: Array<{
-          ctrl_id: number;
-          door?: Array<{ dr_id: number; dr_work_mode?: string }>;
-        }>;
-      } | null;
-      if (json?.ctrl) {
-        const ctrl = json.ctrl.find((c) => c.ctrl_id === door.ctrlId);
-        const dr = ctrl?.door?.find((d) => d.dr_id === door.drId);
-        const mode = dr?.dr_work_mode;
-        return { ok: true, mode, held: mode ? /FORCE_UNLOCK/.test(mode) : false };
-      }
+      const json = safeJson(res.body) as DeviceTree | null;
+      if (json?.ctrl) return json;
       session = null;
-      if (attempt === 1) return { ok: false, error: "קריאת מצב הדלת נכשלה" };
-    } catch (e) {
+    } catch {
       session = null;
-      if (attempt === 1) {
-        return { ok: false, error: e instanceof Error ? e.message : "תקלת תקשורת לבקר הדלת" };
-      }
     }
   }
-  return { ok: false, error: "קריאת מצב הדלת נכשלה" };
+  return null;
+}
+
+// A door is "held" while it's force-unlocked (latched open) —
+// LOCAL/REMOTE_FORCE_UNLOCK_MODE.
+function isHeld(mode?: string): boolean {
+  return mode ? /FORCE_UNLOCK/.test(mode) : false;
+}
+
+// Reads a single door's live work mode from GeoVision.
+export async function getDoorWorkMode(door: DoorDef): Promise<DoorState> {
+  const tree = await fetchDeviceTree();
+  if (!tree?.ctrl) return { ok: false, error: "קריאת מצב הדלת נכשלה" };
+  const ctrl = tree.ctrl.find((c) => c.ctrl_id === door.ctrlId);
+  const mode = ctrl?.door?.find((d) => d.dr_id === door.drId)?.dr_work_mode;
+  return { ok: true, mode, held: isHeld(mode) };
+}
+
+export type AllDoorsState = {
+  ok: boolean;
+  error?: string;
+  doors: Array<{ id: DoorId; name: string; held: boolean; mode?: string }>;
+  heldCount: number;
+};
+
+// Reads the live work mode of EVERY door in ONE GET_ALL_DEVICES call — drives
+// the emergency status (how many doors are currently forced open).
+export async function getAllDoorWorkModes(): Promise<AllDoorsState> {
+  const tree = await fetchDeviceTree();
+  if (!tree?.ctrl) {
+    return { ok: false, error: "קריאת מצב הדלתות נכשלה", doors: [], heldCount: 0 };
+  }
+  const doors = DOORS.map((door) => {
+    const ctrl = tree.ctrl!.find((c) => c.ctrl_id === door.ctrlId);
+    const mode = ctrl?.door?.find((d) => d.dr_id === door.drId)?.dr_work_mode;
+    return { id: door.id, name: door.name, held: isHeld(mode), mode };
+  });
+  return { ok: true, doors, heldCount: doors.filter((d) => d.held).length };
 }

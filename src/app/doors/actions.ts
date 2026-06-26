@@ -8,6 +8,9 @@ import {
   holdDoorOpen as holdDoorOpenHw,
   releaseDoor as releaseDoorHw,
   getDoorWorkMode,
+  holdAllDoorsOpen,
+  releaseAllDoorHolds,
+  getAllDoorWorkModes,
 } from "@/lib/doors";
 
 export type OpenDoorResult = { ok: boolean; error?: string };
@@ -129,4 +132,74 @@ export async function getDoorHold(doorId: string): Promise<DoorHoldResult> {
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "תקלת תקשורת לבקר הדלת" };
   }
+}
+
+// --- Emergency: open / release every door (missile / alert "open all") ------
+
+export type EmergencyDoorOutcome = { id: string; name: string; ok: boolean; error?: string };
+export type EmergencyResult = {
+  ok: boolean;
+  results: EmergencyDoorOutcome[];
+  okCount: number;
+  total: number;
+  error?: string;
+};
+
+// Latch EVERY building door open. Logs each door to door_events (source
+// "war-open"). Any logged-in staff may fire it — in an alert the guard on shift
+// must be able to, same policy as the other door ops.
+export async function activateEmergencyOpen(): Promise<EmergencyResult> {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, results: [], okCount: 0, total: 0, error: "לא מחובר" };
+
+  const r = await holdAllDoorsOpen();
+  for (const d of r.results) {
+    logDoorEvent({ id: d.id, name: d.name }, user.lobbyist_name, d.ok, "war-open");
+  }
+  return { ok: r.okCount === r.total, results: r.results, okCount: r.okCount, total: r.total };
+}
+
+// Release the force on EVERY door → back to the normal card schedule. This is a
+// RELEASE of the forced-open state, NOT a lock-down. Logged as "war-clear".
+export async function clearEmergencyOpen(): Promise<EmergencyResult> {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, results: [], okCount: 0, total: 0, error: "לא מחובר" };
+
+  const r = await releaseAllDoorHolds();
+  for (const d of r.results) {
+    logDoorEvent({ id: d.id, name: d.name }, user.lobbyist_name, d.ok, "war-clear");
+  }
+  return { ok: r.okCount === r.total, results: r.results, okCount: r.okCount, total: r.total };
+}
+
+export type EmergencyStatus = {
+  ok: boolean;
+  active: boolean;
+  heldCount: number;
+  total: number;
+  doors: Array<{ id: string; name: string; held: boolean }>;
+  error?: string;
+};
+
+// Read-only: how many doors are currently forced open. `active` = every door is
+// held (the full emergency "open all" state); the raw heldCount/total are also
+// returned so the UI can show e.g. "5/7 פתוחות".
+export async function getEmergencyStatus(): Promise<EmergencyStatus> {
+  const user = await getCurrentUser();
+  if (!user) {
+    return { ok: false, active: false, heldCount: 0, total: 0, doors: [], error: "לא מחובר" };
+  }
+
+  const s = await getAllDoorWorkModes();
+  if (!s.ok) {
+    return { ok: false, active: false, heldCount: 0, total: 0, doors: [], error: s.error };
+  }
+  const total = s.doors.length;
+  return {
+    ok: true,
+    active: total > 0 && s.heldCount === total,
+    heldCount: s.heldCount,
+    total,
+    doors: s.doors.map((d) => ({ id: d.id, name: d.name, held: d.held })),
+  };
 }

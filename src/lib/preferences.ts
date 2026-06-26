@@ -26,13 +26,28 @@ export type Preferences = {
     // order. Items missing from this list fall back to their default position.
     order: string[];
   };
+  // Manager-chosen order of reorderable tab groups, keyed by a stable group id
+  // (e.g. "events"). Each value is a list of tab values in display order.
+  tabOrders: Record<string, string[]>;
   selectedResident: SelectedResident | null;
 };
 
 const DEFAULTS: Preferences = {
   sidebar: { collapsed: false, order: [] },
+  tabOrders: {},
   selectedResident: null,
 };
+
+function sanitizeTabOrders(value: unknown): Record<string, string[]> {
+  if (!value || typeof value !== "object") return {};
+  const out: Record<string, string[]> = {};
+  for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
+    if (Array.isArray(val)) {
+      out[key] = val.filter((x): x is string => typeof x === "string");
+    }
+  }
+  return out;
+}
 
 function merge(stored: Partial<Preferences>): Preferences {
   return {
@@ -45,6 +60,7 @@ function merge(stored: Partial<Preferences>): Preferences {
         ? stored.sidebar.order.filter((h): h is string => typeof h === "string")
         : DEFAULTS.sidebar.order,
     },
+    tabOrders: sanitizeTabOrders(stored.tabOrders),
     selectedResident: stored.selectedResident ?? DEFAULTS.selectedResident,
   };
 }

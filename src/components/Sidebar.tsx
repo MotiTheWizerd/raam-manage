@@ -6,6 +6,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/cn";
+import { applyOrder } from "@/lib/ordering";
 import { useIsManager } from "@/components/AuthProvider";
 import { useEditMode } from "@/components/EditModeProvider";
 import {
@@ -44,22 +45,6 @@ const EASE = [0.16, 1, 0.3, 1] as const;
 // preference is left untouched and restored automatically on leaving.
 const FORCE_COLLAPSE_ROUTES = ["/directory"];
 
-// Sort the menu by the manager-chosen `order` (list of hrefs). Items missing
-// from `order` (e.g. a menu entry added in a later release) keep their default
-// relative position at the end, so the menu never silently drops an item.
-function applyOrder(list: Item[], order: string[]): Item[] {
-  if (order.length === 0) return list;
-  const rank = new Map(order.map((href, i) => [href, i]));
-  return list
-    .map((it, i) => ({ it, i }))
-    .sort((a, b) => {
-      const ra = rank.get(a.it.href) ?? Number.MAX_SAFE_INTEGER;
-      const rb = rank.get(b.it.href) ?? Number.MAX_SAFE_INTEGER;
-      return ra === rb ? a.i - b.i : ra - rb;
-    })
-    .map((x) => x.it);
-}
-
 export function Sidebar() {
   const pathname = usePathname();
   const collapsedPref = useSidebarCollapsed();
@@ -68,7 +53,10 @@ export function Sidebar() {
   const order = useSidebarOrder();
   const setOrder = useSetSidebarOrder();
 
-  const orderedAll = useMemo(() => applyOrder(items, order), [order]);
+  const orderedAll = useMemo(
+    () => applyOrder(items, order, (it) => it.href),
+    [order]
+  );
   const visibleItems = useMemo(
     () => orderedAll.filter((it) => !it.managerOnly || isManager),
     [orderedAll, isManager]

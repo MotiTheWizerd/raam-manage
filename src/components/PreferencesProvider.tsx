@@ -63,6 +63,10 @@ export const useSidebarOrder = () =>
   usePreferencesStore((s) => s.sidebar.order);
 export const useSetSidebarOrder = () =>
   usePreferencesStore((s) => s.setSidebarOrder);
+export const useTabOrder = (key: string) =>
+  usePreferencesStore((s) => s.tabOrders[key]);
+export const useSetTabOrder = () =>
+  usePreferencesStore((s) => s.setTabOrder);
 export const useSelectedResident = () =>
   usePreferencesStore((s) => s.selectedResident);
 export const useSetSelectedResident = () =>

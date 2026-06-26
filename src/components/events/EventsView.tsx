@@ -1,13 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { MessageSquare, PhoneCall } from "lucide-react";
 import { ApartmentLink, ResidentLink } from "@/components/entity-links";
-import { useSelectedResident } from "@/components/PreferencesProvider";
+import { useIsManager } from "@/components/AuthProvider";
+import { useEditMode } from "@/components/EditModeProvider";
+import {
+  useSelectedResident,
+  useSetTabOrder,
+  useTabOrder,
+} from "@/components/PreferencesProvider";
 import { getApartmentCallPolicy } from "@/app/events/actions";
 import { type CallPolicy } from "@/lib/call-policy";
 import { cn } from "@/lib/cn";
+import { applyOrder } from "@/lib/ordering";
 import { Tabs, type TabItem } from "@/components/ui/Tabs";
 import { CarsTab } from "./CarsTab";
 import { EquipmentTab } from "./EquipmentTab";
@@ -26,11 +33,20 @@ const TABS: TabItem[] = [
 ];
 
 const TAB_VALUES = new Set(TABS.map((t) => t.value));
+const TABS_ORDER_KEY = "events";
 
 export function EventsView() {
   const resident = useSelectedResident();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const isManager = useIsManager();
+  const { editMode } = useEditMode();
+  const savedTabOrder = useTabOrder(TABS_ORDER_KEY);
+  const setTabOrder = useSetTabOrder();
+  const orderedTabs = useMemo(
+    () => applyOrder(TABS, savedTabOrder ?? [], (t) => t.value),
+    [savedTabOrder]
+  );
   const [tab, setTab] = useState<string>(() => {
     const initial = searchParams.get("tab");
     return initial && TAB_VALUES.has(initial) ? initial : "vehicles";
@@ -181,7 +197,13 @@ export function EventsView() {
         </div>
       )}
 
-      <Tabs tabs={TABS} value={tab} onChange={selectTab} />
+      <Tabs
+        tabs={orderedTabs}
+        value={tab}
+        onChange={selectTab}
+        reorderable={editMode && isManager}
+        onReorder={(values) => setTabOrder(TABS_ORDER_KEY, values)}
+      />
 
       <section>
         {tab === "keys" && (

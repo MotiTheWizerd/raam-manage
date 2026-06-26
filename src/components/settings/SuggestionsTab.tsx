@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { ChevronDown, Trash2 } from "lucide-react";
+import { ChevronDown, MessageSquareText, Trash2 } from "lucide-react";
 import { useActionState, useEffect, useState } from "react";
 import {
   deleteSuggestion,
@@ -177,6 +177,27 @@ function SuggestionCard({
             {!expanded && (
               <div className="text-xs opacity-60 line-clamp-2">
                 {suggestion.body}
+              </div>
+            )}
+            {!expanded && suggestion.last_comment_body && (
+              <div className="rounded-md border-s-2 border-sky-400 bg-sky-500/5 px-2.5 py-1.5">
+                <div className="flex items-center gap-1.5 text-[11px] font-semibold text-sky-700 dark:text-sky-300">
+                  <MessageSquareText size={12} className="shrink-0" />
+                  עדכון אחרון
+                  {suggestion.last_comment_status && (
+                    <span className="inline-flex items-center rounded-full bg-sky-500/15 px-1.5 py-0.5">
+                      ← {STATUS_LABEL[suggestion.last_comment_status]}
+                    </span>
+                  )}
+                </div>
+                <div className="mt-0.5 line-clamp-2 text-xs opacity-80">
+                  {suggestion.last_comment_body}
+                </div>
+                <div className="mt-0.5 text-[11px] opacity-50">
+                  {suggestion.last_comment_by}
+                  {suggestion.last_comment_at &&
+                    ` · ${formatDate(suggestion.last_comment_at)}`}
+                </div>
               </div>
             )}
             <div className="text-xs opacity-50">

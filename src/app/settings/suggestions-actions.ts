@@ -27,6 +27,12 @@ export type SuggestionRow = {
   created_at: string;
   updated_at: string;
   resolved_at: string | null;
+  // The most recent progress comment (null when the thread is empty), surfaced
+  // in the list so the latest update is visible without expanding the card.
+  last_comment_body: string | null;
+  last_comment_by: string | null;
+  last_comment_status: SuggestionStatus | null;
+  last_comment_at: string | null;
 };
 
 // A single entry in a suggestion's progress thread. `status` is the status the
@@ -41,7 +47,7 @@ export type SuggestionComment = {
 };
 
 const STATUS_ORDER = `
-  CASE status
+  CASE s.status
     WHEN 'open'        THEN 0
     WHEN 'in_progress' THEN 1
     WHEN 'done'        THEN 2
@@ -52,10 +58,20 @@ const STATUS_ORDER = `
 export async function getAllSuggestions(): Promise<SuggestionRow[]> {
   return db
     .prepare(
-      `SELECT id, title, body, category, status, submitted_by,
-              resolution_notes, created_at, updated_at, resolved_at
-       FROM suggestions
-       ORDER BY ${STATUS_ORDER}, created_at DESC`
+      `SELECT s.id, s.title, s.body, s.category, s.status, s.submitted_by,
+              s.resolution_notes, s.created_at, s.updated_at, s.resolved_at,
+              lc.body          AS last_comment_body,
+              lc.lobbyist_name AS last_comment_by,
+              lc.status        AS last_comment_status,
+              lc.created_at    AS last_comment_at
+       FROM suggestions s
+       LEFT JOIN suggestion_comments lc ON lc.id = (
+         SELECT c.id FROM suggestion_comments c
+         WHERE c.suggestion_id = s.id
+         ORDER BY c.created_at DESC, c.id DESC
+         LIMIT 1
+       )
+       ORDER BY ${STATUS_ORDER}, s.created_at DESC`
     )
     .all() as SuggestionRow[];
 }

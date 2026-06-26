@@ -59,6 +59,10 @@ export const useSidebarCollapsed = () =>
   usePreferencesStore((s) => s.sidebar.collapsed);
 export const useToggleSidebar = () =>
   usePreferencesStore((s) => s.toggleSidebar);
+export const useSidebarOrder = () =>
+  usePreferencesStore((s) => s.sidebar.order);
+export const useSetSidebarOrder = () =>
+  usePreferencesStore((s) => s.setSidebarOrder);
 export const useSelectedResident = () =>
   usePreferencesStore((s) => s.selectedResident);
 export const useSetSelectedResident = () =>

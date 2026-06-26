@@ -10,6 +10,7 @@ import type {
 export type PreferencesActions = {
   setSidebarCollapsed: (v: boolean) => void;
   toggleSidebar: () => void;
+  setSidebarOrder: (order: string[]) => void;
   setSelectedResident: (r: SelectedResident | null) => void;
   clearSelectedResident: () => void;
 };
@@ -32,6 +33,8 @@ export function createPreferencesStore(
       set((s) => ({ sidebar: { ...s.sidebar, collapsed: v } })),
     toggleSidebar: () =>
       set((s) => ({ sidebar: { ...s.sidebar, collapsed: !s.sidebar.collapsed } })),
+    setSidebarOrder: (order) =>
+      set((s) => ({ sidebar: { ...s.sidebar, order } })),
     setSelectedResident: (r) => set({ selectedResident: r }),
     clearSelectedResident: () => set({ selectedResident: null }),
   }));

@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { Suspense } from "react";
 import { Toaster } from "sonner";
 import { AuthProvider } from "@/components/AuthProvider";
+import { EditModeProvider } from "@/components/EditModeProvider";
 import { EmergencyProvider } from "@/components/EmergencyProvider";
 import { FaceNotifier } from "@/components/FaceNotifier";
 import { GateControl } from "@/components/GateControl";
@@ -51,6 +52,7 @@ export default async function RootLayout({
           <PreferencesProvider initial={preferences} currentUser={currentUser}>
             {currentUser ? (
               <EmergencyProvider>
+                <EditModeProvider>
                 <Header lobbyistName={currentUser.lobbyist_name} isDark={isDark} />
                 <div className="flex-1 flex min-h-0">
                   <Sidebar />
@@ -72,6 +74,7 @@ export default async function RootLayout({
                 <StickyMessages />
                 <GateControl />
                 <BackToTop />
+                </EditModeProvider>
               </EmergencyProvider>
             ) : (
               children

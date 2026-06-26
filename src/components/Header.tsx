@@ -1,5 +1,6 @@
 import { BrandLogo } from "./BrandLogo";
 import { CurrentUserChip } from "./CurrentUserChip";
+import { EditModeToggle } from "./EditModeToggle";
 import { SearchBar } from "./SearchBar";
 import { ThemeToggle } from "./ThemeToggle";
 
@@ -16,7 +17,10 @@ export function Header({ lobbyistName, isDark }: Props) {
         <SearchBar className="flex-1 max-w-sm" />
         <CurrentUserChip lobbyistName={lobbyistName} />
       </div>
-      <ThemeToggle initialIsDark={isDark} />
+      <div className="flex items-center gap-2">
+        <EditModeToggle />
+        <ThemeToggle initialIsDark={isDark} />
+      </div>
     </header>
   );
 }

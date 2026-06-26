@@ -22,12 +22,15 @@ export type ActiveLobbyist = {
 export type Preferences = {
   sidebar: {
     collapsed: boolean;
+    // Sidebar item hrefs in the manager-chosen display order. Empty = default
+    // order. Items missing from this list fall back to their default position.
+    order: string[];
   };
   selectedResident: SelectedResident | null;
 };
 
 const DEFAULTS: Preferences = {
-  sidebar: { collapsed: false },
+  sidebar: { collapsed: false, order: [] },
   selectedResident: null,
 };
 
@@ -38,6 +41,9 @@ function merge(stored: Partial<Preferences>): Preferences {
         typeof stored.sidebar?.collapsed === "boolean"
           ? stored.sidebar.collapsed
           : DEFAULTS.sidebar.collapsed,
+      order: Array.isArray(stored.sidebar?.order)
+        ? stored.sidebar.order.filter((h): h is string => typeof h === "string")
+        : DEFAULTS.sidebar.order,
     },
     selectedResident: stored.selectedResident ?? DEFAULTS.selectedResident,
   };

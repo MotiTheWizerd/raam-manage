@@ -3,6 +3,7 @@ import { CurrentUserChip } from "./CurrentUserChip";
 import { EditModeToggle } from "./EditModeToggle";
 import { SearchBar } from "./SearchBar";
 import { ThemeToggle } from "./ThemeToggle";
+import { ViewAsToggle } from "./ViewAsToggle";
 
 type Props = {
   lobbyistName: string;
@@ -19,6 +20,7 @@ export function Header({ lobbyistName, isDark }: Props) {
       </div>
       <div className="flex items-center gap-2">
         <EditModeToggle />
+        <ViewAsToggle />
         <ThemeToggle initialIsDark={isDark} />
       </div>
     </header>

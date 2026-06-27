@@ -54,6 +54,57 @@ export async function getApartmentKeysForEvents(
     .all(apartmentId) as EventsKeyRow[];
 }
 
+export type LobbyKeyRow = {
+  id: number;
+  nickname: string;
+  is_default: number;
+  is_in_lobby: number;
+  apartment_id: number;
+  apartment_number: string;
+  floor: number | null;
+  zone_name: string | null;
+  since: string | null;
+  last_lobbyist: string | null;
+  comment: string | null;
+};
+
+/**
+ * Snapshot of every active key joined to its apartment and its most-recent
+ * history row (who last moved it in/out of the lobby and when). Powers the
+ * "דוח מפתחות לובי" sub-tab inside the keys tab; the client filters by lobby
+ * status (in / out / all).
+ */
+export async function getLobbyKeysReport(): Promise<LobbyKeyRow[]> {
+  return db
+    .prepare(
+      `SELECT
+         k.id,
+         k.nickname,
+         k.is_default,
+         k.is_in_lobby,
+         a.id            AS apartment_id,
+         a.number        AS apartment_number,
+         a.floor         AS floor,
+         z.name          AS zone_name,
+         h.created_at    AS since,
+         h.lobbyist_name AS last_lobbyist,
+         h.comment       AS comment
+       FROM apartment_keys k
+       JOIN apartments a ON a.id = k.apartment_id
+       LEFT JOIN zones z ON z.id = a.zone_id
+       LEFT JOIN apartment_keys_history h ON h.id = (
+         SELECT h2.id
+         FROM apartment_keys_history h2
+         WHERE h2.apartment_key_id = k.id
+         ORDER BY h2.created_at DESC, h2.id DESC
+         LIMIT 1
+       )
+       WHERE k.is_active = 1
+       ORDER BY a.number, k.id`
+    )
+    .all() as LobbyKeyRow[];
+}
+
 export async function getApartmentKeysComment(
   apartmentId: number
 ): Promise<string | null> {

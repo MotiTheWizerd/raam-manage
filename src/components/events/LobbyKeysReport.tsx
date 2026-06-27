@@ -3,23 +3,10 @@
 import Link from "next/link";
 import { Download, KeyRound, Printer, Search, X } from "lucide-react";
 import { useMemo, useState } from "react";
+import { type LobbyKeyRow } from "@/app/events/actions";
 import { Button } from "@/components/ui/Button";
 import { Dropdown } from "@/components/ui/Dropdown";
 import { Input } from "@/components/ui/Input";
-
-export type LobbyKeyRow = {
-  id: number;
-  nickname: string;
-  is_default: number;
-  is_in_lobby: number;
-  apartment_id: number;
-  apartment_number: string;
-  floor: number | null;
-  zone_name: string | null;
-  since: string | null;
-  last_lobbyist: string | null;
-  comment: string | null;
-};
 
 type LobbyFilter = "in" | "out" | "all";
 
@@ -107,10 +94,10 @@ export function LobbyKeysReport({ rows }: Props) {
     <div className="space-y-4">
       <header className="flex flex-wrap items-center justify-between gap-3 print:hidden">
         <div>
-          <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
-            <KeyRound size={22} className="text-red-600 dark:text-red-400" />
+          <h2 className="flex items-center gap-2 text-xl font-semibold tracking-tight">
+            <KeyRound size={20} className="text-red-600 dark:text-red-400" />
             דוח מפתחות לובי
-          </h1>
+          </h2>
           <p className="mt-1 text-sm opacity-60">
             {rows.length === 0
               ? "אין מפתחות פעילים"

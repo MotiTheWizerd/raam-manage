@@ -8,23 +8,32 @@ import {
   getApartmentKeysForEvents,
   getApartmentResidents,
   getKeysHistoryPage,
+  getLobbyKeysReport,
   searchKeysHistory,
   updateApartmentKeysComment,
   type ApartmentResidentOption,
   type EventsKeyRow,
   type KeyHistoryRow,
+  type LobbyKeyRow,
 } from "@/app/events/actions";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { ResidentLink } from "@/components/entity-links";
 import { Input } from "@/components/ui/Input";
 import { Pagination } from "@/components/ui/Pagination";
+import { Tabs, type TabItem } from "@/components/ui/Tabs";
 import { useDebouncedValue } from "@/lib/hooks/useDebouncedValue";
 import { cn } from "@/lib/cn";
 import { KeysHistoryList } from "./KeysHistoryList";
+import { LobbyKeysReport } from "./LobbyKeysReport";
 import { LogKeyEventModal } from "./LogKeyEventModal";
 
 const HISTORY_PAGE_SIZE = 10;
+
+const KEYS_SUB_TABS: TabItem[] = [
+  { value: "manage", label: "מפתחות" },
+  { value: "report", label: "דוח מפתחות לובי" },
+];
 
 type Props = {
   apartmentId: number | null;
@@ -43,9 +52,24 @@ export function KeysTab({ apartmentId }: Props) {
   const [query, setQuery] = useState("");
   const debouncedQuery = useDebouncedValue(query.trim(), 250);
   const searching = debouncedQuery.length > 0;
+  const [subTab, setSubTab] = useState<string>("manage");
+  const [reportRows, setReportRows] = useState<LobbyKeyRow[] | null>(null);
 
   const refresh = useCallback(() => setRefreshTick((t) => t + 1), []);
   const handleCloseModal = useCallback(() => setActiveKey(null), []);
+
+  // Load the lobby-keys report fresh each time its sub-tab is opened (cheap
+  // local query); the rows stay in state so the table survives a tab switch.
+  useEffect(() => {
+    if (subTab !== "report") return;
+    let active = true;
+    getLobbyKeysReport().then((rows) => {
+      if (active) setReportRows(rows);
+    });
+    return () => {
+      active = false;
+    };
+  }, [subTab]);
 
   useEffect(() => {
     let active = true;
@@ -93,6 +117,10 @@ export function KeysTab({ apartmentId }: Props) {
 
   return (
     <div className="space-y-6">
+      <Tabs tabs={KEYS_SUB_TABS} value={subTab} onChange={setSubTab} />
+
+      {subTab === "manage" && (
+        <div className="space-y-6">
       {apartmentId !== null ? (
         <>
           <KeysComment
@@ -153,6 +181,15 @@ export function KeysTab({ apartmentId }: Props) {
           />
         )}
       </section>
+        </div>
+      )}
+
+      {subTab === "report" &&
+        (reportRows === null ? (
+          <div className="py-8 text-center text-sm opacity-60">טוען דוח...</div>
+        ) : (
+          <LobbyKeysReport rows={reportRows} />
+        ))}
 
       {activeKey && apartmentId !== null && (
         <LogKeyEventModal

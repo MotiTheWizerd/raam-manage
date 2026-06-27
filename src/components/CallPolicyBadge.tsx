@@ -1,10 +1,14 @@
 "use client";
 
-import { MessageSquare, PhoneCall } from "lucide-react";
+import { MessageSquare, PhoneCall, PhoneOff } from "lucide-react";
 import { CALL_POLICY_SHORT, callPolicyFromCode } from "@/lib/call-policy";
 import { cn } from "@/lib/cn";
 
 const STYLE = {
+  none: {
+    Icon: PhoneOff,
+    normal: "bg-zinc-500/15 text-zinc-600 dark:text-zinc-400",
+  },
   call: {
     Icon: PhoneCall,
     normal: "bg-red-500/15 text-red-700 dark:text-red-300",
@@ -16,8 +20,9 @@ const STYLE = {
 } as const;
 
 // A small pill that flags an apartment's contact policy next to a resident's
-// name. Renders nothing for the "none" policy. `active` is the highlighted
-// (red-background) state used by the search dropdown's selected row.
+// name — including "אין צורך" for the "none" policy (lobby staff asked for the
+// explicit all-clear, not just the call/message states). `active` is the
+// highlighted (red-background) state used by the search dropdown's selected row.
 export function CallPolicyBadge({
   code,
   active = false,
@@ -28,7 +33,6 @@ export function CallPolicyBadge({
   className?: string;
 }) {
   const policy = callPolicyFromCode(code);
-  if (policy === "none") return null;
   const { Icon, normal } = STYLE[policy];
 
   return (

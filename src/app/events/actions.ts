@@ -100,7 +100,7 @@ export async function getLobbyKeysReport(): Promise<LobbyKeyRow[]> {
          LIMIT 1
        )
        WHERE k.is_active = 1
-       ORDER BY a.number, k.id`
+       ORDER BY CAST(a.number AS INTEGER), a.number, k.id`
     )
     .all() as LobbyKeyRow[];
 }

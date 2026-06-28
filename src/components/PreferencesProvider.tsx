@@ -63,6 +63,10 @@ export const useSidebarOrder = () =>
   usePreferencesStore((s) => s.sidebar.order);
 export const useSetSidebarOrder = () =>
   usePreferencesStore((s) => s.setSidebarOrder);
+export const useSidebarLabels = () =>
+  usePreferencesStore((s) => s.sidebar.labels);
+export const useSetSidebarLabel = () =>
+  usePreferencesStore((s) => s.setSidebarLabel);
 export const useTabOrder = (key: string) =>
   usePreferencesStore((s) => s.tabOrders[key]);
 export const useSetTabOrder = () =>

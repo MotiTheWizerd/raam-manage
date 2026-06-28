@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-
-const SESSION_COOKIE = "raam_session";
+import {
+  SESSION_COOKIE_NAME,
+  SESSION_MAX_AGE_SECONDS,
+} from "@/lib/session-config";
 
 export function proxy(request: NextRequest) {
-  const hasSession = request.cookies.has(SESSION_COOKIE);
+  const session = request.cookies.get(SESSION_COOKIE_NAME);
+  const hasSession = session !== undefined;
   const isLogin = request.nextUrl.pathname === "/login";
 
   if (!hasSession && !isLogin) {
@@ -21,7 +24,20 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  return NextResponse.next();
+  const res = NextResponse.next();
+  // Sliding refresh: re-stamp the session cookie's lifetime on every authed
+  // request so an already-open session also becomes persistent and survives
+  // browser/Windows restarts (otherwise a stale tab's red door/gate buttons
+  // return "לא מחובר" until a full reload). See session-config.ts.
+  if (hasSession) {
+    res.cookies.set(SESSION_COOKIE_NAME, session.value, {
+      httpOnly: true,
+      sameSite: "lax",
+      path: "/",
+      maxAge: SESSION_MAX_AGE_SECONDS,
+    });
+  }
+  return res;
 }
 
 export const config = {

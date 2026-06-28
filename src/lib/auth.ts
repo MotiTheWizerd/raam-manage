@@ -3,8 +3,9 @@ import "server-only";
 import { cookies } from "next/headers";
 import { cache } from "react";
 import { db } from "./db";
+import { SESSION_COOKIE_NAME, SESSION_MAX_AGE_SECONDS } from "./session-config";
 
-const COOKIE_NAME = "raam_session";
+const COOKIE_NAME = SESSION_COOKIE_NAME;
 
 export type UserRole = "lobbyist" | "manager";
 
@@ -35,11 +36,15 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
 
 export async function setSessionCookie(userId: number): Promise<void> {
   const cookieStore = await cookies();
-  // No maxAge/expires → session cookie (dies when browser closes).
+  // Persistent cookie (not session-only) so the trusted lobby PC stays logged
+  // in across browser/Windows restarts. The proxy re-stamps this lifetime on
+  // every authed request (sliding refresh), so existing sessions become
+  // persistent too. See session-config.ts for the why.
   cookieStore.set(COOKIE_NAME, String(userId), {
     httpOnly: true,
     sameSite: "lax",
     path: "/",
+    maxAge: SESSION_MAX_AGE_SECONDS,
   });
 }
 

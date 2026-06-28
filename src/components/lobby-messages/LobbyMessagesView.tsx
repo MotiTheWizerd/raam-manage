@@ -176,12 +176,10 @@ export function LobbyMessagesView() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-end">
-                      {isManager && (
-                        <div className="flex items-center justify-end gap-1">
-                          <EditSystemMessageButton message={m} />
-                          <DeleteSystemMessageButton messageId={m.id} />
-                        </div>
-                      )}
+                      <div className="flex items-center justify-end gap-1">
+                        {isManager && <EditSystemMessageButton message={m} />}
+                        <DeleteSystemMessageButton messageId={m.id} />
+                      </div>
                     </td>
                   </tr>
                 );

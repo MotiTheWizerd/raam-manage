@@ -96,7 +96,7 @@ export async function createSystemMessage(
   formData: FormData
 ): Promise<SystemMessageFormState> {
   // Any logged-in lobby user may POST a message (they man the desk and need to
-  // share notices). Editing/deleting stays manager-only (curation) below.
+  // share notices). Editing stays manager-only (curation) below.
   if (!(await getCurrentUser())) return fail("אין הרשאה");
 
   const parsed = parseFields(formData);
@@ -153,7 +153,9 @@ export async function deleteSystemMessage(
   _prev: SystemMessageFormState,
   formData: FormData
 ): Promise<SystemMessageFormState> {
-  if (!(await isManager())) return fail("אין הרשאה");
+  // Any logged-in lobby user may delete a message (collaborative board, same as
+  // create). Editing stays manager-only (curation).
+  if (!(await getCurrentUser())) return fail("אין הרשאה");
 
   const idRaw = String(formData.get("id") ?? "").trim();
   const id = parseInt(idRaw, 10);

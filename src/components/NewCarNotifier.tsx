@@ -1,16 +1,24 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { Bell, BellOff, Car, X } from "lucide-react";
+import { Bell, BellOff, Car, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getLatestCarEvent } from "@/app/events/cars-actions";
+import { useIsManager } from "@/components/AuthProvider";
 import { cn } from "@/lib/cn";
 
 const POLL_MS = 5000;
 const AUTO_DISMISS_MS = 12000;
 const MAX_VISIBLE = 4;
 const SOUND_PREF_KEY = "raam.carNotify.sound";
+const COLLAPSE_PREF_KEY = "raam.carNotify.collapsed";
+
+// Tucked-to-the-edge drawer (mirrors StickyMessages): the stack slides this far
+// off the left edge, leaving only the grip handle; a hover/click peeks it back.
+const CARD_WIDTH = 320; // matches w-80
+const PEEK_MS = 8000; // how long a peek stays open before it tucks again
+const COLLAPSE_PEEK_MS = 3500; // short peek right after minimizing, so it's clear where it went
 
 type CarNotification = {
   key: number;
@@ -65,6 +73,11 @@ export function NewCarNotifier() {
   const searchParams = useSearchParams();
   const [items, setItems] = useState<CarNotification[]>([]);
   const [soundOn, setSoundOn] = useState(true);
+  // Lobbyists who don't want the full popup can tuck it to the left edge — only
+  // a small grip handle stays, peeking out the side (mirrors StickyMessages).
+  const [collapsed, setCollapsed] = useState(false);
+  const [peek, setPeek] = useState(false);
+  const isManager = useIsManager();
 
   // Refs so the polling closure always reads current values without re-binding.
   const lastSeenIdRef = useRef<number | null>(null);
@@ -72,6 +85,7 @@ export function NewCarNotifier() {
   const soundOnRef = useRef(true);
   const onCarsTabRef = useRef(false);
   const keyRef = useRef(0);
+  const peekTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // The רכבים tab already live-updates; suppress popups while it's open.
   const onCarsTab =
@@ -80,15 +94,52 @@ export function NewCarNotifier() {
     onCarsTabRef.current = onCarsTab;
   }, [onCarsTab]);
 
-  // Restore the sound preference (per lobby PC).
+  // Restore the sound + collapsed preferences (per lobby PC).
   useEffect(() => {
-    const saved = window.localStorage.getItem(SOUND_PREF_KEY);
-    if (saved !== null) {
-      const on = saved === "1";
+    const savedSound = window.localStorage.getItem(SOUND_PREF_KEY);
+    if (savedSound !== null) {
+      const on = savedSound === "1";
       setSoundOn(on);
       soundOnRef.current = on;
     }
+    if (window.localStorage.getItem(COLLAPSE_PREF_KEY) === "1") {
+      setCollapsed(true);
+    }
   }, []);
+
+  const cancelPeek = useCallback(() => {
+    if (peekTimer.current) {
+      clearTimeout(peekTimer.current);
+      peekTimer.current = null;
+    }
+  }, []);
+
+  // Slide the tucked drawer out for a beat, then let it tuck itself away again.
+  const openPeek = useCallback(
+    (ms: number) => {
+      cancelPeek();
+      setPeek(true);
+      peekTimer.current = setTimeout(() => setPeek(false), ms);
+    },
+    [cancelPeek]
+  );
+
+  // Toggle the tucked mode and remember it (per lobby PC).
+  const setCollapsedPref = useCallback(
+    (value: boolean) => {
+      setCollapsed(value);
+      window.localStorage.setItem(COLLAPSE_PREF_KEY, value ? "1" : "0");
+      if (value) {
+        openPeek(COLLAPSE_PEEK_MS); // brief peek so it's clear where the card went
+      } else {
+        cancelPeek();
+        setPeek(false);
+      }
+    },
+    [openPeek, cancelPeek]
+  );
+
+  useEffect(() => cancelPeek, [cancelPeek]);
 
   const toggleSound = useCallback(() => {
     setSoundOn((prev) => {
@@ -110,6 +161,28 @@ export function NewCarNotifier() {
     },
     [dismiss, router]
   );
+
+  // Manager-only: pop the "new car" card on demand so admins can preview the
+  // alert (card + chime + auto-dismiss) without waiting for a real arrival.
+  // Replays the real latest car when there is one; falls back to a sample.
+  const triggerTest = useCallback(async () => {
+    const latest = await getLatestCarEvent().catch(() => null);
+    const key = ++keyRef.current;
+    const note: CarNotification = latest
+      ? { key, ...latest }
+      : {
+          key,
+          id: Date.now(),
+          plate: "123-45-678",
+          status: "APPROVED",
+          guestName: "אורח בדיקה",
+          ownerName: null,
+          apartmentNumber: "1001A",
+        };
+    setItems((cur) => [note, ...cur].slice(0, MAX_VISIBLE));
+    if (soundOnRef.current) playChime();
+    window.setTimeout(() => dismiss(key), AUTO_DISMISS_MS);
+  }, [dismiss]);
 
   useEffect(() => {
     let active = true;
@@ -157,106 +230,211 @@ export function NewCarNotifier() {
     };
   }, [dismiss]);
 
-  return (
-    <div className="pointer-events-none flex w-full flex-col gap-2.5">
-        <AnimatePresence initial={false}>
-          {items.map((n) => {
-            const approved = isApproved(n.status);
-            return (
-              <motion.div
-                key={n.key}
-                layout
-                initial={{ opacity: 0, x: -28, scale: 0.94 }}
-                animate={{ opacity: 1, x: 0, scale: 1 }}
-                exit={{ opacity: 0, x: -28, scale: 0.94 }}
-                transition={{ type: "spring", stiffness: 380, damping: 26 }}
-                className="pointer-events-auto overflow-hidden rounded-2xl border border-red-500/40 bg-white shadow-2xl shadow-red-900/20 ring-1 ring-red-500/20 dark:border-red-500/40 dark:bg-zinc-900"
-                role="status"
+  const renderCard = (n: CarNotification, showMinimize: boolean) => {
+    const approved = isApproved(n.status);
+    return (
+      <motion.div
+        key={n.key}
+        layout
+        initial={{ opacity: 0, x: -28, scale: 0.94 }}
+        animate={{ opacity: 1, x: 0, scale: 1 }}
+        exit={{ opacity: 0, x: -28, scale: 0.94 }}
+        transition={{ type: "spring", stiffness: 380, damping: 26 }}
+        className="pointer-events-auto overflow-hidden rounded-2xl border border-red-500/40 bg-white shadow-2xl shadow-red-900/20 ring-1 ring-red-500/20 dark:border-red-500/40 dark:bg-zinc-900"
+        role="status"
+      >
+        {/* Bold brand-red header so the alert reads instantly. */}
+        <div className="flex items-center justify-between gap-2 bg-gradient-to-l from-red-600 to-rose-500 px-3 py-2 text-white">
+          <span className="flex items-center gap-1.5 text-[13px] font-bold tracking-wide">
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white/20">
+              <Car size={15} />
+            </span>
+            רכב חדש בכניסה
+          </span>
+          <div className="flex items-center gap-0.5">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleSound();
+              }}
+              aria-label={soundOn ? "כבה צליל התראה" : "הפעל צליל התראה"}
+              title={soundOn ? "צליל פעיל — לחץ להשתקה" : "מושתק — לחץ להפעלה"}
+              className={cn(
+                "inline-flex h-6 w-6 items-center justify-center rounded-md text-white transition-colors hover:bg-white/20",
+                !soundOn && "opacity-60"
+              )}
+            >
+              {soundOn ? <Bell size={14} /> : <BellOff size={14} />}
+            </button>
+            {showMinimize && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setCollapsedPref(true);
+                }}
+                aria-label="מזער לצד"
+                title="מזער את ההתראה לצד המסך"
+                className="inline-flex h-6 w-6 items-center justify-center rounded-md text-white transition-colors hover:bg-white/20"
               >
-                {/* Bold brand-red header so the alert reads instantly. */}
-                <div className="flex items-center justify-between gap-2 bg-gradient-to-l from-red-600 to-rose-500 px-3 py-2 text-white">
-                  <span className="flex items-center gap-1.5 text-[13px] font-bold tracking-wide">
-                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white/20">
-                      <Car size={15} />
-                    </span>
-                    רכב חדש בכניסה
-                  </span>
-                  <div className="flex items-center gap-0.5">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleSound();
-                      }}
-                      aria-label={soundOn ? "כבה צליל התראה" : "הפעל צליל התראה"}
-                      title={
-                        soundOn ? "צליל פעיל — לחץ להשתקה" : "מושתק — לחץ להפעלה"
-                      }
-                      className={cn(
-                        "inline-flex h-6 w-6 items-center justify-center rounded-md text-white transition-colors hover:bg-white/20",
-                        !soundOn && "opacity-60"
-                      )}
-                    >
-                      {soundOn ? <Bell size={14} /> : <BellOff size={14} />}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        dismiss(n.key);
-                      }}
-                      aria-label="סגור"
-                      className="inline-flex h-6 w-6 items-center justify-center rounded-md text-white transition-colors hover:bg-white/20"
-                    >
-                      <X size={14} />
-                    </button>
-                  </div>
-                </div>
+                <PanelLeftClose size={14} />
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                dismiss(n.key);
+              }}
+              aria-label="סגור"
+              className="inline-flex h-6 w-6 items-center justify-center rounded-md text-white transition-colors hover:bg-white/20"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        </div>
 
-                {/* Clickable body -> opens the cars tab. */}
+        {/* Clickable body -> opens the cars tab. */}
+        <button
+          type="button"
+          onClick={() => openCarsTab(n.key)}
+          className="block w-full px-3 py-2.5 text-start transition-colors hover:bg-red-50/70 dark:hover:bg-red-950/20"
+          title="פתח את לשונית הרכבים"
+        >
+          <div className="flex items-center justify-between gap-2">
+            <span
+              className="font-mono text-xl font-extrabold leading-none"
+              dir="ltr"
+            >
+              {n.plate || "—"}
+            </span>
+            <span
+              className={cn(
+                "inline-flex h-5 items-center rounded-full px-2 text-[11px] font-semibold",
+                approved
+                  ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
+                  : "bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
+              )}
+            >
+              {approved ? "מאושר" : "לא מאושר"}
+            </span>
+          </div>
+          {n.guestName ? (
+            <div className="mt-1.5 text-xs font-semibold text-orange-700 dark:text-orange-300">
+              אורח מזוהה: {n.guestName}
+              {n.apartmentNumber ? ` · דירה ${n.apartmentNumber}` : ""}
+            </div>
+          ) : n.ownerName ? (
+            <div className="mt-1.5 text-xs font-semibold text-sky-700 dark:text-sky-300">
+              רכב רשום: {n.ownerName}
+              {n.apartmentNumber ? ` · דירה ${n.apartmentNumber}` : ""}
+            </div>
+          ) : null}
+          <div className="mt-1.5 text-[11px] opacity-50">
+            לחץ לפתיחת לשונית הרכבים ←
+          </div>
+        </button>
+      </motion.div>
+    );
+  };
+
+  return (
+    <>
+      {/* EXPANDED: the normal top-left popup stack (in-flow in the layout
+          container). The manager test trigger stays reachable in both modes. */}
+      {(!collapsed || isManager) && (
+        <div className="pointer-events-none flex w-full flex-col gap-2.5">
+          {!collapsed && (
+            <AnimatePresence initial={false}>
+              {items.map((n) => renderCard(n, true))}
+            </AnimatePresence>
+          )}
+
+          {isManager && (
+            <button
+              type="button"
+              onClick={triggerTest}
+              title="הצג התראת רכב לדוגמה (מנהל בלבד)"
+              className="pointer-events-auto inline-flex w-fit items-center gap-1.5 rounded-full border border-dashed border-red-400/50 bg-white/80 px-3 py-1 text-[11px] font-medium text-red-600 shadow-sm backdrop-blur transition-colors hover:bg-red-50 dark:border-red-400/40 dark:bg-zinc-900/80 dark:text-red-300 dark:hover:bg-red-950/30"
+            >
+              <Car size={12} />
+              בדיקת התראת רכב
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* COLLAPSED: tucked to the left edge — only a grip handle peeks out until
+          hovered/clicked (mirrors the StickyMessages drawer). */}
+      {collapsed && (
+        <div
+          className="pointer-events-none fixed left-0 top-24 z-50"
+          style={{ width: CARD_WIDTH }}
+        >
+          <motion.div
+            initial={false}
+            animate={{ x: peek ? 0 : -CARD_WIDTH }}
+            transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+            className="relative"
+            style={{ width: CARD_WIDTH }}
+          >
+            <div
+              className={cn(
+                "flex w-full flex-col gap-2 pl-3",
+                peek ? "pointer-events-auto" : "pointer-events-none"
+              )}
+              onMouseEnter={cancelPeek}
+              onMouseLeave={() => openPeek(PEEK_MS)}
+            >
+              {/* Header strip — always carries the "back to full alerts" control,
+                  so it's reachable even when no cars are queued. */}
+              <div className="flex items-center justify-between gap-2 rounded-lg border border-red-500/30 bg-white/90 px-2.5 py-1.5 text-[11px] font-semibold text-red-700 shadow-md backdrop-blur dark:border-red-500/30 dark:bg-zinc-900/90 dark:text-red-300">
+                <span className="flex items-center gap-1.5">
+                  <Car size={13} />
+                  רכבים בכניסה{items.length > 0 ? ` (${items.length})` : ""}
+                </span>
                 <button
                   type="button"
-                  onClick={() => openCarsTab(n.key)}
-                  className="block w-full px-3 py-2.5 text-start transition-colors hover:bg-red-50/70 dark:hover:bg-red-950/20"
-                  title="פתח את לשונית הרכבים"
+                  onClick={() => setCollapsedPref(false)}
+                  aria-label="הצג התראות מלאות"
+                  title="חזרה להתראות מלאות"
+                  className="inline-flex items-center justify-center rounded-md p-0.5 transition-colors hover:bg-red-50 dark:hover:bg-red-950/30"
                 >
-                  <div className="flex items-center justify-between gap-2">
-                    <span
-                      className="font-mono text-xl font-extrabold leading-none"
-                      dir="ltr"
-                    >
-                      {n.plate || "—"}
-                    </span>
-                    <span
-                      className={cn(
-                        "inline-flex h-5 items-center rounded-full px-2 text-[11px] font-semibold",
-                        approved
-                          ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
-                          : "bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
-                      )}
-                    >
-                      {approved ? "מאושר" : "לא מאושר"}
-                    </span>
-                  </div>
-                  {n.guestName ? (
-                    <div className="mt-1.5 text-xs font-semibold text-orange-700 dark:text-orange-300">
-                      אורח מזוהה: {n.guestName}
-                      {n.apartmentNumber ? ` · דירה ${n.apartmentNumber}` : ""}
-                    </div>
-                  ) : n.ownerName ? (
-                    <div className="mt-1.5 text-xs font-semibold text-sky-700 dark:text-sky-300">
-                      רכב רשום: {n.ownerName}
-                      {n.apartmentNumber ? ` · דירה ${n.apartmentNumber}` : ""}
-                    </div>
-                  ) : null}
-                  <div className="mt-1.5 text-[11px] opacity-50">
-                    לחץ לפתיחת לשונית הרכבים ←
-                  </div>
+                  <PanelLeftOpen size={15} />
                 </button>
-              </motion.div>
-            );
-          })}
-        </AnimatePresence>
-    </div>
+              </div>
+
+              <AnimatePresence initial={false}>
+                {items.map((n) => renderCard(n, false))}
+              </AnimatePresence>
+            </div>
+
+            {/* Grip handle — flush at the screen edge while tucked; fades out
+                while peeked open. */}
+            <button
+              type="button"
+              onMouseEnter={() => openPeek(PEEK_MS)}
+              onFocus={() => openPeek(PEEK_MS)}
+              onClick={() => (peek ? setPeek(false) : openPeek(PEEK_MS))}
+              aria-label={`רכבים בכניסה${items.length ? ` (${items.length})` : ""}`}
+              className={cn(
+                "pointer-events-auto absolute left-full top-2 flex flex-col items-center gap-1",
+                "rounded-r-xl bg-gradient-to-l from-red-600 to-rose-500 py-3 pl-1.5 pr-2 text-white shadow-lg ring-1 ring-black/10",
+                "transition-opacity duration-200",
+                peek ? "pointer-events-none opacity-0" : "opacity-100"
+              )}
+            >
+              <Car className="size-4" aria-hidden />
+              {items.length > 0 && (
+                <span className="text-[10px] font-bold leading-none">
+                  {items.length}
+                </span>
+              )}
+            </button>
+          </motion.div>
+        </div>
+      )}
+    </>
   );
 }

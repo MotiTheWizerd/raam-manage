@@ -16,6 +16,10 @@ const FILTER_OPTIONS = [
   { value: "all", label: "הכל" },
 ];
 
+// Excel export + print buttons are hidden for now (session 44, by request) — the
+// code below stays intact; flip this to `true` to bring the buttons back.
+const SHOW_REPORT_ACTIONS = false;
+
 // SQLite stores timestamps as UTC "YYYY-MM-DD HH:MM:SS"; render them in local
 // Israeli time (same helper shape as the keys history list).
 function formatTimestamp(iso: string | null) {
@@ -104,27 +108,29 @@ export function LobbyKeysReport({ rows }: Props) {
               : `בלובי: ${inCount} · מחוץ ללובי: ${outCount} · סה"כ: ${rows.length}`}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => window.print()}
-          >
-            <Printer size={14} />
-            הדפסה
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={exportToExcel}
-            disabled={exporting || visible.length === 0}
-          >
-            <Download size={14} />
-            {exporting ? "מייצא..." : "ייצוא לאקסל"}
-          </Button>
-        </div>
+        {SHOW_REPORT_ACTIONS && (
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => window.print()}
+            >
+              <Printer size={14} />
+              הדפסה
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={exportToExcel}
+              disabled={exporting || visible.length === 0}
+            >
+              <Download size={14} />
+              {exporting ? "מייצא..." : "ייצוא לאקסל"}
+            </Button>
+          </div>
+        )}
       </header>
 
       <div className="flex flex-wrap items-center gap-3 print:hidden">

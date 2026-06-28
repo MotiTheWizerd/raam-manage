@@ -9,7 +9,11 @@ export async function register() {
     const { startGateWatcher } = await import("./lib/gate-watcher");
     startGateWatcher();
 
-    const { startFaceWatcher } = await import("./lib/face-watcher");
-    startFaceWatcher();
+    // Face-rec is moving to its own dedicated machine (session 44) — the sentry
+    // it drains (raam-face / port 8090) is shut down on this box, so don't start
+    // the watcher here or it just polls a dead service every 3s. Re-enable (and
+    // repoint at the new box's sentry URL) when face-rec is back online.
+    // const { startFaceWatcher } = await import("./lib/face-watcher");
+    // startFaceWatcher();
   }
 }

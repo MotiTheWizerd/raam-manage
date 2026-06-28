@@ -128,7 +128,7 @@ export function KnownGuestsTab() {
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="חיפוש לפי שם אורח או מספר רישוי"
+          placeholder="חיפוש לפי שם אורח, רכב, דירה או דייר מארח"
           className="ps-9 pe-9"
         />
         {query && (

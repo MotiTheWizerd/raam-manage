@@ -81,7 +81,7 @@ export async function setGuestAutoOpen(
   return { ok: true };
 }
 
-/** Search learned guests by name or plate (mirrors searchGuestParking). */
+/** Search learned guests by guest name, plate, apartment number, or hosting resident. */
 export async function searchKnownGuests(
   rawQuery: string,
   limit: number = 50
@@ -92,9 +92,12 @@ export async function searchKnownGuests(
   return db
     .prepare(
       `${KNOWN_GUESTS_SELECT}
-       WHERE rg.guest_name LIKE ? OR rg.car_plate LIKE ?
+       WHERE rg.guest_name LIKE ?
+          OR rg.car_plate LIKE ?
+          OR a.number LIKE ?
+          OR (r.first_name || ' ' || r.last_name) LIKE ?
        ORDER BY rg.updated_at DESC, rg.id DESC
        LIMIT ?`
     )
-    .all(like, like, limit) as KnownGuestRow[];
+    .all(like, like, like, like, limit) as KnownGuestRow[];
 }

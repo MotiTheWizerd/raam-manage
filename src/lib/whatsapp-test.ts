@@ -2,7 +2,14 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { db } from "@/lib/db";
 
-const AUTH_DIR = path.join(process.cwd(), ".baileys-auth", "test-whatsapp");
+// Keep prod (:3000 pm2 build, NODE_ENV=production) and dev (:3001 `next dev`)
+// on SEPARATE auth folders = separate WhatsApp linked-device slots, so working
+// on the dev server never kicks the live prod session offline (and vice-versa).
+const AUTH_DIR = path.join(
+  process.cwd(),
+  ".baileys-auth",
+  process.env.NODE_ENV === "production" ? "test-whatsapp" : "test-whatsapp-dev"
+);
 
 type ConnectionState = "idle" | "connecting" | "qr" | "connected" | "closed";
 
@@ -115,6 +122,9 @@ class WhatsAppTestRuntime {
   private lastError: string | null = null;
   private loggedOutCode: number | undefined;
   private shouldReconnect = false;
+  /** Backoff state for auto-reconnect (reset to 0 on a successful open). */
+  private reconnectAttempts = 0;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
   getStatus(): WhatsAppTestStatus {
     return {
@@ -135,6 +145,26 @@ class WhatsAppTestRuntime {
       return await this.connectPromise;
     } finally {
       this.connectPromise = null;
+    }
+  }
+
+  /**
+   * Boot helper: reconnect on server start ONLY if we already have linked creds
+   * on disk, so a pm2 restart / nightly reboot restores the session without
+   * anyone re-scanning a QR. No creds → stay idle (never spawn a QR nobody
+   * will scan).
+   */
+  async connectIfLinked(): Promise<void> {
+    try {
+      await fs.access(path.join(AUTH_DIR, "creds.json"));
+    } catch {
+      return; // not linked yet
+    }
+    this.shouldReconnect = true;
+    try {
+      await this.connect();
+    } catch {
+      this.scheduleReconnect();
     }
   }
 
@@ -204,12 +234,39 @@ class WhatsAppTestRuntime {
 
   /** Reset in-memory connection state back to a clean, disconnected slate. */
   private resetRuntime(): void {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    this.reconnectAttempts = 0;
     this.socket = null;
     this.state = "idle";
     this.qrDataUrl = null;
     this.user = null;
     this.lastError = null;
     this.shouldReconnect = false;
+  }
+
+  /**
+   * Auto-reconnect with exponential backoff (1.5s → 3s → 6s … capped at 30s).
+   * Unlike a one-shot retry, a transient failure mid-reconnect just backs off
+   * and tries again instead of leaving the socket permanently dead. Backoff
+   * resets to 0 once the connection actually opens.
+   */
+  private scheduleReconnect(): void {
+    if (!this.shouldReconnect) return;
+    if (this.reconnectTimer) return; // already queued
+
+    const delay = Math.min(1500 * 2 ** this.reconnectAttempts, 30_000);
+    this.reconnectAttempts += 1;
+
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      void this.connect().catch(() => {
+        // connect() itself threw (network blip, version fetch, …) — keep trying.
+        if (this.shouldReconnect) this.scheduleReconnect();
+      });
+    }, delay);
   }
 
   /**
@@ -243,13 +300,18 @@ class WhatsAppTestRuntime {
     const socket = makeSocket({
       auth: state,
       version,
-      browser: baileys.Browsers?.ubuntu?.("Chrome") ?? [
-        "Ubuntu",
-        "Chrome",
-        "22.04.4",
-      ],
+      // Label shown in the phone's "Linked Devices" list (platform, browser,
+      // version) — purely cosmetic, decoupled from the real host OS. Set to our
+      // system name so it's instantly recognizable instead of a generic "Ubuntu".
+      browser: ["רעם ביטחון (בוטיק)", "Chrome", "1.0"],
       markOnlineOnConnect: false,
       syncFullHistory: false,
+      // Stability tuning: ping a bit more often so dead links are caught and
+      // NAT/firewall mappings stay warm; give slow networks longer to finish
+      // the handshake before aborting; back off request retries slightly.
+      keepAliveIntervalMs: 25_000,
+      connectTimeoutMs: 60_000,
+      retryRequestDelayMs: 1_000,
     });
 
     this.socket = socket;
@@ -272,6 +334,7 @@ class WhatsAppTestRuntime {
         this.qrDataUrl = null;
         this.lastError = null;
         this.shouldReconnect = true;
+        this.reconnectAttempts = 0;
         this.user = socket.user?.name ?? socket.user?.id ?? "connected";
       }
 
@@ -295,7 +358,7 @@ class WhatsAppTestRuntime {
           await this.purgeAuth();
           this.state = "idle";
         } else if (this.shouldReconnect) {
-          setTimeout(() => void this.connect(), 1500);
+          this.scheduleReconnect();
         }
       }
     });
@@ -430,9 +493,13 @@ function findResidentByPhone(normalized: string): number | null {
 }
 
 async function getLatestVersion(baileys: BaileysModule): Promise<number[] | undefined> {
+  // Prefer the version Baileys was TESTED against (fetchLatestBaileysVersion)
+  // over the bleeding-edge WA Web version — forcing a protocol version newer
+  // than this Baileys build supports causes handshake/stream failures and
+  // frequent drops. WA Web version stays only as a fallback.
   const result =
-    (await baileys.fetchLatestWaWebVersion?.().catch(() => undefined)) ??
-    (await baileys.fetchLatestBaileysVersion?.().catch(() => undefined));
+    (await baileys.fetchLatestBaileysVersion?.().catch(() => undefined)) ??
+    (await baileys.fetchLatestWaWebVersion?.().catch(() => undefined));
 
   return result?.version;
 }

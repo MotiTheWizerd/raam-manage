@@ -32,12 +32,17 @@ export type Preferences = {
   // Manager-chosen order of reorderable tab groups, keyed by a stable group id
   // (e.g. "events"). Each value is a list of tab values in display order.
   tabOrders: Record<string, string[]>;
+  // Manager-chosen tab label overrides, keyed by group id then by tab value
+  // (e.g. tabLabels["events"]["vehicles"]). Missing = use the built-in default
+  // label. Blank values are dropped on save.
+  tabLabels: Record<string, Record<string, string>>;
   selectedResident: SelectedResident | null;
 };
 
 const DEFAULTS: Preferences = {
   sidebar: { collapsed: false, order: [], labels: {} },
   tabOrders: {},
+  tabLabels: {},
   selectedResident: null,
 };
 
@@ -61,6 +66,18 @@ function sanitizeTabOrders(value: unknown): Record<string, string[]> {
   return out;
 }
 
+function sanitizeTabLabels(
+  value: unknown
+): Record<string, Record<string, string>> {
+  if (!value || typeof value !== "object") return {};
+  const out: Record<string, Record<string, string>> = {};
+  for (const [group, val] of Object.entries(value as Record<string, unknown>)) {
+    const inner = sanitizeLabels(val); // trims + drops blanks, same as sidebar
+    if (Object.keys(inner).length) out[group] = inner;
+  }
+  return out;
+}
+
 function merge(stored: Partial<Preferences>): Preferences {
   return {
     sidebar: {
@@ -74,6 +91,7 @@ function merge(stored: Partial<Preferences>): Preferences {
       labels: sanitizeLabels(stored.sidebar?.labels),
     },
     tabOrders: sanitizeTabOrders(stored.tabOrders),
+    tabLabels: sanitizeTabLabels(stored.tabLabels),
     selectedResident: stored.selectedResident ?? DEFAULTS.selectedResident,
   };
 }

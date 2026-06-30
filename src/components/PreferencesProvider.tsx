@@ -71,6 +71,10 @@ export const useTabOrder = (key: string) =>
   usePreferencesStore((s) => s.tabOrders[key]);
 export const useSetTabOrder = () =>
   usePreferencesStore((s) => s.setTabOrder);
+export const useTabLabels = (key: string) =>
+  usePreferencesStore((s) => s.tabLabels[key]);
+export const useSetTabLabel = () =>
+  usePreferencesStore((s) => s.setTabLabel);
 export const useSelectedResident = () =>
   usePreferencesStore((s) => s.selectedResident);
 export const useSetSelectedResident = () =>

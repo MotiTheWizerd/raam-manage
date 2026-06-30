@@ -8,7 +8,9 @@ import { useIsManager } from "@/components/AuthProvider";
 import { useEditMode } from "@/components/EditModeProvider";
 import {
   useSelectedResident,
+  useSetTabLabel,
   useSetTabOrder,
+  useTabLabels,
   useTabOrder,
 } from "@/components/PreferencesProvider";
 import { getApartmentCallPolicy } from "@/app/events/actions";
@@ -43,6 +45,8 @@ export function EventsView() {
   const { editMode } = useEditMode();
   const savedTabOrder = useTabOrder(TABS_ORDER_KEY);
   const setTabOrder = useSetTabOrder();
+  const savedTabLabels = useTabLabels(TABS_ORDER_KEY);
+  const setTabLabel = useSetTabLabel();
   const orderedTabs = useMemo(
     () => applyOrder(TABS, savedTabOrder ?? [], (t) => t.value),
     [savedTabOrder]
@@ -201,8 +205,10 @@ export function EventsView() {
         tabs={orderedTabs}
         value={tab}
         onChange={selectTab}
+        labels={savedTabLabels}
         reorderable={editMode && isManager}
         onReorder={(values) => setTabOrder(TABS_ORDER_KEY, values)}
+        onRename={(value, label) => setTabLabel(TABS_ORDER_KEY, value, label)}
       />
 
       <section>

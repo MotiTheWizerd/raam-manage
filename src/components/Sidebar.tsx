@@ -23,6 +23,10 @@ type Item = {
   href: string;
   icon: typeof Home;
   managerOnly?: boolean;
+  // When set, the sidebar entry opens this URL in a new tab (e.g. a protocol
+  // handler for a native app) instead of navigating in-app. href stays the
+  // stable identity used for order/rename keys and any parked route.
+  externalUrl?: string;
 };
 
 const items: Item[] = [
@@ -35,7 +39,17 @@ const items: Item[] = [
   { label: "בעלי דירות", href: "/owners", icon: Crown },
   { label: "מדריך הבניין", href: "/directory", icon: Rows3 },
   { label: "פקידי לובי", href: "/users", icon: UserCog, managerOnly: true },
-  { label: "ווטסאפ", href: "/test/whatsapp", icon: MessageCircle },
+  // Clicking opens WhatsApp Web in a new browser tab. Swap externalUrl to the
+  // "whatsapp://" protocol to launch the native desktop app instead — that's
+  // the only knob that controls app-vs-web. Our in-app Baileys page at
+  // /test/whatsapp is parked for future automated messages — it's just no
+  // longer the sidebar's click target.
+  {
+    label: "ווטסאפ",
+    href: "/test/whatsapp",
+    icon: MessageCircle,
+    externalUrl: "https://web.whatsapp.com/",
+  },
   { label: "הגדרות", href: "/settings", icon: Settings, managerOnly: true },
 ];
 
@@ -125,24 +139,21 @@ export function Sidebar() {
         <nav className="flex flex-col gap-1 text-sm">
           {visibleItems.map((item) => {
             const active =
-              item.href === "/"
+              !item.externalUrl &&
+              (item.href === "/"
                 ? pathname === "/"
-                : pathname.startsWith(item.href);
+                : pathname.startsWith(item.href));
             const Icon = item.icon;
             const label = labels[item.href] ?? item.label;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                title={collapsed ? label : undefined}
-                className={cn(
-                  "h-9 rounded-md flex items-center gap-3 transition-colors relative",
-                  collapsed ? "justify-center px-0" : "px-3",
-                  active
-                    ? "bg-linear-to-b from-red-500 to-red-600 text-white shadow-sm"
-                    : "text-foreground/80 hover:text-foreground hover:bg-black/5 dark:hover:bg-white/10"
-                )}
-              >
+            const className = cn(
+              "h-9 rounded-md flex items-center gap-3 transition-colors relative",
+              collapsed ? "justify-center px-0" : "px-3",
+              active
+                ? "bg-linear-to-b from-red-500 to-red-600 text-white shadow-sm"
+                : "text-foreground/80 hover:text-foreground hover:bg-black/5 dark:hover:bg-white/10"
+            );
+            const inner = (
+              <>
                 <Icon size={18} aria-hidden="true" className="shrink-0" />
                 <motion.span
                   initial={false}
@@ -158,6 +169,29 @@ export function Sidebar() {
                 >
                   {label}
                 </motion.span>
+              </>
+            );
+            // External entries open the native app in a new tab via a plain
+            // anchor — no client-side routing, no active state.
+            return item.externalUrl ? (
+              <a
+                key={item.href}
+                href={item.externalUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={collapsed ? label : undefined}
+                className={className}
+              >
+                {inner}
+              </a>
+            ) : (
+              <Link
+                key={item.href}
+                href={item.href}
+                title={collapsed ? label : undefined}
+                className={className}
+              >
+                {inner}
               </Link>
             );
           })}

@@ -14,7 +14,7 @@ function fail(error: string): EquipmentLoanFormState {
   return { error, errorAt: Date.now() };
 }
 
-export type EquipmentType = "chairs" | "tables" | "cart";
+export type EquipmentType = "chairs" | "tables" | "cart" | "other";
 
 export type EquipmentLoanRow = {
   id: number;
@@ -207,7 +207,12 @@ export async function createEquipmentLoan(
   }
 
   const type = String(formData.get("type") ?? "chairs").trim();
-  if (type !== "chairs" && type !== "tables" && type !== "cart") {
+  if (
+    type !== "chairs" &&
+    type !== "tables" &&
+    type !== "cart" &&
+    type !== "other"
+  ) {
     return fail("סוג לא חוקי");
   }
 

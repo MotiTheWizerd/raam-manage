@@ -118,6 +118,7 @@ export function AddEquipmentLoanButton({
                     { value: "chairs", label: "כיסאות" },
                     { value: "tables", label: "שולחנות" },
                     { value: "cart", label: "עגלת משא" },
+                    { value: "other", label: "אחר" },
                   ]}
                 />
               </Field>

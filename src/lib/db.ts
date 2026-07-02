@@ -5,7 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 const DB_PATH = path.join(process.cwd(), "data", "raam.db");
-const SCHEMA_EVOLUTION_VERSION = 12;
+const SCHEMA_EVOLUTION_VERSION = 13;
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS zones (
@@ -220,7 +220,7 @@ CREATE TABLE IF NOT EXISTS equipment_loans (
   resident_id     INTEGER REFERENCES residents(id) ON DELETE SET NULL,
   borrower_name   TEXT,
   type            TEXT NOT NULL DEFAULT 'chairs'
-                    CHECK (type IN ('chairs', 'tables', 'cart')),
+                    CHECK (type IN ('chairs', 'tables', 'cart', 'other')),
   quantity        INTEGER NOT NULL DEFAULT 1 CHECK (quantity > 0),
   lobbyist_name   TEXT NOT NULL DEFAULT '',
   is_returned     INTEGER NOT NULL DEFAULT 0,
@@ -350,7 +350,7 @@ function applySchemaEvolution(db: Database.Database) {
       resident_id     INTEGER REFERENCES residents(id) ON DELETE SET NULL,
       borrower_name   TEXT,
       type            TEXT NOT NULL DEFAULT 'chairs'
-                        CHECK (type IN ('chairs', 'tables', 'cart')),
+                        CHECK (type IN ('chairs', 'tables', 'cart', 'other')),
       quantity        INTEGER NOT NULL DEFAULT 1 CHECK (quantity > 0),
       lobbyist_name   TEXT NOT NULL DEFAULT '',
       is_returned     INTEGER NOT NULL DEFAULT 0,
@@ -487,6 +487,41 @@ function applySchemaEvolution(db: Database.Database) {
         created_at      TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
       INSERT INTO equipment_loans_new SELECT * FROM equipment_loans;
+      DROP TABLE equipment_loans;
+      ALTER TABLE equipment_loans_new RENAME TO equipment_loans;
+      CREATE INDEX IF NOT EXISTS idx_equipment_loans_resident ON equipment_loans(resident_id);
+      CREATE INDEX IF NOT EXISTS idx_equipment_loans_open ON equipment_loans(resident_id) WHERE is_returned = 0;
+    `);
+  }
+
+  // Migration v13: widen equipment_loans.type CHECK to include 'other'.
+  // Explicit column list (not SELECT *) because returned_by was appended via
+  // ensureColumn, so its ordinal position differs across DBs.
+  const loansSqlOther = (db.prepare(
+    `SELECT sql FROM sqlite_master WHERE type='table' AND name='equipment_loans'`
+  ).get() as { sql: string } | undefined)?.sql ?? '';
+  if (loansSqlOther && !loansSqlOther.includes("'other'")) {
+    db.exec(`
+      CREATE TABLE equipment_loans_new (
+        id              INTEGER PRIMARY KEY,
+        resident_id     INTEGER REFERENCES residents(id) ON DELETE SET NULL,
+        borrower_name   TEXT,
+        type            TEXT NOT NULL DEFAULT 'chairs'
+                          CHECK (type IN ('chairs', 'tables', 'cart', 'other')),
+        quantity        INTEGER NOT NULL DEFAULT 1 CHECK (quantity > 0),
+        lobbyist_name   TEXT NOT NULL DEFAULT '',
+        is_returned     INTEGER NOT NULL DEFAULT 0,
+        returned_at     TEXT,
+        returned_by     TEXT NOT NULL DEFAULT '',
+        comment         TEXT,
+        created_at      TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+      INSERT INTO equipment_loans_new
+        (id, resident_id, borrower_name, type, quantity, lobbyist_name,
+         is_returned, returned_at, returned_by, comment, created_at)
+        SELECT id, resident_id, borrower_name, type, quantity, lobbyist_name,
+               is_returned, returned_at, returned_by, comment, created_at
+          FROM equipment_loans;
       DROP TABLE equipment_loans;
       ALTER TABLE equipment_loans_new RENAME TO equipment_loans;
       CREATE INDEX IF NOT EXISTS idx_equipment_loans_resident ON equipment_loans(resident_id);

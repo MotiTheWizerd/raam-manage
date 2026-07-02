@@ -1,6 +1,6 @@
 "use client";
 
-import { Home, Plus, Power, Star } from "lucide-react";
+import { Home, Plus, Star, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -73,10 +73,15 @@ export function KeysFields({
     setKeys((ks) => ks.map((k) => ({ ...k, is_default: k.id === id })));
   }
 
-  function toggleActive(id: string) {
-    setKeys((ks) =>
-      ks.map((k) => (k.id === id ? { ...k, is_active: !k.is_active } : k))
-    );
+  function remove(id: string) {
+    setKeys((ks) => {
+      const next = ks.filter((k) => k.id !== id);
+      // Keep a default among the survivors so events keep a fallback key.
+      if (next.length > 0 && !next.some((k) => k.is_default)) {
+        return next.map((k, i) => (i === 0 ? { ...k, is_default: true } : k));
+      }
+      return next;
+    });
   }
 
   function toggleInLobby(id: string) {
@@ -99,7 +104,8 @@ export function KeysFields({
     keys.map((k) => ({
       nickname: k.nickname.trim(),
       is_default: k.is_default,
-      is_active: k.is_active,
+      // Inactive was retired in favour of delete — every listed key is active.
+      is_active: true,
       is_in_lobby: k.is_in_lobby,
     }))
   );
@@ -130,13 +136,7 @@ export function KeysFields({
       {keys.length > 0 && (
         <div className="space-y-2">
           {keys.map((k) => (
-            <div
-              key={k.id}
-              className={cn(
-                "flex items-center gap-2 transition-opacity",
-                !k.is_active && "opacity-50"
-              )}
-            >
+            <div key={k.id} className="flex items-center gap-2">
               <Input
                 value={k.nickname}
                 onChange={(e) => update(k.id, { nickname: e.target.value })}
@@ -179,20 +179,12 @@ export function KeysFields({
               </button>
               <button
                 type="button"
-                onClick={() => toggleActive(k.id)}
-                aria-label={k.is_active ? "פעיל" : "לא פעיל"}
-                title={k.is_active ? "פעיל" : "לא פעיל"}
-                className="p-1.5 rounded hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+                onClick={() => remove(k.id)}
+                aria-label="מחק מפתח"
+                title="מחיקה"
+                className="p-1.5 rounded text-zinc-400 transition-colors hover:bg-red-500/10 hover:text-red-600 dark:text-zinc-500 dark:hover:text-red-400"
               >
-                <Power
-                  size={16}
-                  className={cn(
-                    "transition-colors",
-                    k.is_active
-                      ? "text-emerald-600 dark:text-emerald-400"
-                      : "text-zinc-400 dark:text-zinc-500"
-                  )}
-                />
+                <Trash2 size={16} />
               </button>
             </div>
           ))}

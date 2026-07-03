@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { Bell, BellOff, Car, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
+import { Bell, BellOff, Car, PanelLeftClose, X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getLatestCarEvent } from "@/app/events/cars-actions";
@@ -16,12 +16,6 @@ const COLLAPSE_PREF_KEY = "raam.carNotify.collapsed";
 // The manager "test alert" button now lives in the header (CarNotifyTestButton);
 // it dispatches this window event, which this notifier listens for and replays.
 export const CAR_TEST_EVENT = "raam:car-test";
-
-// Tucked-to-the-edge drawer (mirrors StickyMessages): the stack slides this far
-// off the left edge, leaving only the grip handle; a hover/click peeks it back.
-const CARD_WIDTH = 320; // matches w-80
-const PEEK_MS = 8000; // how long a peek stays open before it tucks again
-const COLLAPSE_PEEK_MS = 3500; // short peek right after minimizing, so it's clear where it went
 
 type CarNotification = {
   key: number;
@@ -79,7 +73,6 @@ export function NewCarNotifier() {
   // Lobbyists who don't want the full popup can tuck it to the left edge — only
   // a small grip handle stays, peeking out the side (mirrors StickyMessages).
   const [collapsed, setCollapsed] = useState(false);
-  const [peek, setPeek] = useState(false);
 
   // Refs so the polling closure always reads current values without re-binding.
   const lastSeenIdRef = useRef<number | null>(null);
@@ -87,7 +80,6 @@ export function NewCarNotifier() {
   const soundOnRef = useRef(true);
   const onCarsTabRef = useRef(false);
   const keyRef = useRef(0);
-  const peekTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // The רכבים tab already live-updates; suppress popups while it's open.
   const onCarsTab =
@@ -109,39 +101,11 @@ export function NewCarNotifier() {
     }
   }, []);
 
-  const cancelPeek = useCallback(() => {
-    if (peekTimer.current) {
-      clearTimeout(peekTimer.current);
-      peekTimer.current = null;
-    }
+  // Tuck the notifier to a side tab (or restore it) and remember it per lobby PC.
+  const setCollapsedPref = useCallback((value: boolean) => {
+    setCollapsed(value);
+    window.localStorage.setItem(COLLAPSE_PREF_KEY, value ? "1" : "0");
   }, []);
-
-  // Slide the tucked drawer out for a beat, then let it tuck itself away again.
-  const openPeek = useCallback(
-    (ms: number) => {
-      cancelPeek();
-      setPeek(true);
-      peekTimer.current = setTimeout(() => setPeek(false), ms);
-    },
-    [cancelPeek]
-  );
-
-  // Toggle the tucked mode and remember it (per lobby PC).
-  const setCollapsedPref = useCallback(
-    (value: boolean) => {
-      setCollapsed(value);
-      window.localStorage.setItem(COLLAPSE_PREF_KEY, value ? "1" : "0");
-      if (value) {
-        openPeek(COLLAPSE_PEEK_MS); // brief peek so it's clear where the card went
-      } else {
-        cancelPeek();
-        setPeek(false);
-      }
-    },
-    [openPeek, cancelPeek]
-  );
-
-  useEffect(() => cancelPeek, [cancelPeek]);
 
   const toggleSound = useCallback(() => {
     setSoundOn((prev) => {
@@ -183,10 +147,10 @@ export function NewCarNotifier() {
         };
     setItems((cur) => [note, ...cur].slice(0, MAX_VISIBLE));
     if (soundOnRef.current) playChime();
-    // If the drawer is tucked to the edge, slide it out so the test is visible.
-    if (collapsed) openPeek(PEEK_MS);
+    // If tucked to the side tab, restore the full popup so the test is visible.
+    if (collapsed) setCollapsedPref(false);
     window.setTimeout(() => dismiss(key), AUTO_DISMISS_MS);
-  }, [dismiss, collapsed, openPeek]);
+  }, [dismiss, collapsed, setCollapsedPref]);
 
   // The header's "בדיקת התראת רכב" button dispatches CAR_TEST_EVENT; replay it.
   useEffect(() => {
@@ -241,7 +205,7 @@ export function NewCarNotifier() {
     };
   }, [dismiss]);
 
-  const renderCard = (n: CarNotification, showMinimize: boolean) => {
+  const renderCard = (n: CarNotification) => {
     const approved = isApproved(n.status);
     return (
       <motion.div
@@ -278,20 +242,18 @@ export function NewCarNotifier() {
             >
               {soundOn ? <Bell size={14} /> : <BellOff size={14} />}
             </button>
-            {showMinimize && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setCollapsedPref(true);
-                }}
-                aria-label="מזער לצד"
-                title="מזער את ההתראה לצד המסך"
-                className="inline-flex h-6 w-6 items-center justify-center rounded-md text-white transition-colors hover:bg-white/20"
-              >
-                <PanelLeftClose size={14} />
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setCollapsedPref(true);
+              }}
+              aria-label="מזער לצד"
+              title="מזער את ההתראה לצד המסך"
+              className="inline-flex h-6 w-6 items-center justify-center rounded-md text-white transition-colors hover:bg-white/20"
+            >
+              <PanelLeftClose size={14} />
+            </button>
             <button
               type="button"
               onClick={(e) => {
@@ -357,80 +319,28 @@ export function NewCarNotifier() {
       {!collapsed && (
         <div className="pointer-events-none flex w-full flex-col gap-2.5">
           <AnimatePresence initial={false}>
-            {items.map((n) => renderCard(n, true))}
+            {items.map((n) => renderCard(n))}
           </AnimatePresence>
         </div>
       )}
 
-      {/* COLLAPSED: tucked to the left edge — only a grip handle peeks out until
-          hovered/clicked (mirrors the StickyMessages drawer). */}
+      {/* COLLAPSED: tucked away to a small tab at the left edge. Click it to
+          bring the full alerts back (per-PC preference). */}
       {collapsed && (
-        <div
-          className="pointer-events-none fixed left-0 top-24 z-50"
-          style={{ width: CARD_WIDTH }}
+        <button
+          type="button"
+          onClick={() => setCollapsedPref(false)}
+          aria-label={`רכבים בכניסה${items.length ? ` (${items.length})` : ""} — הצג התראות`}
+          title="הצג התראות רכבים"
+          className="pointer-events-auto fixed left-0 top-24 z-50 flex flex-col items-center gap-1 rounded-r-xl bg-gradient-to-l from-red-600 to-rose-500 py-3 pl-1.5 pr-2 text-white shadow-lg ring-1 ring-black/10 transition-[padding] hover:pr-3"
         >
-          <motion.div
-            initial={false}
-            animate={{ x: peek ? 0 : -CARD_WIDTH }}
-            transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-            className="relative"
-            style={{ width: CARD_WIDTH }}
-          >
-            <div
-              className={cn(
-                "flex w-full flex-col gap-2 pl-3",
-                peek ? "pointer-events-auto" : "pointer-events-none"
-              )}
-              onMouseEnter={cancelPeek}
-              onMouseLeave={() => openPeek(PEEK_MS)}
-            >
-              {/* Header strip — always carries the "back to full alerts" control,
-                  so it's reachable even when no cars are queued. */}
-              <div className="flex items-center justify-between gap-2 rounded-lg border border-red-500/30 bg-white/90 px-2.5 py-1.5 text-[11px] font-semibold text-red-700 shadow-md backdrop-blur dark:border-red-500/30 dark:bg-zinc-900/90 dark:text-red-300">
-                <span className="flex items-center gap-1.5">
-                  <Car size={13} />
-                  רכבים בכניסה{items.length > 0 ? ` (${items.length})` : ""}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setCollapsedPref(false)}
-                  aria-label="הצג התראות מלאות"
-                  title="חזרה להתראות מלאות"
-                  className="inline-flex items-center justify-center rounded-md p-0.5 transition-colors hover:bg-red-50 dark:hover:bg-red-950/30"
-                >
-                  <PanelLeftOpen size={15} />
-                </button>
-              </div>
-
-              <AnimatePresence initial={false}>
-                {items.map((n) => renderCard(n, false))}
-              </AnimatePresence>
-            </div>
-
-            {/* Grip handle — flush at the screen edge while tucked; fades out
-                while peeked open. */}
-            <button
-              type="button"
-              onMouseEnter={() => openPeek(PEEK_MS)}
-              onFocus={() => openPeek(PEEK_MS)}
-              onClick={() => (peek ? setPeek(false) : openPeek(PEEK_MS))}
-              aria-label={`רכבים בכניסה${items.length ? ` (${items.length})` : ""}`}
-              className={cn(
-                "pointer-events-auto absolute left-full top-2 flex flex-col items-center gap-1",
-                "rounded-r-xl bg-gradient-to-l from-red-600 to-rose-500 py-3 pl-1.5 pr-2 text-white shadow-lg ring-1 ring-black/10",
-                "transition-opacity duration-200",
-                peek ? "pointer-events-none opacity-0" : "opacity-100"
-              )}
-            >
-              <Car className="size-4" aria-hidden />
-              {items.length > 0 && (
-                <span className="text-[10px] font-bold leading-none">
-                  {items.length}
-                </span>
-              )}
-            </button>
-          </motion.div>
-        </div>
+          <Car className="size-4" aria-hidden />
+          {items.length > 0 && (
+            <span className="text-[10px] font-bold leading-none">
+              {items.length}
+            </span>
+          )}
+        </button>
       )}
     </>
   );

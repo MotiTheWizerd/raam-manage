@@ -1,6 +1,6 @@
 "use server";
 
-import { getCurrentUser, isManager } from "@/lib/auth";
+import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 
 export type SystemMessageFormState = {
@@ -96,7 +96,7 @@ export async function createSystemMessage(
   formData: FormData
 ): Promise<SystemMessageFormState> {
   // Any logged-in lobby user may POST a message (they man the desk and need to
-  // share notices). Editing stays manager-only (curation) below.
+  // share notices) — same open policy as edit/delete below.
   if (!(await getCurrentUser())) return fail("אין הרשאה");
 
   const parsed = parseFields(formData);
@@ -120,7 +120,9 @@ export async function updateSystemMessage(
   _prev: SystemMessageFormState,
   formData: FormData
 ): Promise<SystemMessageFormState> {
-  if (!(await isManager())) return fail("אין הרשאה");
+  // Any logged-in lobby user may edit a message, same as create/delete — they
+  // man the desk and keep the board current.
+  if (!(await getCurrentUser())) return fail("אין הרשאה");
 
   const idRaw = String(formData.get("id") ?? "").trim();
   const id = parseInt(idRaw, 10);
@@ -154,7 +156,7 @@ export async function deleteSystemMessage(
   formData: FormData
 ): Promise<SystemMessageFormState> {
   // Any logged-in lobby user may delete a message (collaborative board, same as
-  // create). Editing stays manager-only (curation).
+  // create/edit).
   if (!(await getCurrentUser())) return fail("אין הרשאה");
 
   const idRaw = String(formData.get("id") ?? "").trim();

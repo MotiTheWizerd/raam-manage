@@ -5,7 +5,6 @@ import {
   getAllSystemMessages,
   type SystemMessageRow,
 } from "@/app/lobby-messages/actions";
-import { useIsManager } from "@/components/AuthProvider";
 import { cn } from "@/lib/cn";
 import { onSystemMessagesChanged } from "@/lib/system-messages-events";
 import { AddSystemMessageButton } from "./AddSystemMessageButton";
@@ -68,7 +67,6 @@ function formatRange(iso: string): string {
 }
 
 export function LobbyMessagesView() {
-  const isManager = useIsManager();
   const [messages, setMessages] = useState<SystemMessageRow[] | null>(null);
   const [refreshTick, setRefreshTick] = useState(0);
 
@@ -177,7 +175,7 @@ export function LobbyMessagesView() {
                     </td>
                     <td className="px-4 py-3 text-end">
                       <div className="flex items-center justify-end gap-1">
-                        {isManager && <EditSystemMessageButton message={m} />}
+                        <EditSystemMessageButton message={m} />
                         <DeleteSystemMessageButton messageId={m.id} />
                       </div>
                     </td>

@@ -35,9 +35,10 @@ const PRIORITY_RANK: Record<SystemMessageRow["priority"], number> = {
   low: 1,
 };
 
-// How long the card stays open before it tucks itself back into the edge.
-const INITIAL_OPEN_MS = 12000; // on load / login / a newly published message
-const HOVER_OPEN_MS = 10000; // after a hover/click peek
+// A newly published message (or first load/login) pops the drawer open for this
+// long, then it tucks itself back into the edge. Manual open (grip click) has no
+// timer — it stays open until the lobbyist closes it.
+const INITIAL_OPEN_MS = 12000;
 
 const CARD_WIDTH = 320; // matches w-80; the card slides this far off the edge
 
@@ -147,8 +148,6 @@ export function StickyMessages() {
             "flex w-full flex-col gap-2 pl-3",
             open ? "pointer-events-auto" : "pointer-events-none"
           )}
-          onMouseEnter={cancelCollapse}
-          onMouseLeave={() => scheduleCollapse(HOVER_OPEN_MS)}
         >
           <AnimatePresence initial={false}>
             {messages.slice(0, MAX_VISIBLE).map((m) => (
@@ -177,13 +176,14 @@ export function StickyMessages() {
         </div>
 
         {/* Grip handle — pinned to the right side of the stack, so it sits flush
-            at the screen edge while the cards are tucked. Hover/click/focus
-            peeks the drawer open for ~10s. Faded out while the drawer is open. */}
+            at the screen edge while the cards are tucked. Click it to open the
+            drawer; it stays open until closed. Faded out while the drawer is open. */}
         <button
           type="button"
-          onMouseEnter={() => openFor(HOVER_OPEN_MS)}
-          onFocus={() => openFor(HOVER_OPEN_MS)}
-          onClick={() => (open ? setOpen(false) : openFor(HOVER_OPEN_MS))}
+          onClick={() => {
+            cancelCollapse();
+            setOpen((o) => !o);
+          }}
           aria-label={`הודעות לובי (${messages.length})`}
           className={cn(
             "pointer-events-auto absolute left-full top-4 flex flex-col items-center gap-1",

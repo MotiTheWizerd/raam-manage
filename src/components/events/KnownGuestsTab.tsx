@@ -6,7 +6,6 @@ import { toast } from "sonner";
 import {
   forgetResidentGuest,
   getKnownGuestsPage,
-  searchKnownGuests,
   setGuestAutoOpen,
   type KnownGuestRow,
 } from "@/app/events/cars-actions";
@@ -88,26 +87,17 @@ export function KnownGuestsTab() {
 
   useEffect(() => {
     let active = true;
-    if (searching) {
-      searchKnownGuests(debouncedQuery, 50).then((result) => {
-        if (!active) return;
-        setRows(result);
-        setTotal(result.length);
-        setTotalPages(1);
-      });
-    } else {
-      getKnownGuestsPage(page, PAGE_SIZE).then((result) => {
-        if (!active) return;
-        setRows(result.rows);
-        setTotal(result.total);
-        setTotalPages(result.totalPages);
-        if (result.page !== page) setPage(result.page);
-      });
-    }
+    getKnownGuestsPage(page, PAGE_SIZE, debouncedQuery).then((result) => {
+      if (!active) return;
+      setRows(result.rows);
+      setTotal(result.total);
+      setTotalPages(result.totalPages);
+      if (result.page !== page) setPage(result.page);
+    });
     return () => {
       active = false;
     };
-  }, [searching, debouncedQuery, page, refreshTick]);
+  }, [debouncedQuery, page, refreshTick]);
 
   return (
     <div className="space-y-4">
@@ -127,14 +117,20 @@ export function KnownGuestsTab() {
         <Input
           type="search"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setPage(1); // a changed query restarts from the first page
+          }}
           placeholder="חיפוש לפי שם אורח, רכב, דירה או דייר מארח"
           className="ps-9 pe-9"
         />
         {query && (
           <button
             type="button"
-            onClick={() => setQuery("")}
+            onClick={() => {
+              setQuery("");
+              setPage(1);
+            }}
             aria-label="נקה חיפוש"
             className="absolute top-1/2 -translate-y-1/2 end-2 inline-flex items-center justify-center h-6 w-6 rounded-full opacity-60 hover:opacity-100 hover:bg-black/[0.05] dark:hover:bg-white/[0.06] transition-colors"
           >
@@ -234,15 +230,13 @@ export function KnownGuestsTab() {
         </div>
       )}
 
-      {!searching && (
-        <Pagination
-          page={page}
-          totalPages={totalPages}
-          pageSize={PAGE_SIZE}
-          total={total}
-          onPageChange={setPage}
-        />
-      )}
+      <Pagination
+        page={page}
+        totalPages={totalPages}
+        pageSize={PAGE_SIZE}
+        total={total}
+        onPageChange={setPage}
+      />
     </div>
   );
 }

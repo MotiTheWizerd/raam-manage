@@ -30,18 +30,40 @@ export async function forgetResidentGuest(
   return { submittedAt: Date.now() };
 }
 
-/** Paginated list of every guest plate we've learned (the "אורחים מוכרים" tab). */
+/**
+ * Paginated list of the guest plates we've learned (the "אורחים מוכרים" tab).
+ * An optional query filters by guest name / plate / apartment / hosting
+ * resident and is applied to BOTH the count and the page — so the lobbyist
+ * pages through ALL matches from the full history, never a capped slice.
+ */
 export async function getKnownGuestsPage(
   page: number = 1,
-  pageSize: number = DEFAULT_KNOWN_GUESTS_PAGE_SIZE
+  pageSize: number = DEFAULT_KNOWN_GUESTS_PAGE_SIZE,
+  rawQuery: string = ""
 ): Promise<PaginatedKnownGuests> {
   const safePageSize = Math.max(1, Math.min(100, Math.floor(pageSize)));
   const requestedPage = Math.max(1, Math.floor(page));
 
+  const q = rawQuery.trim();
+  const like = `%${q}%`;
+  const where = q
+    ? `WHERE rg.guest_name LIKE ?
+          OR rg.car_plate LIKE ?
+          OR a.number LIKE ?
+          OR (r.first_name || ' ' || r.last_name) LIKE ?`
+    : "";
+  const whereParams = q ? [like, like, like, like] : [];
+
   const total = (
-    db.prepare(`SELECT COUNT(*) AS count FROM resident_guests`).get() as {
-      count: number;
-    }
+    db
+      .prepare(
+        `SELECT COUNT(*) AS count
+         FROM resident_guests rg
+         LEFT JOIN residents r  ON r.id = rg.resident_id
+         LEFT JOIN apartments a ON a.id = rg.apartment_id
+         ${where}`
+      )
+      .get(...whereParams) as { count: number }
   ).count;
 
   const totalPages = Math.max(1, Math.ceil(total / safePageSize));
@@ -51,10 +73,11 @@ export async function getKnownGuestsPage(
   const rows = db
     .prepare(
       `${KNOWN_GUESTS_SELECT}
+       ${where}
        ORDER BY rg.updated_at DESC, rg.id DESC
        LIMIT ? OFFSET ?`
     )
-    .all(safePageSize, offset) as KnownGuestRow[];
+    .all(...whereParams, safePageSize, offset) as KnownGuestRow[];
 
   return { rows, page: safePage, pageSize: safePageSize, total, totalPages };
 }
@@ -79,25 +102,4 @@ export async function setGuestAutoOpen(
 
   if (result.changes === 0) return { ok: false, error: "הרישום לא נמצא" };
   return { ok: true };
-}
-
-/** Search learned guests by guest name, plate, apartment number, or hosting resident. */
-export async function searchKnownGuests(
-  rawQuery: string,
-  limit: number = 50
-): Promise<KnownGuestRow[]> {
-  const q = rawQuery.trim();
-  if (!q) return [];
-  const like = `%${q}%`;
-  return db
-    .prepare(
-      `${KNOWN_GUESTS_SELECT}
-       WHERE rg.guest_name LIKE ?
-          OR rg.car_plate LIKE ?
-          OR a.number LIKE ?
-          OR (r.first_name || ' ' || r.last_name) LIKE ?
-       ORDER BY rg.updated_at DESC, rg.id DESC
-       LIMIT ?`
-    )
-    .all(like, like, like, like, limit) as KnownGuestRow[];
 }

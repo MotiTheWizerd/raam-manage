@@ -7,6 +7,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import {
+  Fragment,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -65,6 +66,12 @@ type Props<T> = {
    * a one-click expand toggle. Set to 0 to disable clamping. Default 100.
    */
   maxCellHeight?: number;
+  /**
+   * Optional full-width panel rendered in an extra row directly under a row —
+   * e.g. an inline editor. Return null/undefined for rows with no expansion.
+   * The extra row has no selectable cells, so keyboard navigation is unaffected.
+   */
+  renderRowExpansion?: (row: T, rowIndex: number) => ReactNode;
 };
 
 function setsEqual(a: Set<number>, b: Set<number>): boolean {
@@ -94,6 +101,7 @@ export function SheetTable<T>({
   className,
   emptyText = "אין נתונים להצגה",
   maxCellHeight = 100,
+  renderRowExpansion,
 }: Props<T>) {
   // Selected cell as [rowIndex, colIndex]; null = nothing selected.
   const [selected, setSelected] = useState<{ r: number; c: number } | null>(
@@ -160,6 +168,16 @@ export function SheetTable<T>({
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
       if (!selected) return;
+      // Don't hijack arrow keys while typing in a field — e.g. the inline row
+      // editor rendered in a row expansion lives inside this same container, so
+      // its input keystrokes bubble up here.
+      if (
+        (e.target as HTMLElement).closest(
+          "input, textarea, select, [contenteditable=true]"
+        )
+      ) {
+        return;
+      }
       let { r, c } = selected;
       switch (e.key) {
         case "ArrowUp":
@@ -271,8 +289,10 @@ export function SheetTable<T>({
             const isOverflowing = overflowing.has(r);
             const isExpanded = expanded.has(r);
             const clamp = clampEnabled && isOverflowing && !isExpanded;
+            const expansion = renderRowExpansion?.(row, r);
             return (
-            <tr key={rowKey(row, r)} className="group">
+            <Fragment key={rowKey(row, r)}>
+            <tr className="group">
               {/* Row number — sticky grey header column, like Excel. Doubles as
                   the expand toggle when the row is clamped. */}
               <td
@@ -347,6 +367,19 @@ export function SheetTable<T>({
                 );
               })}
             </tr>
+            {expansion != null && (
+              <tr>
+                <td
+                  colSpan={colCount + 1}
+                  className={cn(
+                    "border-b border-e border-zinc-300 bg-white p-0"
+                  )}
+                >
+                  {expansion}
+                </td>
+              </tr>
+            )}
+            </Fragment>
             );
           })}
         </tbody>

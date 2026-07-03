@@ -53,7 +53,7 @@ export async function getActiveSystemMessages(): Promise<SystemMessageRow[]> {
        WHERE start_at <= strftime('%Y-%m-%dT%H:%M', 'now', 'localtime')
          AND end_at   >= strftime('%Y-%m-%dT%H:%M', 'now', 'localtime')
        ORDER BY ${PRIORITY_ORDER} DESC, start_at DESC
-       LIMIT 3`
+       LIMIT 6`
     )
     .all() as SystemMessageRow[];
 }

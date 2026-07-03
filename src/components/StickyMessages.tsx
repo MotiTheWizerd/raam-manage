@@ -41,6 +41,10 @@ const HOVER_OPEN_MS = 10000; // after a hover/click peek
 
 const CARD_WIDTH = 320; // matches w-80; the card slides this far off the edge
 
+// How many message cards the drawer shows at once. Keep in sync with the
+// LIMIT in getActiveSystemMessages (the query never returns more than this).
+const MAX_VISIBLE = 6;
+
 export function StickyMessages() {
   const [messages, setMessages] = useState<SystemMessageRow[]>([]);
   const [open, setOpen] = useState(false);
@@ -147,7 +151,7 @@ export function StickyMessages() {
           onMouseLeave={() => scheduleCollapse(HOVER_OPEN_MS)}
         >
           <AnimatePresence initial={false}>
-            {messages.slice(0, 3).map((m) => (
+            {messages.slice(0, MAX_VISIBLE).map((m) => (
               <motion.div
                 key={m.id}
                 initial={{ opacity: 0, scale: 0.96 }}

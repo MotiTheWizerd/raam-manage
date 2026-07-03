@@ -5,7 +5,6 @@ import { Bell, BellOff, Car, PanelLeftClose, PanelLeftOpen, X } from "lucide-rea
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getLatestCarEvent } from "@/app/events/cars-actions";
-import { useIsManager } from "@/components/AuthProvider";
 import { cn } from "@/lib/cn";
 
 const POLL_MS = 5000;
@@ -13,6 +12,10 @@ const AUTO_DISMISS_MS = 12000;
 const MAX_VISIBLE = 4;
 const SOUND_PREF_KEY = "raam.carNotify.sound";
 const COLLAPSE_PREF_KEY = "raam.carNotify.collapsed";
+
+// The manager "test alert" button now lives in the header (CarNotifyTestButton);
+// it dispatches this window event, which this notifier listens for and replays.
+export const CAR_TEST_EVENT = "raam:car-test";
 
 // Tucked-to-the-edge drawer (mirrors StickyMessages): the stack slides this far
 // off the left edge, leaving only the grip handle; a hover/click peeks it back.
@@ -77,7 +80,6 @@ export function NewCarNotifier() {
   // a small grip handle stays, peeking out the side (mirrors StickyMessages).
   const [collapsed, setCollapsed] = useState(false);
   const [peek, setPeek] = useState(false);
-  const isManager = useIsManager();
 
   // Refs so the polling closure always reads current values without re-binding.
   const lastSeenIdRef = useRef<number | null>(null);
@@ -181,8 +183,17 @@ export function NewCarNotifier() {
         };
     setItems((cur) => [note, ...cur].slice(0, MAX_VISIBLE));
     if (soundOnRef.current) playChime();
+    // If the drawer is tucked to the edge, slide it out so the test is visible.
+    if (collapsed) openPeek(PEEK_MS);
     window.setTimeout(() => dismiss(key), AUTO_DISMISS_MS);
-  }, [dismiss]);
+  }, [dismiss, collapsed, openPeek]);
+
+  // The header's "בדיקת התראת רכב" button dispatches CAR_TEST_EVENT; replay it.
+  useEffect(() => {
+    const handler = () => void triggerTest();
+    window.addEventListener(CAR_TEST_EVENT, handler);
+    return () => window.removeEventListener(CAR_TEST_EVENT, handler);
+  }, [triggerTest]);
 
   useEffect(() => {
     let active = true;
@@ -342,26 +353,12 @@ export function NewCarNotifier() {
   return (
     <>
       {/* EXPANDED: the normal top-left popup stack (in-flow in the layout
-          container). The manager test trigger stays reachable in both modes. */}
-      {(!collapsed || isManager) && (
+          container). The manager test trigger now lives in the header. */}
+      {!collapsed && (
         <div className="pointer-events-none flex w-full flex-col gap-2.5">
-          {!collapsed && (
-            <AnimatePresence initial={false}>
-              {items.map((n) => renderCard(n, true))}
-            </AnimatePresence>
-          )}
-
-          {isManager && (
-            <button
-              type="button"
-              onClick={triggerTest}
-              title="הצג התראת רכב לדוגמה (מנהל בלבד)"
-              className="pointer-events-auto inline-flex w-fit items-center gap-1.5 rounded-full border border-dashed border-red-400/50 bg-white/80 px-3 py-1 text-[11px] font-medium text-red-600 shadow-sm backdrop-blur transition-colors hover:bg-red-50 dark:border-red-400/40 dark:bg-zinc-900/80 dark:text-red-300 dark:hover:bg-red-950/30"
-            >
-              <Car size={12} />
-              בדיקת התראת רכב
-            </button>
-          )}
+          <AnimatePresence initial={false}>
+            {items.map((n) => renderCard(n, true))}
+          </AnimatePresence>
         </div>
       )}
 

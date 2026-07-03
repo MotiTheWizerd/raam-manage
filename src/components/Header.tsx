@@ -1,4 +1,5 @@
 import { BrandLogo } from "./BrandLogo";
+import { CarNotifyTestButton } from "./CarNotifyTestButton";
 import { CurrentUserChip } from "./CurrentUserChip";
 import { EditModeToggle } from "./EditModeToggle";
 import { SearchBar } from "./SearchBar";
@@ -19,6 +20,7 @@ export function Header({ lobbyistName, isDark }: Props) {
         <CurrentUserChip lobbyistName={lobbyistName} />
       </div>
       <div className="flex items-center gap-2">
+        <CarNotifyTestButton />
         <EditModeToggle />
         <ViewAsToggle />
         <ThemeToggle initialIsDark={isDark} />

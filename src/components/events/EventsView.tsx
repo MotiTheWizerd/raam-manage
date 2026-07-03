@@ -13,6 +13,7 @@ import {
   useTabLabels,
   useTabOrder,
 } from "@/components/PreferencesProvider";
+import { PageHeading } from "@/components/PageHeading";
 import { getApartmentCallPolicy } from "@/app/events/actions";
 import { type CallPolicy } from "@/lib/call-policy";
 import { cn } from "@/lib/cn";
@@ -137,7 +138,7 @@ export function EventsView() {
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
       <header className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">אירועים</h1>
+        <PageHeading href="/events" fallback="אירועים" />
         {resident ? (
           <p className="text-sm opacity-70 flex flex-wrap items-center gap-x-3 gap-y-1">
             <span>

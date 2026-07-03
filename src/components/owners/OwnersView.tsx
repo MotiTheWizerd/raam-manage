@@ -10,6 +10,7 @@ import {
   type OwnerRow,
 } from "@/app/owners/actions";
 import { useIsManager } from "@/components/AuthProvider";
+import { PageHeading } from "@/components/PageHeading";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useFormToasts } from "@/lib/hooks/useFormToasts";
@@ -93,7 +94,7 @@ export function OwnersView({ initial: initialOwners, apartments }: Props) {
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
       <header className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold tracking-tight">בעלי דירות</h1>
+        <PageHeading href="/owners" fallback="בעלי דירות" />
         <div className="flex items-center gap-2">
           <Button
             type="button"

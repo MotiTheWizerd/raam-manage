@@ -1,4 +1,5 @@
 import { LobbyMessagesView } from "@/components/lobby-messages/LobbyMessagesView";
+import { PageHeading } from "@/components/PageHeading";
 
 export const dynamic = "force-dynamic";
 
@@ -8,7 +9,7 @@ export default function LobbyMessagesPage() {
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
       <header className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">הודעות לובי</h1>
+        <PageHeading href="/lobby-messages" fallback="הודעות לובי" />
       </header>
 
       <LobbyMessagesView />

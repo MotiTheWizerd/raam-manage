@@ -14,6 +14,7 @@ import { PackagesWaitingTile } from "@/components/dashboard/PackagesWaitingTile"
 import { SuggestionsTile } from "@/components/dashboard/SuggestionsTile";
 import { SystemMessagesTile } from "@/components/dashboard/SystemMessagesTile";
 import { WhatsAppVolumeTile } from "@/components/dashboard/WhatsAppVolumeTile";
+import { PageHeading } from "@/components/PageHeading";
 
 export const dynamic = "force-dynamic";
 
@@ -30,7 +31,7 @@ export default function Dashboard() {
     <div className="space-y-4 max-w-7xl mx-auto">
       <header className="flex items-end justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">לוח בקרה</h1>
+          <PageHeading href="/" fallback="לוח בקרה" />
           <p className="text-sm opacity-60 mt-1">
             {new Intl.DateTimeFormat("he-IL", {
               weekday: "long",

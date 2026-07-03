@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getOpenSuggestionCount } from "@/app/settings/suggestions-actions";
+import { PageHeading } from "@/components/PageHeading";
 import { Tabs, type TabItem } from "@/components/ui/Tabs";
 import { onSuggestionsChanged } from "@/lib/suggestions-events";
 import { BackupTab } from "./BackupTab";
@@ -46,7 +47,7 @@ export function SettingsView() {
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
       <header className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">הגדרות</h1>
+        <PageHeading href="/settings" fallback="הגדרות" />
       </header>
 
       <Tabs tabs={tabs} value={tab} onChange={setTab} />

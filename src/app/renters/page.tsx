@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { isManager } from "@/lib/auth";
 import { AddResidentButton } from "./AddResidentButton";
 import { RentersList, type RentersListResident } from "./RentersList";
+import { PageHeading } from "@/components/PageHeading";
 
 export const dynamic = "force-dynamic";
 
@@ -42,7 +43,7 @@ export default async function RentersPage() {
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold tracking-tight">דיירים</h1>
+        <PageHeading href="/renters" fallback="דיירים" />
         {canEdit && <AddResidentButton apartments={apartments} />}
       </div>
 

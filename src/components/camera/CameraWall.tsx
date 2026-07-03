@@ -3,6 +3,7 @@
 import { Cctv } from "lucide-react";
 import { useState } from "react";
 import { CameraTile } from "@/components/camera/CameraTile";
+import { PageHeading } from "@/components/PageHeading";
 
 export type CameraInfo = { id: string; name: string };
 
@@ -47,7 +48,7 @@ export function CameraWall({ cameras }: { cameras: CameraInfo[] }) {
     <div className="flex h-full flex-col">
       <div className="mb-3 flex shrink-0 items-center gap-2">
         <Cctv size={22} aria-hidden="true" className="text-foreground/70" />
-        <h1 className="text-xl font-semibold tracking-tight">מצלמות</h1>
+        <PageHeading href="/cameras" fallback="מצלמות" className="text-xl" />
         <span className="text-sm text-foreground/50">({cameras.length})</span>
       </div>
 

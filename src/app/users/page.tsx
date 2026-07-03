@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { getCurrentUser, isManager } from "@/lib/auth";
 import { AddUserButton } from "./AddUserButton";
 import { UsersList, type UsersListUser } from "./UsersList";
+import { PageHeading } from "@/components/PageHeading";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +23,7 @@ export default async function UsersPage() {
   return (
     <div className="space-y-6 max-w-3xl mx-auto">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold tracking-tight">פקידי לובי</h1>
+        <PageHeading href="/users" fallback="פקידי לובי" />
         <AddUserButton />
       </div>
 

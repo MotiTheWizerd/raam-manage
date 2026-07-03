@@ -5,6 +5,7 @@ import { Download, Pencil, Printer, Search, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useIsManager } from "@/components/AuthProvider";
 import { DirectoryRowEditor } from "@/components/directory/DirectoryRowEditor";
+import { PageHeading } from "@/components/PageHeading";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import {
@@ -287,7 +288,7 @@ export function DirectoryTable({ rows }: Props) {
   return (
     <div className="space-y-4">
       <header className="flex flex-wrap items-center justify-between gap-3 print:hidden">
-        <h1 className="text-2xl font-semibold tracking-tight">מדריך הבניין</h1>
+        <PageHeading href="/directory" fallback="מדריך הבניין" />
         <div className="flex items-center gap-2">
           <Button
             type="button"

@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { isManager } from "@/lib/auth";
 import { AddApartmentButton } from "./AddApartmentButton";
 import { ApartmentsList, type ApartmentsListItem } from "./ApartmentsList";
+import { PageHeading } from "@/components/PageHeading";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +27,7 @@ export default async function ApartmentsPage() {
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold tracking-tight">דירות</h1>
+        <PageHeading href="/apartments" fallback="דירות" />
         {canEdit && <AddApartmentButton zones={zones} />}
       </div>
 

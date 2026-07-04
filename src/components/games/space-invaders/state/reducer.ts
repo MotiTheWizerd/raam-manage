@@ -11,6 +11,8 @@ import {
   stepInvaders,
 } from '../engine'
 import {
+  INV_H,
+  INV_W,
   PLAY_W,
   PLAYER_H,
   PLAYER_SHOOT_COOLDOWN,
@@ -222,8 +224,26 @@ function tick(state: State, keys: Keys): State {
     if (meta.duration > 0) {
       // timed effect — (re)start its countdown
       effects = { ...effects, [b.kind]: meta.duration }
+    } else if (b.kind === 'smartBomb') {
+      // instant — detonate the bottom-most alive invader row + wipe enemy fire
+      let bottomRow = -1
+      for (const inv of invaders) {
+        if (inv.alive && inv.row > bottomRow) bottomRow = inv.row
+      }
+      if (bottomRow >= 0) {
+        invaders = invaders.map((inv) => {
+          if (!(inv.alive && inv.row === bottomRow)) return inv
+          score += rowPoints(inv.row)
+          events.push({ type: 'invader-killed', row: inv.row, points: rowPoints(inv.row) })
+          const rowBurst = burstParticles(inv.x + INV_W / 2, inv.y + INV_H / 2, nextId)
+          nextId += rowBurst.length
+          particles = [...particles, ...rowBurst]
+          return { ...inv, alive: false }
+        })
+      }
+      bullets = bullets.filter((bl) => bl.fromPlayer)
     }
-    // (instant bonuses would apply their one-shot effect here, by kind)
+    // catch spark
     const burst = burstParticles(b.x, b.y, nextId)
     nextId += burst.length
     particles = [...particles, ...burst]

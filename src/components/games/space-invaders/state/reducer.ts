@@ -29,6 +29,12 @@ import {
 import { writeBest } from './bestScore'
 import type { GameEvent } from './events'
 import { burstParticles, stepParticles, type Particle } from './particles'
+import {
+  catchBonuses,
+  maybeDropBonus,
+  stepBonuses,
+  type Bonus,
+} from './bonuses'
 
 const HIT_PAUSE_TICKS = 50   // ~0.8s death freeze
 const INVULN_TICKS = 90      // ~1.5s respawn invulnerability
@@ -39,6 +45,9 @@ export type State = GameState & {
   hitPause: number
   invuln: number
   particles: Particle[]
+  // Which wave we're on — each stage brings its own bonus pool (see bonuses.ts).
+  stage: number
+  bonuses: Bonus[]
 }
 
 export type Keys = { left: boolean; right: boolean; shoot: boolean }
@@ -70,6 +79,8 @@ export function initialState(best: number): State {
     hitPause: 0,
     invuln: 0,
     particles: [],
+    stage: 1,
+    bonuses: [],
   }
 }
 
@@ -96,6 +107,7 @@ function tick(state: State, keys: Keys): State {
     hitPause,
     invuln,
     particles,
+    bonuses,
   } = state
   const events: GameEvent[] = []
 
@@ -165,6 +177,9 @@ function tick(state: State, keys: Keys): State {
     if (invaders[i].alive && !playerHits.invaders[i].alive) {
       const row = invaders[i].row
       events.push({ type: 'invader-killed', row, points: rowPoints(row) })
+      // roll a bonus drop from this stage's pool at the dead invader's spot
+      const drop = maybeDropBonus(invaders[i].x, invaders[i].y, state.stage, nextId++)
+      if (drop) bonuses = [...bonuses, drop]
     }
   }
   bullets = playerHits.bullets
@@ -185,6 +200,19 @@ function tick(state: State, keys: Keys): State {
     }
   }
 
+  // bonuses fall; the ship collects any it overlaps. Placeholder effect until
+  // the real bonus list lands — a few points + a spark so a catch feels good.
+  bonuses = stepBonuses(bonuses)
+  const grabbed = catchBonuses(bonuses, playerX)
+  bonuses = grabbed.remaining
+  for (const b of grabbed.caught) {
+    events.push({ type: 'bonus-collected', kind: b.kind })
+    score += 50
+    const burst = burstParticles(b.x, b.y, nextId)
+    nextId += burst.length
+    particles = [...particles, ...burst]
+  }
+
   const next: State = {
     ...state,
     playerX,
@@ -202,6 +230,7 @@ function tick(state: State, keys: Keys): State {
     hitPause,
     invuln,
     particles,
+    bonuses,
     events,
   }
 

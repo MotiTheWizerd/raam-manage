@@ -21,6 +21,7 @@ import {
   SPRITES,
   SPRITE_PIXEL,
 } from './sprites'
+import { BONUS_H, BONUS_W } from './state/bonuses'
 
 const PlayerShip = memo(function PlayerShip() {
   const pixels: React.ReactNode[] = []
@@ -164,6 +165,26 @@ export function SpaceInvaders() {
             className={`absolute rounded-full ${b.fromPlayer ? 'bg-lime-400' : 'bg-red-500'}`}
             style={{ left: b.x - BULLET_W / 2, top: b.y, width: BULLET_W, height: BULLET_H }}
           />
+        ))}
+
+        {/* Falling bonuses — generic mystery box for now; each kind gets its
+            own visual once the bonus list lands. */}
+        {state.bonuses.map((b) => (
+          <div
+            key={b.id}
+            className="absolute flex items-center justify-center rounded-md text-[11px] font-bold animate-pulse"
+            style={{
+              left: b.x - BONUS_W / 2,
+              top: b.y,
+              width: BONUS_W,
+              height: BONUS_H,
+              background: '#f59e0b',
+              color: '#000',
+              filter: 'drop-shadow(0 0 5px #f59e0b)',
+            }}
+          >
+            ?
+          </div>
         ))}
 
         {state.hitPause === 0 && (state.invuln === 0 || Math.floor(state.invuln / 5) % 2 === 0) && (

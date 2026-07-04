@@ -47,10 +47,16 @@ export function rowPoints(row: number): number {
   return 10
 }
 
-export function invaderMoveRate(aliveCount: number): number {
+// Ticks between marching steps — lower is faster. Thins toward the floor as
+// invaders die (classic speed-up), and each level tightens the whole cadence
+// ~8% so a fresh wave starts a bit quicker than the last. Floored at 4 so it
+// stays humanly playable at high levels.
+export function invaderMoveRate(aliveCount: number, stage = 1): number {
   const total = INV_ROWS * INV_COLS
   const ratio = aliveCount / total
-  return Math.max(4, Math.round(4 + ratio * 52))
+  const base = 4 + ratio * 52
+  const levelSpeedup = Math.pow(0.92, stage - 1)
+  return Math.max(4, Math.round(base * levelSpeedup))
 }
 
 export function enemyShootRate(aliveCount: number): number {

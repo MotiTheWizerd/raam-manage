@@ -6,5 +6,6 @@ export type GameEvent =
   | { type: 'shield-hit' }
   | { type: 'march-step' }
   | { type: 'bonus-collected'; kind: BonusKind }
+  | { type: 'level-up'; stage: number }
   | { type: 'victory' }
   | { type: 'gameover' }

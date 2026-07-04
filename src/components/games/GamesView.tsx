@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ArrowRight } from "lucide-react";
 import { GAMES, findGame, type GameStatus } from "./registry";
+import { useCurrentUser } from "@/components/AuthProvider";
 
 // The lobby arcade. A self-contained dark panel that lives inside the normal
 // app chrome (header + sidebar). The little games were built LTR, so the game
@@ -17,6 +18,7 @@ const STATUS_LABEL: Record<GameStatus, string> = {
 export function GamesView() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const game = selectedId ? findGame(selectedId) : undefined;
+  const playerName = useCurrentUser()?.lobbyist_name;
 
   return (
     <div className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950 font-mono text-zinc-100 shadow-2xl">
@@ -37,7 +39,7 @@ export function GamesView() {
             <div className="w-24" />
           </header>
           <main dir="ltr" className="flex justify-center overflow-x-auto">
-            <game.component />
+            <game.component playerName={playerName} />
           </main>
         </>
       ) : (

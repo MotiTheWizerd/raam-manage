@@ -85,11 +85,12 @@ export const BONUS_W = 18
 export const BONUS_H = 18
 export const BONUS_FALL_SPEED = 2.2
 
-// Chance a killed invader drops a bonus. Tunable — bump it while testing.
-export const DROP_CHANCE = 0.2
+// Chance a killed invader drops a bonus. Deliberately rare so a bonus is a real
+// event, not a constant stream (~1 per full wave of 55, sometimes none). Tunable.
+export const DROP_CHANCE = 0.02
 
-// Which bonus kinds may drop on a given stage. Data-driven so each stage can
-// bring its own set once stages exist. Placeholder: every stage drops shield.
+// Which bonus kinds may drop on a given stage. All four can drop at every stage;
+// data-driven so a stage could bring its own set later if we want.
 export function stageBonusPool(stage: number): BonusKind[] {
   return stage >= 1 ? ['shield', 'rapidFire', 'smartBomb', 'tripleShot'] : []
 }

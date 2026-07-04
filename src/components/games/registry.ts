@@ -5,6 +5,10 @@ import { SpaceInvaders } from './space-invaders/SpaceInvaders'
 
 export type GameStatus = 'playable' | 'wip'
 
+// Games that care about who's playing (e.g. the Space Invaders leaderboard)
+// read this; the rest simply ignore it.
+export type GameProps = { playerName?: string }
+
 export type Game = {
   id: string
   name: string
@@ -12,7 +16,7 @@ export type Game = {
   emoji: string
   accent: string
   status: GameStatus
-  component: ComponentType
+  component: ComponentType<GameProps>
 }
 
 export const GAMES: ReadonlyArray<Game> = [

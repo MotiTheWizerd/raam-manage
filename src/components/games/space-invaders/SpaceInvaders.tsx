@@ -1,5 +1,6 @@
 import { memo } from 'react'
 import { useSpaceInvaders } from './state/useSpaceInvaders'
+import { cleanName, type ScoreEntry } from './state/leaderboard'
 import {
   BULLET_H,
   BULLET_W,
@@ -116,9 +117,12 @@ function invaderGlow(row: number): string {
   return `drop-shadow(0 0 3px ${ROW_CONFIG[row].color})`
 }
 
-export function SpaceInvaders() {
-  const { state, restart, togglePause } = useSpaceInvaders()
+export function SpaceInvaders({ playerName }: { playerName?: string }) {
+  const { state, restart, togglePause } = useSpaceInvaders(playerName)
   const rapidActive = (state.effects.rapidFire ?? 0) > 0
+  const me = cleanName(playerName)
+  // The reducer owns the board (seeded on start, refreshed on game over).
+  const board = state.board
 
   return (
     <div className="flex flex-col md:flex-row items-start gap-8 p-6">
@@ -235,6 +239,33 @@ export function SpaceInvaders() {
           />
         ))}
 
+        {state.levelFlash > 0 && state.status === 'playing' && (
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <div className="text-4xl font-bold tracking-widest text-lime-400 animate-pulse drop-shadow-[0_0_12px_rgba(163,230,53,0.85)]">
+              LEVEL {state.stage}
+            </div>
+          </div>
+        )}
+
+        {/* Unreal-style multi-kill callout */}
+        {state.announceTimer > 0 && state.announce && (
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <div
+              className="flex -translate-y-14 flex-col items-center gap-1 animate-pulse"
+              style={{ color: state.announce.color }}
+            >
+              <div className="text-3xl">{state.announce.glyph}</div>
+              <div
+                className="text-3xl font-extrabold uppercase tracking-widest"
+                style={{ textShadow: `0 0 16px ${state.announce.color}` }}
+              >
+                {state.announce.label}
+              </div>
+              <div className="text-sm font-bold tabular-nums opacity-80">×{state.combo}</div>
+            </div>
+          </div>
+        )}
+
         {state.status === 'paused' && (
           <Overlay>
             <div className="text-3xl font-bold text-zinc-200">PAUSED</div>
@@ -250,10 +281,15 @@ export function SpaceInvaders() {
         {state.status === 'gameover' && (
           <Overlay>
             <div className="text-3xl font-bold text-red-400">GAME OVER</div>
-            <div className="text-zinc-300">score: {state.score}</div>
-            {state.score > 0 && state.score === state.best && (
-              <div className="text-amber-300 text-sm">★ new best ★</div>
+            <div className="text-zinc-300 text-sm">
+              {me} · {state.score} נק׳ · הגעת לשלב {state.stage}
+            </div>
+            {state.newRecord && (
+              <div className="text-amber-300 text-sm animate-pulse">🏆 שיא אישי חדש!</div>
             )}
+            <div className="w-64 max-h-52 overflow-y-auto px-1">
+              <Leaderboard entries={board} me={me} max={10} title="טבלת השיאים" />
+            </div>
             <button
               onClick={restart}
               className="px-4 py-2 rounded-md bg-cyan-500 hover:bg-cyan-400 text-zinc-950 font-semibold transition"
@@ -281,6 +317,7 @@ export function SpaceInvaders() {
       </div>
 
       <aside className="flex flex-col gap-4 text-zinc-200 font-mono">
+        <Stat label="level" value={state.stage} />
         <Stat label="score" value={state.score} />
         <Stat label="best" value={state.best} />
 
@@ -295,6 +332,8 @@ export function SpaceInvaders() {
             ))}
           </div>
         </div>
+
+        <Leaderboard entries={board} me={me} max={5} title="שיאי הפקידים" />
 
         {(Object.keys(state.effects) as BonusKind[])
           .filter((k) => (state.effects[k] ?? 0) > 0)
@@ -355,6 +394,65 @@ export function SpaceInvaders() {
         </div>
       </aside>
     </div>
+  )
+}
+
+// The per-lobbyist tournament board. Shows the top `max`; if the current
+// player ranks below the cut, their row is appended so they always see
+// where they stand.
+function Leaderboard({
+  entries,
+  me,
+  max,
+  title,
+}: {
+  entries: ScoreEntry[]
+  me: string
+  max: number
+  title: string
+}) {
+  const top = entries.slice(0, max)
+  const myRank = entries.findIndex((e) => e.name === me)
+  const meShown = myRank >= 0 && myRank < max
+
+  return (
+    <div dir="rtl" className="w-full font-mono">
+      <div className="mb-1.5 flex items-center gap-1.5 text-[11px] uppercase tracking-widest text-zinc-500">
+        <span>🏆</span>
+        <span>{title}</span>
+      </div>
+      {top.length === 0 ? (
+        <div className="text-xs text-zinc-600">עדיין אין שיאים — קדימה!</div>
+      ) : (
+        <ol className="flex flex-col gap-0.5">
+          {top.map((e, i) => (
+            <LbRow key={e.name} rank={i + 1} entry={e} isMe={e.name === me} />
+          ))}
+          {!meShown && myRank >= 0 && (
+            <>
+              <li className="text-center text-[10px] leading-none text-zinc-600">···</li>
+              <LbRow rank={myRank + 1} entry={entries[myRank]} isMe />
+            </>
+          )}
+        </ol>
+      )}
+    </div>
+  )
+}
+
+function LbRow({ rank, entry, isMe }: { rank: number; entry: ScoreEntry; isMe: boolean }) {
+  return (
+    <li
+      className={`flex items-center justify-between gap-2 rounded px-2 py-1 text-sm ${
+        isMe ? 'bg-cyan-500/15 text-cyan-200' : 'text-zinc-300'
+      }`}
+    >
+      <span className="flex min-w-0 items-center gap-2">
+        <span className="w-4 tabular-nums text-zinc-500">{rank}.</span>
+        <span className="truncate">{entry.name}</span>
+      </span>
+      <span className="tabular-nums font-semibold">{entry.score}</span>
+    </li>
   )
 }
 

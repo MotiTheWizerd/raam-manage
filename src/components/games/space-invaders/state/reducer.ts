@@ -29,6 +29,13 @@ import {
   type Shield,
 } from '../shields'
 import { writeBest } from './bestScore'
+import { readLeaderboard, recordScore, type ScoreEntry } from './leaderboard'
+import {
+  ANNOUNCE_TICKS,
+  COMBO_GAP_TICKS,
+  tierCrossed,
+  type Announcement,
+} from './killstreak'
 import type { GameEvent } from './events'
 import { burstParticles, stepParticles, type Particle } from './particles'
 import {
@@ -44,6 +51,7 @@ import {
 const HIT_PAUSE_TICKS = 50   // ~0.8s death freeze
 const INVULN_TICKS = 90      // ~1.5s respawn invulnerability
 const RAPID_FIRE_COOLDOWN = 5 // shoot cooldown while Rapid Fire is up (vs 18)
+const LEVEL_FLASH_TICKS = 90 // ~1.5s "LEVEL N" banner after clearing a wave
 
 export type State = GameState & {
   events: GameEvent[]
@@ -53,9 +61,23 @@ export type State = GameState & {
   particles: Particle[]
   // Which wave we're on — each stage brings its own bonus pool (see bonuses.ts).
   stage: number
+  // Ticks remaining on the "LEVEL N" banner shown right after a wave clears.
+  levelFlash: number
   bonuses: Bonus[]
   // Active timed bonus effects — kind -> ticks remaining.
   effects: ActiveEffects
+  // Logged-in lobbyist, recorded to the leaderboard on game over.
+  playerName: string
+  // True when the last game over set a new personal best (for the win banner).
+  newRecord: boolean
+  // The per-lobbyist high-score board, refreshed on game over.
+  board: ScoreEntry[]
+  // Multi-kill streak: consecutive shooting kills + the window ticks left.
+  combo: number
+  comboTimer: number
+  // Current on-screen kill callout + its remaining display ticks.
+  announce: Announcement | null
+  announceTimer: number
 }
 
 export type Keys = { left: boolean; right: boolean; shoot: boolean }
@@ -65,7 +87,7 @@ export type Action =
   | { type: 'toggle-pause' }
   | { type: 'restart' }
 
-export function initialState(best: number): State {
+export function initialState(best: number, playerName = ''): State {
   const invaders = createInvaders()
   const aliveCount = invaders.length
   return {
@@ -88,15 +110,53 @@ export function initialState(best: number): State {
     invuln: 0,
     particles: [],
     stage: 1,
+    levelFlash: 0,
     bonuses: [],
     effects: {},
+    playerName,
+    newRecord: false,
+    board: readLeaderboard(),
+    combo: 0,
+    comboTimer: 0,
+    announce: null,
+    announceTimer: 0,
+  }
+}
+
+// Wave cleared → next level. Same difficulty for now (fresh identical wave);
+// score, lives, best, shields and active bonus effects all carry over. This is
+// the seam where per-stage difficulty/pools plug in later (see bonuses.ts).
+function advanceLevel(state: State): State {
+  const stage = state.stage + 1
+  const invaders = createInvaders()
+  const aliveCount = invaders.length
+  return {
+    ...state,
+    stage,
+    invaders,
+    invaderDir: 1,
+    invaderTickLeft: invaderMoveRate(aliveCount, stage),
+    enemyShootCooldown: enemyShootRate(aliveCount),
+    bullets: [],
+    bonuses: [],
+    levelFlash: LEVEL_FLASH_TICKS,
+    events: [...state.events, { type: 'level-up', stage }],
   }
 }
 
 function endGame(state: State, status: 'victory' | 'gameover'): State {
   const best = Math.max(state.best, state.score)
   if (best > state.best) writeBest(best)
-  return { ...state, status, best, events: [...state.events, { type: status }] }
+  // Log this run to the per-lobbyist tournament board; flag a personal best.
+  const { entries, isRecord } = recordScore(state.playerName, state.score, state.stage)
+  return {
+    ...state,
+    status,
+    best,
+    newRecord: isRecord,
+    board: entries,
+    events: [...state.events, { type: status }],
+  }
 }
 
 function tick(state: State, keys: Keys): State {
@@ -118,6 +178,11 @@ function tick(state: State, keys: Keys): State {
     particles,
     bonuses,
     effects,
+    levelFlash,
+    combo,
+    comboTimer,
+    announce,
+    announceTimer,
   } = state
   const events: GameEvent[] = []
 
@@ -133,6 +198,10 @@ function tick(state: State, keys: Keys): State {
   }
 
   invuln = Math.max(0, invuln - 1)
+  levelFlash = Math.max(0, levelFlash - 1)
+  announceTimer = Math.max(0, announceTimer - 1)
+  // the multi-kill window closes → the streak resets
+  if (comboTimer > 0 && --comboTimer === 0) combo = 0
   particles = stepParticles(particles)
   effects = tickEffects(effects)
 
@@ -177,7 +246,7 @@ function tick(state: State, keys: Keys): State {
     const stepped = stepInvaders(invaders, invaderDir)
     invaders = stepped.invaders
     invaderDir = stepped.dir
-    invaderTickLeft = invaderMoveRate(invaders.filter((i) => i.alive).length)
+    invaderTickLeft = invaderMoveRate(invaders.filter((i) => i.alive).length, state.stage)
     animFrame = animFrame === 0 ? 1 : 0
     events.push({ type: 'march-step' })
     if (anyInvaderInShieldZone(invaders)) {
@@ -193,9 +262,11 @@ function tick(state: State, keys: Keys): State {
 
   // player bullets vs invaders
   const playerHits = resolvePlayerBullets(bullets, invaders)
+  let bulletKills = 0
   for (let i = 0; i < invaders.length; i++) {
     if (invaders[i].alive && !playerHits.invaders[i].alive) {
       const row = invaders[i].row
+      bulletKills++
       events.push({ type: 'invader-killed', row, points: rowPoints(row) })
       // roll a bonus drop from this stage's pool at the dead invader's spot
       const drop = maybeDropBonus(invaders[i].x, invaders[i].y, state.stage, nextId++)
@@ -206,6 +277,19 @@ function tick(state: State, keys: Keys): State {
   invaders = playerHits.invaders
   score += playerHits.scored
 
+  // multi-kill streak — only direct shots count; a bigger jump (Triple Shot)
+  // can leap tiers in one tick. Announce the top tier newly crossed.
+  if (bulletKills > 0) {
+    const prevCombo = combo
+    combo += bulletKills
+    comboTimer = COMBO_GAP_TICKS
+    const tier = tierCrossed(prevCombo, combo)
+    if (tier) {
+      announce = { label: tier.label, glyph: tier.glyph, color: tier.color }
+      announceTimer = ANNOUNCE_TICKS
+    }
+  }
+
   // enemy bullets vs player (invulnerable right after respawn OR while the
   // Force Field bonus is active)
   const shielded = (effects.shield ?? 0) > 0
@@ -215,6 +299,9 @@ function tick(state: State, keys: Keys): State {
     if (enemyHits.hit) {
       lives--
       events.push({ type: 'player-hit' })
+      // taking a hit breaks the kill streak
+      combo = 0
+      comboTimer = 0
       const burst = burstParticles(playerX + PLAYER_W / 2, PLAYER_Y + PLAYER_H / 2, nextId)
       nextId += burst.length
       particles = [...particles, ...burst]
@@ -276,11 +363,17 @@ function tick(state: State, keys: Keys): State {
     particles,
     bonuses,
     effects,
+    levelFlash,
+    combo,
+    comboTimer,
+    announce,
+    announceTimer,
     events,
   }
 
   const aliveCount = invaders.filter((i) => i.alive).length
-  if (aliveCount === 0) return endGame(next, 'victory')
+  // wave cleared → roll straight into the next level (endless for now)
+  if (aliveCount === 0) return advanceLevel(next)
   if (lives <= 0 || invadersReachedPlayer(invaders)) {
     return endGame({ ...next, lives: Math.max(0, lives) }, 'gameover')
   }
@@ -288,7 +381,7 @@ function tick(state: State, keys: Keys): State {
 }
 
 export function reducer(state: State, action: Action): State {
-  if (action.type === 'restart') return initialState(state.best)
+  if (action.type === 'restart') return initialState(state.best, state.playerName)
 
   if (action.type === 'toggle-pause') {
     if (state.status === 'gameover' || state.status === 'victory') return state

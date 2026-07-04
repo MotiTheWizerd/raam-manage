@@ -143,6 +143,9 @@ export function DirectoryTable({ rows }: Props) {
       key: "apartment",
       header: "דירה",
       sortable: true,
+      // Numbers are short (e.g. "301A"); pin a narrow width so the column hugs
+      // the content instead of stretching to the "דירה" + sort-arrow header.
+      width: "4rem",
       cellClassName: "font-medium whitespace-nowrap",
       render: (r) => (
         <Link
@@ -171,7 +174,7 @@ export function DirectoryTable({ rows }: Props) {
     {
       key: "owners",
       header: "בעלי הדירות",
-      maxWidth: "12rem",
+      maxWidth: "calc(12rem - 25px)",
       // Owners come from the apartment_owners registry (not residents), so they
       // are plain names — there is no per-owner detail page to link to.
       render: (r) => <Lines items={r.owners.map((o) => o.name)} />,
@@ -179,7 +182,7 @@ export function DirectoryTable({ rows }: Props) {
     {
       key: "occupants",
       header: "רשימת דיירים",
-      maxWidth: "12rem",
+      maxWidth: "calc(12rem - 25px)",
       render: (r) => <PeopleLines people={r.occupants} muted />,
     },
     {

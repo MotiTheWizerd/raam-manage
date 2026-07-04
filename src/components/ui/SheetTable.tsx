@@ -235,7 +235,7 @@ export function SheetTable<T>({
             {/* Corner cell above the row numbers. */}
             <th
               className={cn(
-                "sticky start-0 top-0 z-30 w-10 min-w-10",
+                "sticky start-0 top-0 z-30 w-5 min-w-5",
                 CELL_BORDER,
                 HEADER_BG
               )}

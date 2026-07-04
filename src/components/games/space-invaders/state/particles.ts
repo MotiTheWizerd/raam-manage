@@ -10,10 +10,15 @@ export type Particle = {
 
 export const BURST_COUNT = 18
 
-export function burstParticles(cx: number, cy: number, baseId: number): Particle[] {
+export function burstParticles(
+  cx: number,
+  cy: number,
+  baseId: number,
+  count: number = BURST_COUNT,
+): Particle[] {
   const out: Particle[] = []
-  for (let i = 0; i < BURST_COUNT; i++) {
-    const angle = (i / BURST_COUNT) * Math.PI * 2 + Math.random() * 0.5
+  for (let i = 0; i < count; i++) {
+    const angle = (i / count) * Math.PI * 2 + Math.random() * 0.5
     const speed = 1.5 + Math.random() * 3
     out.push({
       id: baseId + i,

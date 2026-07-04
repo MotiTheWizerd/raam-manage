@@ -51,6 +51,7 @@ import {
 const HIT_PAUSE_TICKS = 50   // ~0.8s death freeze
 const INVULN_TICKS = 90      // ~1.5s respawn invulnerability
 const RAPID_FIRE_COOLDOWN = 5 // shoot cooldown while Rapid Fire is up (vs 18)
+const HIT_BURST_COUNT = 8    // pixel spark when a shot kills an invader
 const LEVEL_FLASH_TICKS = 90 // ~1.5s "LEVEL N" banner after clearing a wave
 
 export type State = GameState & {
@@ -268,6 +269,15 @@ function tick(state: State, keys: Keys): State {
       const row = invaders[i].row
       bulletKills++
       events.push({ type: 'invader-killed', row, points: rowPoints(row) })
+      // pixel-burst hit indicator at the invader's spot
+      const hitBurst = burstParticles(
+        invaders[i].x + INV_W / 2,
+        invaders[i].y + INV_H / 2,
+        nextId,
+        HIT_BURST_COUNT,
+      )
+      nextId += hitBurst.length
+      particles = [...particles, ...hitBurst]
       // roll a bonus drop from this stage's pool at the dead invader's spot
       const drop = maybeDropBonus(invaders[i].x, invaders[i].y, state.stage, nextId++)
       if (drop) bonuses = [...bonuses, drop]

@@ -3,7 +3,11 @@ import "server-only";
 import { cookies } from "next/headers";
 import { cache } from "react";
 import { db } from "./db";
-import { SESSION_COOKIE_NAME, SESSION_MAX_AGE_SECONDS } from "./session-config";
+import {
+  SESSION_COOKIE_NAME,
+  SESSION_MAX_AGE_SECONDS,
+  SESSION_SINCE_COOKIE_NAME,
+} from "./session-config";
 
 const COOKIE_NAME = SESSION_COOKIE_NAME;
 
@@ -46,11 +50,20 @@ export async function setSessionCookie(userId: number): Promise<void> {
     path: "/",
     maxAge: SESSION_MAX_AGE_SECONDS,
   });
+  // Stamp when this session began so the shift-boundary auto-logout (ShiftGuard)
+  // can tell an incoming lobbyist (just logged in) from the outgoing one.
+  cookieStore.set(SESSION_SINCE_COOKIE_NAME, String(Date.now()), {
+    httpOnly: true,
+    sameSite: "lax",
+    path: "/",
+    maxAge: SESSION_MAX_AGE_SECONDS,
+  });
 }
 
 export async function clearSessionCookie(): Promise<void> {
   const cookieStore = await cookies();
   cookieStore.delete(COOKIE_NAME);
+  cookieStore.delete(SESSION_SINCE_COOKIE_NAME);
 }
 
 export async function isManager(): Promise<boolean> {

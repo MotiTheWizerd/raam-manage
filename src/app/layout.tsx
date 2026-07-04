@@ -11,11 +11,13 @@ import { GateControl } from "@/components/GateControl";
 import { Header } from "@/components/Header";
 import { NewCarNotifier } from "@/components/NewCarNotifier";
 import { PreferencesProvider } from "@/components/PreferencesProvider";
+import { ShiftGuard } from "@/components/ShiftGuard";
 import { Sidebar } from "@/components/Sidebar";
 import { StickyMessages } from "@/components/StickyMessages";
 import { BackToTop } from "@/components/ui/BackToTop";
 import { getCurrentUser } from "@/lib/auth";
 import { getPreferences } from "@/lib/preferences";
+import { SESSION_SINCE_COOKIE_NAME } from "@/lib/session-config";
 import "./globals.css";
 
 const heebo = Heebo({
@@ -39,6 +41,9 @@ export default async function RootLayout({
     cookies(),
   ]);
   const isDark = cookieStore.get("theme")?.value === "dark";
+  const sinceRaw = cookieStore.get(SESSION_SINCE_COOKIE_NAME)?.value;
+  const loginAt =
+    sinceRaw && !Number.isNaN(Number(sinceRaw)) ? Number(sinceRaw) : null;
 
   return (
     <html
@@ -73,6 +78,7 @@ export default async function RootLayout({
                     itself into a grip handle and peeks open on hover. */}
                 <StickyMessages />
                 <GateControl />
+                <ShiftGuard loginAt={loginAt} />
                 <BackToTop />
                 </EditModeProvider>
               </EmergencyProvider>

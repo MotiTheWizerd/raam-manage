@@ -16,7 +16,7 @@ const ticks = (sec: number) => Math.round((sec * 1000) / TICK_MS)
 // effect itself is applied by the reducer (switch on kind), since it touches
 // game state. To add a bonus: add a kind here + its case in the reducer.
 
-export type BonusKind = 'shield'
+export type BonusKind = 'shield' | 'rapidFire'
 
 export type BonusMeta = {
   kind: BonusKind
@@ -33,6 +33,13 @@ export const BONUSES: Record<BonusKind, BonusMeta> = {
     glyph: '🛡️',
     color: '#38bdf8', // sky-400
     duration: ticks(10), // 10 seconds of invulnerability
+  },
+  rapidFire: {
+    kind: 'rapidFire',
+    label: 'Rapid Fire',
+    glyph: '🔥',
+    color: '#fb923c', // orange-400
+    duration: ticks(8), // 8 seconds of fast shooting
   },
 }
 
@@ -70,7 +77,7 @@ export const DROP_CHANCE = 0.2
 // Which bonus kinds may drop on a given stage. Data-driven so each stage can
 // bring its own set once stages exist. Placeholder: every stage drops shield.
 export function stageBonusPool(stage: number): BonusKind[] {
-  return stage >= 1 ? ['shield'] : []
+  return stage >= 1 ? ['shield', 'rapidFire'] : []
 }
 
 // Roll the drop for a killed invader; on a hit, spawn a bonus at its center,

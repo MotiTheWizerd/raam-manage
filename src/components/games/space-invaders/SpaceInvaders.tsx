@@ -21,7 +21,7 @@ import {
   SPRITES,
   SPRITE_PIXEL,
 } from './sprites'
-import { BONUS_H, BONUS_W, BONUSES } from './state/bonuses'
+import { BONUS_H, BONUS_W, BONUSES, type BonusKind } from './state/bonuses'
 
 const PlayerShip = memo(function PlayerShip() {
   const pixels: React.ReactNode[] = []
@@ -118,6 +118,7 @@ function invaderGlow(row: number): string {
 
 export function SpaceInvaders() {
   const { state, restart, togglePause } = useSpaceInvaders()
+  const rapidActive = (state.effects.rapidFire ?? 0) > 0
 
   return (
     <div className="flex flex-col md:flex-row items-start gap-8 p-6">
@@ -162,7 +163,7 @@ export function SpaceInvaders() {
         {state.bullets.map((b) => (
           <div
             key={b.id}
-            className={`absolute rounded-full ${b.fromPlayer ? 'bg-lime-400' : 'bg-red-500'}`}
+            className={`absolute rounded-full ${b.fromPlayer ? (rapidActive ? 'bg-orange-400' : 'bg-lime-400') : 'bg-red-500'}`}
             style={{ left: b.x - BULLET_W / 2, top: b.y, width: BULLET_W, height: BULLET_H }}
           />
         ))}
@@ -295,21 +296,27 @@ export function SpaceInvaders() {
           </div>
         </div>
 
-        {(state.effects.shield ?? 0) > 0 && (
-          <div
-            className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm"
-            style={{
-              color: BONUSES.shield.color,
-              boxShadow: `inset 0 0 0 1px ${BONUSES.shield.color}`,
-            }}
-          >
-            <span>{BONUSES.shield.glyph}</span>
-            <span className="flex-1">{BONUSES.shield.label}</span>
-            <span className="tabular-nums">
-              {Math.ceil(((state.effects.shield ?? 0) * 16) / 1000)}s
-            </span>
-          </div>
-        )}
+        {(Object.keys(state.effects) as BonusKind[])
+          .filter((k) => (state.effects[k] ?? 0) > 0)
+          .map((k) => {
+            const meta = BONUSES[k]
+            return (
+              <div
+                key={k}
+                className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm"
+                style={{
+                  color: meta.color,
+                  boxShadow: `inset 0 0 0 1px ${meta.color}`,
+                }}
+              >
+                <span>{meta.glyph}</span>
+                <span className="flex-1">{meta.label}</span>
+                <span className="tabular-nums">
+                  {Math.ceil(((state.effects[k] ?? 0) * 16) / 1000)}s
+                </span>
+              </div>
+            )
+          })}
 
         <div className="flex gap-2 mt-2">
           <button

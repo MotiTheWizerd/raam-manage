@@ -66,22 +66,6 @@ const DOOR_ROW_CLASS = cn(
   "dark:border-zinc-700/80 dark:bg-zinc-800/70 dark:text-zinc-200 dark:hover:text-red-300"
 );
 
-// True when the focused element already has its own meaning for the Space key
-// (typing a space, ticking a control, activating a button/link) — in those
-// cases the global double-tap-Space lobby shortcut must NOT hijack it.
-function spaceIsClaimedBy(el: Element | null): boolean {
-  if (!el) return false;
-  const tag = el.tagName;
-  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || tag === "BUTTON" || tag === "A") {
-    return true;
-  }
-  if ((el as HTMLElement).isContentEditable) return true;
-  const role = el.getAttribute("role");
-  return role !== null && ["button", "switch", "checkbox", "tab", "menuitem", "radio", "option"].includes(role);
-}
-
-const LOBBY_DOUBLE_TAP_MS = 350; // max gap between the two Space taps
-
 export function GateControl() {
   // Per-gate in-flight lock — blocks an accidental double-tap from double-firing.
   const [busy, setBusy] = useState<Gate["id"] | null>(null);
@@ -210,27 +194,24 @@ export function GateControl() {
     recheckEmergencySoon();
   }
 
-  // Global shortcut: double-tap Space anywhere in the app to open the lobby door
-  // (it's the most-opened door). A ref keeps the handler pointed at the latest
-  // fireDoor so its doorBusy in-flight guard stays current without re-binding.
+  // Global shortcut: Ctrl+Space anywhere in the app opens the lobby door (the
+  // most-opened door). A deliberate modifier chord, so it doesn't clash with
+  // typing a space or the games' shoot key. A ref keeps the handler pointed at
+  // the latest fireDoor so its doorBusy in-flight guard stays current without
+  // re-binding.
   const fireDoorRef = useRef(fireDoor);
-  fireDoorRef.current = fireDoor;
   useEffect(() => {
-    let lastTap = 0;
+    fireDoorRef.current = fireDoor;
+  });
+  useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
+      if (!e.ctrlKey) return;
       if (e.code !== "Space" && e.key !== " ") return;
       if (e.repeat) return; // ignore auto-repeat from a held key
-      if (spaceIsClaimedBy(document.activeElement)) return; // don't hijack typing/controls
-      const now = Date.now();
-      if (now - lastTap < LOBBY_DOUBLE_TAP_MS) {
-        lastTap = 0; // consume — require two fresh taps for the next open
-        e.preventDefault(); // stop the page-scroll jump on the triggering tap
-        // No camId here on purpose — the shortcut just opens the door (it's
-        // right next to the desk), no live-view popup needed.
-        void fireDoorRef.current("lobby", "לובי");
-      } else {
-        lastTap = now;
-      }
+      e.preventDefault(); // stop any default (e.g. page-scroll) on the chord
+      // No camId here on purpose — the shortcut just opens the door (it's
+      // right next to the desk), no live-view popup needed.
+      void fireDoorRef.current("lobby", "לובי");
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
@@ -471,7 +452,7 @@ export function GateControl() {
                 onClick={() => fireDoor("lobby", "לובי", "lobby")}
                 disabled={doorBusy === "lobby"}
                 className="flex items-center justify-center gap-2 px-6 py-3 transition-colors duration-200 ease-out hover:bg-white/10 disabled:opacity-60"
-                title="פתיחה מהירה: הקשה כפולה על מקש הרווח"
+                title="פתיחה מהירה: Ctrl + רווח"
               >
                 <DoorOpen className="size-5 transition-transform duration-200 ease-out group-hover/gate:scale-110" />
                 לובי

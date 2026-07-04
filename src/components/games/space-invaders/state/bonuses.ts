@@ -7,10 +7,51 @@ import {
   PLAYER_Y,
 } from '../types'
 
-// A falling bonus dropped by a killed invader. `kind` will later select its
-// visual + effect; for now there's a single placeholder kind and the effect
-// is a stub (see the reducer). The real bonus list lands on top of this.
-export type BonusKind = 'mystery'
+// The game loop ticks every 16ms (see useGameLoop). seconds -> ticks.
+const TICK_MS = 16
+const ticks = (sec: number) => Math.round((sec * 1000) / TICK_MS)
+
+// --- Bonus kinds + registry ------------------------------------------------
+// A bonus is data: its falling-box visual + how long its effect lasts. The
+// effect itself is applied by the reducer (switch on kind), since it touches
+// game state. To add a bonus: add a kind here + its case in the reducer.
+
+export type BonusKind = 'shield'
+
+export type BonusMeta = {
+  kind: BonusKind
+  label: string
+  glyph: string // shown on the falling box + the HUD chip
+  color: string // box + effect accent color
+  duration: number // effect length in ticks; 0 = instant
+}
+
+export const BONUSES: Record<BonusKind, BonusMeta> = {
+  shield: {
+    kind: 'shield',
+    label: 'Force Field',
+    glyph: '🛡️',
+    color: '#38bdf8', // sky-400
+    duration: ticks(10), // 10 seconds of invulnerability
+  },
+}
+
+// --- Active timed effects: kind -> ticks remaining -------------------------
+
+export type ActiveEffects = Partial<Record<BonusKind, number>>
+
+export function tickEffects(effects: ActiveEffects): ActiveEffects {
+  const keys = Object.keys(effects) as BonusKind[]
+  if (keys.length === 0) return effects
+  const next: ActiveEffects = {}
+  for (const k of keys) {
+    const left = (effects[k] ?? 0) - 1
+    if (left > 0) next[k] = left
+  }
+  return next
+}
+
+// --- Falling bonus entity --------------------------------------------------
 
 export type Bonus = {
   id: number
@@ -27,12 +68,9 @@ export const BONUS_FALL_SPEED = 2.2
 export const DROP_CHANCE = 0.2
 
 // Which bonus kinds may drop on a given stage. Data-driven so each stage can
-// bring its own set once stages exist. Placeholder: every stage drops the
-// mystery box.
+// bring its own set once stages exist. Placeholder: every stage drops shield.
 export function stageBonusPool(stage: number): BonusKind[] {
-  // Placeholder: every stage drops the mystery box. Once stages exist this
-  // returns a different pool per `stage`.
-  return stage >= 1 ? ['mystery'] : []
+  return stage >= 1 ? ['shield'] : []
 }
 
 // Roll the drop for a killed invader; on a hit, spawn a bonus at its center,

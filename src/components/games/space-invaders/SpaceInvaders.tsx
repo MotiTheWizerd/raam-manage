@@ -21,7 +21,7 @@ import {
   SPRITES,
   SPRITE_PIXEL,
 } from './sprites'
-import { BONUS_H, BONUS_W } from './state/bonuses'
+import { BONUS_H, BONUS_W, BONUSES } from './state/bonuses'
 
 const PlayerShip = memo(function PlayerShip() {
   const pixels: React.ReactNode[] = []
@@ -167,25 +167,41 @@ export function SpaceInvaders() {
           />
         ))}
 
-        {/* Falling bonuses — generic mystery box for now; each kind gets its
-            own visual once the bonus list lands. */}
-        {state.bonuses.map((b) => (
+        {/* Falling bonuses — visual comes from the registry per kind. */}
+        {state.bonuses.map((b) => {
+          const meta = BONUSES[b.kind]
+          return (
+            <div
+              key={b.id}
+              className="absolute flex items-center justify-center rounded-md text-[11px] animate-pulse"
+              style={{
+                left: b.x - BONUS_W / 2,
+                top: b.y,
+                width: BONUS_W,
+                height: BONUS_H,
+                background: meta.color,
+                filter: `drop-shadow(0 0 5px ${meta.color})`,
+              }}
+            >
+              {meta.glyph}
+            </div>
+          )
+        })}
+
+        {/* Force Field bubble — glows around the ship while the shield is up. */}
+        {(state.effects.shield ?? 0) > 0 && (
           <div
-            key={b.id}
-            className="absolute flex items-center justify-center rounded-md text-[11px] font-bold animate-pulse"
+            className="pointer-events-none absolute rounded-[50%] border-2 animate-pulse"
             style={{
-              left: b.x - BONUS_W / 2,
-              top: b.y,
-              width: BONUS_W,
-              height: BONUS_H,
-              background: '#f59e0b',
-              color: '#000',
-              filter: 'drop-shadow(0 0 5px #f59e0b)',
+              left: state.playerX - 10,
+              top: PLAYER_Y - 12,
+              width: PLAYER_W + 20,
+              height: PLAYER_H + 24,
+              borderColor: BONUSES.shield.color,
+              boxShadow: `0 0 14px ${BONUSES.shield.color}, inset 0 0 10px ${BONUSES.shield.color}`,
             }}
-          >
-            ?
-          </div>
-        ))}
+          />
+        )}
 
         {state.hitPause === 0 && (state.invuln === 0 || Math.floor(state.invuln / 5) % 2 === 0) && (
           <div
@@ -278,6 +294,22 @@ export function SpaceInvaders() {
             ))}
           </div>
         </div>
+
+        {(state.effects.shield ?? 0) > 0 && (
+          <div
+            className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm"
+            style={{
+              color: BONUSES.shield.color,
+              boxShadow: `inset 0 0 0 1px ${BONUSES.shield.color}`,
+            }}
+          >
+            <span>{BONUSES.shield.glyph}</span>
+            <span className="flex-1">{BONUSES.shield.label}</span>
+            <span className="tabular-nums">
+              {Math.ceil(((state.effects.shield ?? 0) * 16) / 1000)}s
+            </span>
+          </div>
+        )}
 
         <div className="flex gap-2 mt-2">
           <button

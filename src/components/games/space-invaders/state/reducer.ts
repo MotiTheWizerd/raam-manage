@@ -30,9 +30,12 @@ import { writeBest } from './bestScore'
 import type { GameEvent } from './events'
 import { burstParticles, stepParticles, type Particle } from './particles'
 import {
+  BONUSES,
   catchBonuses,
   maybeDropBonus,
   stepBonuses,
+  tickEffects,
+  type ActiveEffects,
   type Bonus,
 } from './bonuses'
 
@@ -48,6 +51,8 @@ export type State = GameState & {
   // Which wave we're on — each stage brings its own bonus pool (see bonuses.ts).
   stage: number
   bonuses: Bonus[]
+  // Active timed bonus effects — kind -> ticks remaining.
+  effects: ActiveEffects
 }
 
 export type Keys = { left: boolean; right: boolean; shoot: boolean }
@@ -81,6 +86,7 @@ export function initialState(best: number): State {
     particles: [],
     stage: 1,
     bonuses: [],
+    effects: {},
   }
 }
 
@@ -108,6 +114,7 @@ function tick(state: State, keys: Keys): State {
     invuln,
     particles,
     bonuses,
+    effects,
   } = state
   const events: GameEvent[] = []
 
@@ -124,6 +131,7 @@ function tick(state: State, keys: Keys): State {
 
   invuln = Math.max(0, invuln - 1)
   particles = stepParticles(particles)
+  effects = tickEffects(effects)
 
   // move player
   if (keys.left) playerX = Math.max(0, playerX - PLAYER_SPEED)
@@ -186,8 +194,10 @@ function tick(state: State, keys: Keys): State {
   invaders = playerHits.invaders
   score += playerHits.scored
 
-  // enemy bullets vs player (invulnerable right after respawn)
-  if (invuln <= 0) {
+  // enemy bullets vs player (invulnerable right after respawn OR while the
+  // Force Field bonus is active)
+  const shielded = (effects.shield ?? 0) > 0
+  if (invuln <= 0 && !shielded) {
     const enemyHits = resolveEnemyBullets(bullets, playerX)
     bullets = enemyHits.bullets
     if (enemyHits.hit) {
@@ -200,14 +210,18 @@ function tick(state: State, keys: Keys): State {
     }
   }
 
-  // bonuses fall; the ship collects any it overlaps. Placeholder effect until
-  // the real bonus list lands — a few points + a spark so a catch feels good.
+  // bonuses fall; the ship collects any it overlaps, applying its effect
   bonuses = stepBonuses(bonuses)
   const grabbed = catchBonuses(bonuses, playerX)
   bonuses = grabbed.remaining
   for (const b of grabbed.caught) {
     events.push({ type: 'bonus-collected', kind: b.kind })
-    score += 50
+    const meta = BONUSES[b.kind]
+    if (meta.duration > 0) {
+      // timed effect — (re)start its countdown
+      effects = { ...effects, [b.kind]: meta.duration }
+    }
+    // (instant bonuses would apply their one-shot effect here, by kind)
     const burst = burstParticles(b.x, b.y, nextId)
     nextId += burst.length
     particles = [...particles, ...burst]
@@ -231,6 +245,7 @@ function tick(state: State, keys: Keys): State {
     invuln,
     particles,
     bonuses,
+    effects,
     events,
   }
 

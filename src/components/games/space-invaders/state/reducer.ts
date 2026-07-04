@@ -140,13 +140,21 @@ function tick(state: State, keys: Keys): State {
   if (keys.left) playerX = Math.max(0, playerX - PLAYER_SPEED)
   if (keys.right) playerX = Math.min(PLAY_W - PLAYER_W, playerX + PLAYER_SPEED)
 
-  // player shoot (Rapid Fire bonus shortens the cooldown)
+  // player shoot (Rapid Fire shortens the cooldown; Triple Shot fires 3 streams)
   const rapidFire = (effects.rapidFire ?? 0) > 0
+  const tripleShot = (effects.tripleShot ?? 0) > 0
   if (keys.shoot && playerShootCooldown <= 0) {
-    bullets = [
-      ...bullets,
-      { id: nextId++, x: playerX + PLAYER_W / 2, y: PLAYER_Y, fromPlayer: true },
-    ]
+    const cx = playerX + PLAYER_W / 2
+    if (tripleShot) {
+      bullets = [
+        ...bullets,
+        { id: nextId++, x: cx - 14, y: PLAYER_Y, fromPlayer: true },
+        { id: nextId++, x: cx, y: PLAYER_Y, fromPlayer: true },
+        { id: nextId++, x: cx + 14, y: PLAYER_Y, fromPlayer: true },
+      ]
+    } else {
+      bullets = [...bullets, { id: nextId++, x: cx, y: PLAYER_Y, fromPlayer: true }]
+    }
     playerShootCooldown = rapidFire ? RAPID_FIRE_COOLDOWN : PLAYER_SHOOT_COOLDOWN
   } else {
     playerShootCooldown = Math.max(0, playerShootCooldown - 1)

@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, Reorder, useDragControls } from "framer-motion";
-import { Building2, Cctv, ClipboardList, Crown, GripVertical, Home, Megaphone, MessageCircle, Rows3, Settings, UserCog, Users } from "lucide-react";
+import { Building2, Cctv, ClipboardList, Crown, Gamepad2, GripVertical, Home, Megaphone, MessageCircle, Rows3, Settings, UserCog, Users } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -39,6 +39,7 @@ const items: Item[] = [
   { label: "בעלי דירות", href: "/owners", icon: Crown },
   { label: "מדריך הבניין", href: "/directory", icon: Rows3 },
   { label: "פקידי לובי", href: "/users", icon: UserCog, managerOnly: true },
+  { label: "משחקים", href: "/games", icon: Gamepad2 },
   // Clicking opens WhatsApp Web in a new browser tab. Swap externalUrl to the
   // "whatsapp://" protocol to launch the native desktop app instead — that's
   // the only knob that controls app-vs-web. Our in-app Baileys page at

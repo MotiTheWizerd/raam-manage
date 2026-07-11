@@ -1,8 +1,14 @@
 "use client";
 
 import { AnimatePresence, motion, type Variants } from "framer-motion";
-import { Maximize2, Megaphone, X } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { ChevronDown, Maximize2, Megaphone, PanelLeftClose } from "lucide-react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { createPortal } from "react-dom";
 import {
   getActiveSystemMessages,
@@ -152,26 +158,6 @@ export function StickyMessages() {
         className="relative"
         style={{ width: CARD_WIDTH }}
       >
-        {/* Manual close — tuck the drawer away now (the message stays reachable
-            via the grip handle) for when it's in the way. */}
-        {open && (
-          <button
-            type="button"
-            onClick={() => {
-              cancelCollapse();
-              setOpen(false);
-            }}
-            aria-label="סגור"
-            className={cn(
-              "pointer-events-auto absolute right-2 top-2 z-10 flex size-6",
-              "items-center justify-center rounded-full bg-black/30 text-white",
-              "shadow-sm backdrop-blur-sm transition-colors hover:bg-black/50"
-            )}
-          >
-            <X className="size-3.5" />
-          </button>
-        )}
-
         {/* The message stack. Off-screen + inert while tucked. A rolling window
             of PAGE_SIZE cards that swaps as a group every ROTATE_MS. */}
         <div
@@ -180,21 +166,34 @@ export function StickyMessages() {
             open ? "pointer-events-auto" : "pointer-events-none"
           )}
         >
-          {/* Expand — fly every active message into a centered full view. */}
-          <button
-            type="button"
-            onClick={() => setExpanded(true)}
-            aria-label={`הצג את כל ${messages.length} ההודעות`}
-            title="הצג את כל ההודעות"
-            className={cn(
-              "pointer-events-auto flex items-center justify-center gap-1.5 rounded-lg py-1.5",
-              "bg-black/55 text-[11px] font-semibold text-white shadow-md backdrop-blur-sm",
-              "transition-colors hover:bg-black/70"
+          {/* Controls — expand to the full view, cycle to the next page, and
+              tuck the drawer away. Each nudge to the page resets the auto-advance
+              timer (it's keyed on `page`). */}
+          <div className="flex items-center justify-start gap-1">
+            <DrawerControl
+              onClick={() => setExpanded(true)}
+              label={`הצג את כל ${messages.length} ההודעות`}
+            >
+              <Maximize2 className="size-4" aria-hidden />
+            </DrawerControl>
+            {pageCount > 1 && (
+              <DrawerControl
+                onClick={() => setPage((p) => (p + 1) % pageCount)}
+                label="ההודעה הבאה"
+              >
+                <ChevronDown className="size-4" aria-hidden />
+              </DrawerControl>
             )}
-          >
-            <Maximize2 className="size-3.5" aria-hidden />
-            הצג הכל ({messages.length})
-          </button>
+            <DrawerControl
+              onClick={() => {
+                cancelCollapse();
+                setOpen(false);
+              }}
+              label="סגור"
+            >
+              <PanelLeftClose className="size-4" aria-hidden />
+            </DrawerControl>
+          </div>
 
           <AnimatePresence mode="wait" initial={false}>
             <motion.div
@@ -303,5 +302,32 @@ export function StickyMessages() {
           document.body
         )}
     </>
+  );
+}
+
+// A small icon button for the drawer's control row — matches the dark
+// translucent pill the expand/close controls have always used.
+function DrawerControl({
+  onClick,
+  label,
+  children,
+}: {
+  onClick: () => void;
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      className={cn(
+        "pointer-events-auto inline-flex size-7 items-center justify-center rounded-lg",
+        "bg-black/55 text-white shadow-md backdrop-blur-sm transition-colors hover:bg-black/70"
+      )}
+    >
+      {children}
+    </button>
   );
 }

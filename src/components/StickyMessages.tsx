@@ -1,8 +1,9 @@
 "use client";
 
-import { AnimatePresence, motion } from "framer-motion";
-import { Megaphone, X } from "lucide-react";
+import { AnimatePresence, motion, type Variants } from "framer-motion";
+import { Maximize2, Megaphone, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   getActiveSystemMessages,
   type SystemMessageRow,
@@ -35,6 +36,25 @@ const PRIORITY_RANK: Record<SystemMessageRow["priority"], number> = {
   low: 1,
 };
 
+// The centered "all messages" view sits on a dark backdrop, so its cards use a
+// solid surface with a colored start-edge accent (the drawer's translucent
+// tints would wash out / hide their dark text there).
+const PRIORITY_ACCENT: Record<SystemMessageRow["priority"], string> = {
+  high: "border-red-500",
+  med: "border-amber-500",
+  low: "border-sky-500",
+};
+
+// Stagger the cards flying into the centered view.
+const ALL_CONTAINER_V: Variants = {
+  hidden: { opacity: 0 },
+  show: { opacity: 1, transition: { staggerChildren: 0.035 } },
+};
+const ALL_CARD_V: Variants = {
+  hidden: { opacity: 0, scale: 0.8, y: 18 },
+  show: { opacity: 1, scale: 1, y: 0 },
+};
+
 // A newly published message (or first load/login) pops the drawer open for this
 // long, then it tucks itself back into the edge. Manual open (grip click) has no
 // timer — it stays open until the lobbyist closes it.
@@ -52,6 +72,7 @@ export function StickyMessages() {
   const [messages, setMessages] = useState<SystemMessageRow[]>([]);
   const [open, setOpen] = useState(false);
   const [page, setPage] = useState(0);
+  const [expanded, setExpanded] = useState(false);
   const collapseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const cancelCollapse = useCallback(() => {
@@ -142,7 +163,8 @@ export function StickyMessages() {
   );
 
   return (
-    <div className="pointer-events-none fixed left-0 top-1/3 z-50">
+    <>
+      <div className="pointer-events-none fixed left-0 top-1/3 z-50">
       <motion.div
         initial={false}
         animate={{ x: open ? 0 : -CARD_WIDTH }}
@@ -178,6 +200,22 @@ export function StickyMessages() {
             open ? "pointer-events-auto" : "pointer-events-none"
           )}
         >
+          {/* Expand — fly every active message into a centered full view. */}
+          <button
+            type="button"
+            onClick={() => setExpanded(true)}
+            aria-label={`הצג את כל ${messages.length} ההודעות`}
+            title="הצג את כל ההודעות"
+            className={cn(
+              "pointer-events-auto flex items-center justify-center gap-1.5 rounded-lg py-1.5",
+              "bg-black/55 text-[11px] font-semibold text-white shadow-md backdrop-blur-sm",
+              "transition-colors hover:bg-black/70"
+            )}
+          >
+            <Maximize2 className="size-3.5" aria-hidden />
+            הצג הכל ({messages.length})
+          </button>
+
           <AnimatePresence mode="wait" initial={false}>
             <motion.div
               key={safePage}
@@ -258,6 +296,66 @@ export function StickyMessages() {
           )}
         </button>
       </motion.div>
-    </div>
+      </div>
+
+      {/* Expanded "all messages" view — every active message flown to the centre
+          of the screen. Click anywhere (backdrop or a card) to snap back. Ported
+          to <body> so the drawer's transform doesn't trap the fixed overlay. */}
+      {typeof document !== "undefined" &&
+        createPortal(
+          <AnimatePresence>
+            {expanded && (
+              <motion.div
+                className="pointer-events-auto fixed inset-0 z-[60] flex flex-col items-center justify-center gap-4 bg-black/50 p-6 backdrop-blur-md"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                onClick={() => setExpanded(false)}
+                role="dialog"
+                aria-modal="true"
+                aria-label="כל הודעות הלובי"
+              >
+                <div className="text-center text-white">
+                  <div className="text-lg font-semibold">כל הודעות הלובי</div>
+                  <div className="text-xs opacity-70">לחץ בכל מקום כדי לחזור</div>
+                </div>
+                <motion.div
+                  variants={ALL_CONTAINER_V}
+                  initial="hidden"
+                  animate="show"
+                  className="grid max-h-[75vh] w-full max-w-5xl grid-cols-1 gap-3 overflow-y-auto pe-1 sm:grid-cols-2 lg:grid-cols-3"
+                >
+                  {messages.map((m) => (
+                    <motion.div
+                      key={m.id}
+                      variants={ALL_CARD_V}
+                      className={cn(
+                        "rounded-xl border-s-4 bg-white p-4 text-start text-zinc-900 shadow-lg",
+                        "dark:bg-zinc-900 dark:text-zinc-100",
+                        PRIORITY_ACCENT[m.priority]
+                      )}
+                      role="status"
+                    >
+                      <div className="mb-1 flex items-start justify-between gap-2">
+                        <div className="text-base font-semibold leading-tight">
+                          {m.title}
+                        </div>
+                        <span className="shrink-0 rounded-full bg-black/[0.06] px-2 py-0.5 text-[10px] font-semibold text-zinc-600 dark:bg-white/10 dark:text-zinc-300">
+                          {PRIORITY_LABEL[m.priority]}
+                        </span>
+                      </div>
+                      <div className="whitespace-pre-wrap text-sm opacity-80">
+                        {m.body}
+                      </div>
+                    </motion.div>
+                  ))}
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>,
+          document.body
+        )}
+    </>
   );
 }

@@ -10,18 +10,7 @@ import {
 } from "@/app/lobby-messages/actions";
 import { cn } from "@/lib/cn";
 import { onSystemMessagesChanged } from "@/lib/system-messages-events";
-
-const PRIORITY_CARD: Record<SystemMessageRow["priority"], string> = {
-  high: "bg-red-500/15 border-red-500/40 text-red-950 dark:text-red-100",
-  med: "bg-amber-500/15 border-amber-500/40 text-amber-950 dark:text-amber-100",
-  low: "bg-sky-500/15 border-sky-500/40 text-sky-950 dark:text-sky-100",
-};
-
-const PRIORITY_LABEL: Record<SystemMessageRow["priority"], string> = {
-  high: "גבוהה",
-  med: "בינונית",
-  low: "נמוכה",
-};
+import { LobbyMessageCard } from "./lobby-messages/LobbyMessageCard";
 
 // The grip-handle tab takes the colour of the most urgent message in the stack.
 const PRIORITY_HANDLE: Record<SystemMessageRow["priority"], string> = {
@@ -34,15 +23,6 @@ const PRIORITY_RANK: Record<SystemMessageRow["priority"], number> = {
   high: 3,
   med: 2,
   low: 1,
-};
-
-// The centered "all messages" view sits on a dark backdrop, so its cards use a
-// solid surface with a colored start-edge accent (the drawer's translucent
-// tints would wash out / hide their dark text there).
-const PRIORITY_ACCENT: Record<SystemMessageRow["priority"], string> = {
-  high: "border-red-500",
-  med: "border-amber-500",
-  low: "border-sky-500",
 };
 
 // Stagger the cards flying into the centered view.
@@ -226,22 +206,7 @@ export function StickyMessages() {
               className="flex w-full flex-col gap-2"
             >
               {visible.map((m) => (
-                <div
-                  key={m.id}
-                  className={cn(
-                    "rounded-lg border p-3 shadow-md backdrop-blur-sm",
-                    PRIORITY_CARD[m.priority]
-                  )}
-                  role="status"
-                  aria-label={`הודעת לובי — עדיפות ${PRIORITY_LABEL[m.priority]}`}
-                >
-                  <div className="text-sm font-semibold leading-tight">
-                    {m.title}
-                  </div>
-                  <div className="mt-1 text-xs opacity-90 whitespace-pre-wrap">
-                    {m.body}
-                  </div>
-                </div>
+                <LobbyMessageCard key={m.id} message={m} />
               ))}
             </motion.div>
           </AnimatePresence>
@@ -306,7 +271,7 @@ export function StickyMessages() {
           <AnimatePresence>
             {expanded && (
               <motion.div
-                className="pointer-events-auto fixed inset-0 z-[60] flex flex-col items-center justify-center gap-4 bg-black/50 p-6 backdrop-blur-md"
+                className="pointer-events-auto fixed inset-0 z-[60] flex flex-col items-center justify-center gap-4 bg-background/80 p-6 backdrop-blur-md"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
@@ -316,38 +281,19 @@ export function StickyMessages() {
                 aria-modal="true"
                 aria-label="כל הודעות הלובי"
               >
-                <div className="text-center text-white">
+                <div className="text-center text-foreground">
                   <div className="text-lg font-semibold">כל הודעות הלובי</div>
-                  <div className="text-xs opacity-70">לחץ בכל מקום כדי לחזור</div>
+                  <div className="text-xs opacity-60">לחץ בכל מקום כדי לחזור</div>
                 </div>
                 <motion.div
                   variants={ALL_CONTAINER_V}
                   initial="hidden"
                   animate="show"
-                  className="grid max-h-[75vh] w-full max-w-5xl grid-cols-1 gap-3 overflow-y-auto pe-1 sm:grid-cols-2 lg:grid-cols-3"
+                  className="grid max-h-[75vh] w-full max-w-5xl grid-cols-1 gap-3 overflow-y-auto pe-1 text-start sm:grid-cols-2 lg:grid-cols-3"
                 >
                   {messages.map((m) => (
-                    <motion.div
-                      key={m.id}
-                      variants={ALL_CARD_V}
-                      className={cn(
-                        "rounded-xl border-s-4 bg-white p-4 text-start text-zinc-900 shadow-lg",
-                        "dark:bg-zinc-900 dark:text-zinc-100",
-                        PRIORITY_ACCENT[m.priority]
-                      )}
-                      role="status"
-                    >
-                      <div className="mb-1 flex items-start justify-between gap-2">
-                        <div className="text-base font-semibold leading-tight">
-                          {m.title}
-                        </div>
-                        <span className="shrink-0 rounded-full bg-black/[0.06] px-2 py-0.5 text-[10px] font-semibold text-zinc-600 dark:bg-white/10 dark:text-zinc-300">
-                          {PRIORITY_LABEL[m.priority]}
-                        </span>
-                      </div>
-                      <div className="whitespace-pre-wrap text-sm opacity-80">
-                        {m.body}
-                      </div>
+                    <motion.div key={m.id} variants={ALL_CARD_V}>
+                      <LobbyMessageCard message={m} />
                     </motion.div>
                   ))}
                 </motion.div>

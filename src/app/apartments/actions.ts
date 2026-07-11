@@ -421,3 +421,29 @@ export async function updateApartmentNotes(
   revalidatePath("/renters/[id]", "page");
   return { submittedAt: Date.now() };
 }
+
+// Update only an apartment's contact policy (must_call). Lets lobby staff set
+// how to reach a resident (call / message / none) without touching the rest of
+// the record — used by the directory lobbyist editor.
+export async function updateApartmentCallPolicy(
+  _prev: ApartmentFormState,
+  formData: FormData
+): Promise<ApartmentFormState> {
+  const idRaw = String(formData.get("id") ?? "").trim();
+  const id = parseInt(idRaw, 10);
+  if (Number.isNaN(id)) return fail("מזהה לא חוקי");
+
+  const must_call = CALL_POLICY_CODES[parseCallPolicy(formData.get("call_policy"))];
+
+  const result = db
+    .prepare(
+      `UPDATE apartments SET must_call = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
+    )
+    .run(must_call, id);
+  if (result.changes === 0) return fail("דירה לא נמצאה");
+
+  revalidatePath(`/apartments/${id}`);
+  revalidatePath("/events");
+  revalidatePath("/directory");
+  return { submittedAt: Date.now() };
+}

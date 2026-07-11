@@ -26,8 +26,9 @@ export type ApartmentFormValues = {
 };
 
 // The three contact policies, ascending in urgency. The peer-checked classes
-// are literal strings so Tailwind keeps them in the build.
-const CALL_POLICY_OPTIONS: {
+// are literal strings so Tailwind keeps them in the build. Exported so the
+// directory lobbyist editor renders the exact same radio group.
+export const CALL_POLICY_OPTIONS: {
   value: CallPolicy;
   label: string;
   Icon: typeof PhoneCall;

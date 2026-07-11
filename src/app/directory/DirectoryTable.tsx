@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { Download, Pencil, PencilLine, Printer, Search, X } from "lucide-react";
+import { Download, Pencil, Printer, Search, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useIsManager } from "@/components/AuthProvider";
-import { ApartmentEditor } from "@/components/directory/ApartmentEditor";
 import { DirectoryRowEditor } from "@/components/directory/DirectoryRowEditor";
+import { LobbyistRowEditor } from "@/components/directory/LobbyistRowEditor";
 import { PageHeading } from "@/components/PageHeading";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -64,8 +64,6 @@ export function DirectoryTable({ rows }: Props) {
   const [sortDir, setSortDir] = useState<SheetSortDir>("asc");
   const [exporting, setExporting] = useState(false);
   const [editing, setEditing] = useState<DirectoryRow | null>(null);
-  // The apartment whose inline in-row editor is open (all staff), if any.
-  const [inlineId, setInlineId] = useState<number | null>(null);
   const isManager = useIsManager();
 
   function toggleSort(key: string) {
@@ -239,59 +237,28 @@ export function DirectoryTable({ rows }: Props) {
     },
   ];
 
-  // Actions are available to EVERY staff member: a quick inline-edit toggle that
-  // opens the whole row's fields in place. Managers additionally keep the pencil
-  // that opens the full tabbed modal.
+  // One edit button per row for EVERY staff member. It opens a black-screen
+  // modal: the full tabbed editor for managers, the restricted three-field
+  // editor (contact / notes / keys) for lobbyists.
   columns.push({
     key: "actions",
     header: "",
     align: "center",
-    width: isManager ? "5rem" : "3rem",
-    render: (r) => {
-      const open = inlineId === r.apartment_id;
-      return (
-        <div className="flex items-center justify-center gap-1">
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              setInlineId((id) =>
-                id === r.apartment_id ? null : r.apartment_id
-              );
-            }}
-            aria-label={
-              open
-                ? `סגור עריכת דירה ${r.number}`
-                : `עריכה מהירה של דירה ${r.number}`
-            }
-            aria-expanded={open}
-            title={open ? "סגור" : "עריכה מהירה"}
-            className={cn(
-              "inline-flex h-7 w-7 items-center justify-center rounded transition-colors",
-              open
-                ? "bg-red-100 text-red-700"
-                : "text-zinc-500 hover:bg-zinc-200 hover:text-zinc-800"
-            )}
-          >
-            {open ? <X size={14} /> : <PencilLine size={14} />}
-          </button>
-          {isManager && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setEditing(r);
-              }}
-              aria-label={`עריכה מלאה של דירה ${r.number}`}
-              title="עריכה מלאה (חלון)"
-              className="inline-flex h-7 w-7 items-center justify-center rounded text-zinc-500 transition-colors hover:bg-zinc-200 hover:text-zinc-800"
-            >
-              <Pencil size={14} />
-            </button>
-          )}
-        </div>
-      );
-    },
+    width: "3rem",
+    render: (r) => (
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          setEditing(r);
+        }}
+        aria-label={`עריכת דירה ${r.number}`}
+        title="עריכה"
+        className="inline-flex h-7 w-7 items-center justify-center rounded text-zinc-500 transition-colors hover:bg-zinc-200 hover:text-zinc-800"
+      >
+        <Pencil size={14} />
+      </button>
+    ),
   });
 
   async function exportToExcel() {
@@ -387,45 +354,25 @@ export function DirectoryTable({ rows }: Props) {
           sortDir={sortDir}
           onSort={toggleSort}
           emptyText="לא נמצאו דירות תואמות"
-          renderRowExpansion={(r) =>
-            inlineId === r.apartment_id ? (
-              <div className="border-t-2 border-red-500/50 bg-zinc-50 p-4 text-start text-zinc-900 print:hidden">
-                {/* Cap the form width so inputs don't stretch across the full
-                    (possibly very wide) table; it sits at the RTL start edge. */}
-                <div className="max-w-3xl">
-                  <div className="mb-3 flex items-center justify-between">
-                    <h3 className="text-sm font-semibold text-zinc-800">
-                      עריכת דירה {r.number}
-                    </h3>
-                    <button
-                      type="button"
-                      onClick={() => setInlineId(null)}
-                      className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-zinc-600 transition-colors hover:bg-zinc-200"
-                    >
-                      סגור
-                      <X size={13} />
-                    </button>
-                  </div>
-                  <ApartmentEditor
-                    apartmentId={r.apartment_id}
-                    apartmentNumber={r.number}
-                    layout="stacked"
-                  />
-                </div>
-              </div>
-            ) : null
-          }
         />
       </div>
 
-      {isManager && editing && (
-        <DirectoryRowEditor
-          apartmentId={editing.apartment_id}
-          apartmentNumber={editing.number}
-          open={editing !== null}
-          onClose={() => setEditing(null)}
-        />
-      )}
+      {editing &&
+        (isManager ? (
+          <DirectoryRowEditor
+            apartmentId={editing.apartment_id}
+            apartmentNumber={editing.number}
+            open={editing !== null}
+            onClose={() => setEditing(null)}
+          />
+        ) : (
+          <LobbyistRowEditor
+            apartmentId={editing.apartment_id}
+            apartmentNumber={editing.number}
+            open={editing !== null}
+            onClose={() => setEditing(null)}
+          />
+        ))}
     </div>
   );
 }

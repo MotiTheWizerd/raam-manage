@@ -42,13 +42,16 @@ const INITIAL_OPEN_MS = 12000;
 
 const CARD_WIDTH = 320; // matches w-80; the card slides this far off the edge
 
-// How many message cards the drawer shows at once. Keep in sync with the
-// LIMIT in getActiveSystemMessages (the query never returns more than this).
-const MAX_VISIBLE = 6;
+// The drawer shows a rolling window of PAGE_SIZE cards, advancing to the next
+// page every ROTATE_MS so every active message gets screen time. The query
+// (getActiveSystemMessages) caps the pool at 25 → up to 7 pages.
+const PAGE_SIZE = 4;
+const ROTATE_MS = 60000;
 
 export function StickyMessages() {
   const [messages, setMessages] = useState<SystemMessageRow[]>([]);
   const [open, setOpen] = useState(false);
+  const [page, setPage] = useState(0);
   const collapseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const cancelCollapse = useCallback(() => {
@@ -73,6 +76,14 @@ export function StickyMessages() {
     },
     [scheduleCollapse]
   );
+
+  // Jump the window back to the first page (highest priority / newest) and pop
+  // the drawer open. Wrapped so the signature effect doesn't call setState
+  // directly in its body.
+  const surfaceFromTop = useCallback(() => {
+    setPage(0);
+    openFor(INITIAL_OPEN_MS);
+  }, [openFor]);
 
   // Fetch the active messages; refresh on the broadcast + on an interval.
   useEffect(() => {
@@ -99,11 +110,22 @@ export function StickyMessages() {
   const signature = messages.map((m) => m.id).join(",");
   useEffect(() => {
     if (!signature) return;
-    openFor(INITIAL_OPEN_MS);
-  }, [signature, openFor]);
+    surfaceFromTop();
+  }, [signature, surfaceFromTop]);
 
   // Clear any pending timer on unmount.
   useEffect(() => cancelCollapse, [cancelCollapse]);
+
+  const pageCount = Math.max(1, Math.ceil(messages.length / PAGE_SIZE));
+
+  // Advance to the next page every minute (only when there's more than one).
+  // Keyed on `page` too, so the countdown restarts after each change — a manual
+  // dot tap included — instead of snapping to the next page right after.
+  useEffect(() => {
+    if (pageCount <= 1) return;
+    const id = setTimeout(() => setPage((p) => (p + 1) % pageCount), ROTATE_MS);
+    return () => clearTimeout(id);
+  }, [page, pageCount]);
 
   if (messages.length === 0) return null;
 
@@ -111,6 +133,12 @@ export function StickyMessages() {
     (acc, m) =>
       PRIORITY_RANK[m.priority] > PRIORITY_RANK[acc] ? m.priority : acc,
     "low"
+  );
+
+  const safePage = page % pageCount;
+  const visible = messages.slice(
+    safePage * PAGE_SIZE,
+    safePage * PAGE_SIZE + PAGE_SIZE
   );
 
   return (
@@ -142,37 +170,66 @@ export function StickyMessages() {
           </button>
         )}
 
-        {/* The message stack. Off-screen + inert while tucked. */}
+        {/* The message stack. Off-screen + inert while tucked. A rolling window
+            of PAGE_SIZE cards that swaps as a group every ROTATE_MS. */}
         <div
           className={cn(
             "flex w-full flex-col gap-2 pl-3",
             open ? "pointer-events-auto" : "pointer-events-none"
           )}
         >
-          <AnimatePresence initial={false}>
-            {messages.slice(0, MAX_VISIBLE).map((m) => (
-              <motion.div
-                key={m.id}
-                initial={{ opacity: 0, scale: 0.96 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.96 }}
-                transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-                className={cn(
-                  "rounded-lg border p-3 shadow-md backdrop-blur-sm",
-                  PRIORITY_CARD[m.priority]
-                )}
-                role="status"
-                aria-label={`הודעת לובי — עדיפות ${PRIORITY_LABEL[m.priority]}`}
-              >
-                <div className="text-sm font-semibold leading-tight">
-                  {m.title}
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={safePage}
+              initial={{ opacity: 0, y: 14 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -14 }}
+              transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+              className="flex w-full flex-col gap-2"
+            >
+              {visible.map((m) => (
+                <div
+                  key={m.id}
+                  className={cn(
+                    "rounded-lg border p-3 shadow-md backdrop-blur-sm",
+                    PRIORITY_CARD[m.priority]
+                  )}
+                  role="status"
+                  aria-label={`הודעת לובי — עדיפות ${PRIORITY_LABEL[m.priority]}`}
+                >
+                  <div className="text-sm font-semibold leading-tight">
+                    {m.title}
+                  </div>
+                  <div className="mt-1 text-xs opacity-90 whitespace-pre-wrap">
+                    {m.body}
+                  </div>
                 </div>
-                <div className="mt-1 text-xs opacity-90 whitespace-pre-wrap">
-                  {m.body}
-                </div>
-              </motion.div>
-            ))}
+              ))}
+            </motion.div>
           </AnimatePresence>
+
+          {/* Page dots — position indicator + jump-to-page. Only when the active
+              messages span more than one page. Explicit black/white alpha so
+              they read on the transparent drawer in either theme. */}
+          {pageCount > 1 && (
+            <div className="flex items-center justify-center gap-1.5 pt-1">
+              {Array.from({ length: pageCount }).map((_, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => setPage(i)}
+                  aria-label={`עמוד ${i + 1} מתוך ${pageCount}`}
+                  aria-current={i === safePage}
+                  className={cn(
+                    "h-1.5 rounded-full transition-all",
+                    i === safePage
+                      ? "w-4 bg-black/60 dark:bg-white/70"
+                      : "w-1.5 bg-black/20 hover:bg-black/40 dark:bg-white/25 dark:hover:bg-white/45"
+                  )}
+                />
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Grip handle — pinned to the right side of the stack, so it sits flush

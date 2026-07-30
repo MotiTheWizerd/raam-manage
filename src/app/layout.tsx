@@ -3,6 +3,7 @@ import { Heebo } from "next/font/google";
 import { cookies } from "next/headers";
 import { Suspense } from "react";
 import { Toaster } from "sonner";
+import { AssistantPanel } from "@/components/AssistantPanel";
 import { AuthProvider } from "@/components/AuthProvider";
 import { EditModeProvider } from "@/components/EditModeProvider";
 import { EmergencyProvider } from "@/components/EmergencyProvider";
@@ -77,6 +78,9 @@ export default async function RootLayout({
                 {/* Lobby messages — self-positioned left-edge drawer that tucks
                     itself into a grip handle and peeks open on hover. */}
                 <StickyMessages />
+                {/* Floating assistant chat — bottom-right glass panel, Ctrl+K.
+                    Sits over BackToTop (z-40) only while open. */}
+                <AssistantPanel />
                 <GateControl />
                 <ShiftGuard loginAt={loginAt} />
                 <BackToTop />

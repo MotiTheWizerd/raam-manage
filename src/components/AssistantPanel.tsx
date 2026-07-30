@@ -5,10 +5,10 @@ import { SendHorizontal, Sparkles, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/cn";
 
-// Floating "ask the building" chat panel — design shell only for now (no LLM
-// wired yet). Global shortcut Ctrl+K toggles it (Ctrl+Space is taken by the
-// lobby door in GateControl). e.code is used so the chord also works when the
-// keyboard layout is on Hebrew (where e.key would be "ל").
+// Floating "ask the building" chat panel. Global shortcut Ctrl+K toggles it
+// (Ctrl+Space is taken by the lobby door in GateControl). e.code is used so
+// the chord also works when the keyboard layout is on Hebrew (where e.key
+// would be "ל"). Answers stream from /api/assistant (OpenRouter behind it).
 
 type Msg = {
   id: number;
@@ -19,13 +19,10 @@ type Msg = {
 const WELCOME: Msg = {
   id: 0,
   role: "assistant",
-  text: "היי! 👋 אני העוזר של רעם.\nבקרוב אוכל לענות מתוך הנהלים — אזעקות, מעליות, חניה וכל השאר.",
+  text: "היי! 👋 אני העוזר של רעם.\nשאלו אותי על נהלי הבניין — אזעקות, מעליות, חניה וכל השאר.",
 };
 
-// Until the brain is connected, every question gets this honest answer.
-const PLACEHOLDER_REPLY =
-  "עוד לא חיברו אותי למוח 🧠 בינתיים אני רק יפה — בקרוב אענה על הכל!";
-const REPLY_DELAY_MS = 900;
+const ERROR_REPLY = "משהו השתבש אצלי 😵 נסו שוב עוד רגע.";
 
 export function AssistantPanel() {
   const [open, setOpen] = useState(false);
@@ -33,7 +30,7 @@ export function AssistantPanel() {
   const [draft, setDraft] = useState("");
   const [typing, setTyping] = useState(false);
   const nextId = useRef(1);
-  const replyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -70,25 +67,68 @@ export function AssistantPanel() {
   }, [messages, typing, open]);
 
   useEffect(() => {
-    return () => {
-      if (replyTimer.current) clearTimeout(replyTimer.current);
-    };
+    return () => abortRef.current?.abort();
   }, []);
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const text = draft.trim();
     if (!text || typing) return;
     setDraft("");
-    setMessages((m) => [...m, { id: nextId.current++, role: "user", text }]);
+    const userMsg: Msg = { id: nextId.current++, role: "user", text };
+    // Forward the visible conversation (minus the canned welcome) + this turn.
+    const history = [...messages.filter((m) => m.id !== WELCOME.id), userMsg];
+    setMessages((m) => [...m, userMsg]);
     setTyping(true);
-    replyTimer.current = setTimeout(() => {
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+    try {
+      const res = await fetch("/api/assistant", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: history.map((m) => ({ role: m.role, content: m.text })),
+        }),
+        signal: controller.signal,
+      });
+      if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
+
+      // Stream the reply into a live assistant bubble, chunk by chunk.
+      const replyId = nextId.current++;
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let reply = "";
+      let bubbleShown = false;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        reply += decoder.decode(value, { stream: true });
+        if (!bubbleShown) {
+          bubbleShown = true;
+          setTyping(false);
+          setMessages((m) => [
+            ...m,
+            { id: replyId, role: "assistant", text: reply },
+          ]);
+        } else {
+          setMessages((m) =>
+            m.map((msg) => (msg.id === replyId ? { ...msg, text: reply } : msg))
+          );
+        }
+      }
+      if (!bubbleShown) throw new Error("empty reply");
+    } catch (err) {
+      if (!(err instanceof DOMException && err.name === "AbortError")) {
+        setMessages((m) => [
+          ...m,
+          { id: nextId.current++, role: "assistant", text: ERROR_REPLY },
+        ]);
+      }
+    } finally {
       setTyping(false);
-      setMessages((m) => [
-        ...m,
-        { id: nextId.current++, role: "assistant", text: PLACEHOLDER_REPLY },
-      ]);
-    }, REPLY_DELAY_MS);
+      abortRef.current = null;
+    }
   }
 
   return (

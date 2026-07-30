@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, Reorder, useDragControls } from "framer-motion";
-import { Building2, Cctv, ClipboardList, Crown, Gamepad2, GripVertical, Home, Megaphone, MessageCircle, Rows3, Settings, UserCog, Users } from "lucide-react";
+import { BookOpen, Building2, Cctv, ClipboardList, Crown, Gamepad2, GripVertical, Home, Megaphone, MessageCircle, Rows3, Settings, UserCog, Users } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -38,6 +38,8 @@ const items: Item[] = [
   { label: "דיירים", href: "/renters", icon: Users, managerOnly: true },
   { label: "בעלי דירות", href: "/owners", icon: Crown },
   { label: "מדריך הבניין", href: "/directory", icon: Rows3 },
+  // The building manual — same content feeds the assistant's system prompt.
+  { label: "נהלים", href: "/docs", icon: BookOpen },
   { label: "פקידי לובי", href: "/users", icon: UserCog, managerOnly: true },
   { label: "משחקים", href: "/games", icon: Gamepad2 },
   // Clicking opens WhatsApp Web in a new browser tab. Swap externalUrl to the

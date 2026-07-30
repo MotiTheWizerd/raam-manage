@@ -7,12 +7,17 @@ import type { ReactNode } from "react";
 // doesn't recognize falls through as plain text, so a half-streamed chunk
 // just renders literally until its closing marker arrives.
 
-const INLINE_TOKEN = /(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`)/g;
+const INLINE_TOKEN = /(\*\*\*[^*]+\*\*\*|\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`)/g;
 
 function renderInline(text: string): ReactNode {
   const parts = text.split(INLINE_TOKEN).filter((p) => p !== "");
-  if (parts.length === 1 && parts[0] === text) return text;
   return parts.map((part, i) => {
+    if (part.startsWith("***") && part.endsWith("***") && part.length > 6)
+      return (
+        <strong key={i}>
+          <em>{part.slice(3, -3)}</em>
+        </strong>
+      );
     if (part.startsWith("**") && part.endsWith("**") && part.length > 4)
       return <strong key={i}>{part.slice(2, -2)}</strong>;
     if (part.startsWith("*") && part.endsWith("*") && part.length > 2)
@@ -33,10 +38,12 @@ function renderInline(text: string): ReactNode {
 const HEADING = /^#{1,4}\s+(.*)$/;
 const BULLET_ITEM = /^\s*[-*•]\s+(.*)$/;
 const ORDERED_ITEM = /^\s*(\d+)[.)]\s+(.*)$/;
+const QUOTE_LINE = /^>\s?(.*)$/;
 
 type Block =
   | { kind: "heading"; text: string }
   | { kind: "list"; ordered: boolean; start: number; items: string[] }
+  | { kind: "quote"; lines: string[] }
   | { kind: "paragraph"; lines: string[] };
 
 function parseBlocks(text: string): Block[] {
@@ -46,7 +53,7 @@ function parseBlocks(text: string): Block[] {
   for (const line of text.split("\n")) {
     if (line.trim() === "") {
       // Blank line closes the current block.
-      if (last()?.kind === "paragraph" || last()?.kind === "list")
+      if (last() && last().kind !== "heading")
         blocks.push({ kind: "paragraph", lines: [] });
       continue;
     }
@@ -54,6 +61,14 @@ function parseBlocks(text: string): Block[] {
     const heading = HEADING.exec(line);
     if (heading) {
       blocks.push({ kind: "heading", text: heading[1] });
+      continue;
+    }
+
+    const quote = QUOTE_LINE.exec(line);
+    if (quote) {
+      const prev = last();
+      if (prev?.kind === "quote") prev.lines.push(quote[1]);
+      else blocks.push({ kind: "quote", lines: [quote[1]] });
       continue;
     }
 
@@ -94,6 +109,20 @@ export function AssistantMarkdown({ text }: { text: string }) {
             <div key={i} className="font-semibold">
               {renderInline(block.text)}
             </div>
+          );
+        if (block.kind === "quote")
+          return (
+            <blockquote
+              key={i}
+              className="border-s-2 border-black/20 ps-3 opacity-90 dark:border-white/25"
+            >
+              {block.lines.map((line, j) => (
+                <span key={j}>
+                  {j > 0 && <br />}
+                  {renderInline(line)}
+                </span>
+              ))}
+            </blockquote>
           );
         if (block.kind === "list") {
           const items = block.items.map((item, j) => (

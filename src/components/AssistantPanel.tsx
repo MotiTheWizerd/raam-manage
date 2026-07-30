@@ -1,8 +1,9 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { SendHorizontal, Sparkles, X } from "lucide-react";
+import { SendHorizontal, Sparkles, Square, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { AssistantMarkdown } from "@/components/AssistantMarkdown";
 import { cn } from "@/lib/cn";
 
 // Floating "ask the building" chat panel. Global shortcut Ctrl+K toggles it
@@ -24,14 +25,20 @@ const WELCOME: Msg = {
 
 const ERROR_REPLY = "משהו השתבש אצלי 😵 נסו שוב עוד רגע.";
 
+// Cap the auto-growing composer at ~5 lines; beyond that it scrolls.
+const MAX_COMPOSER_HEIGHT = 120;
+
 export function AssistantPanel() {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Msg[]>([WELCOME]);
   const [draft, setDraft] = useState("");
+  // typing = dots shown until the first chunk; busy = the whole request,
+  // from send until the stream ends (drives the send/stop button swap).
   const [typing, setTyping] = useState(false);
+  const [busy, setBusy] = useState(false);
   const nextId = useRef(1);
   const abortRef = useRef<AbortController | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Global shortcut: Ctrl+K toggles the panel anywhere in the app.
@@ -57,9 +64,11 @@ export function AssistantPanel() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [open]);
 
-  // Focus the input when the panel opens; keep the log scrolled to the newest.
+  // Focus the input when the panel opens; closing it also stops a running
+  // answer (the partial reply stays in the log).
   useEffect(() => {
     if (open) inputRef.current?.focus();
+    else abortRef.current?.abort();
   }, [open]);
   useEffect(() => {
     const el = scrollRef.current;
@@ -70,16 +79,24 @@ export function AssistantPanel() {
     return () => abortRef.current?.abort();
   }, []);
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  // Auto-grow the composer with its content, capped at MAX_COMPOSER_HEIGHT.
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, MAX_COMPOSER_HEIGHT)}px`;
+  }, [draft, open]);
+
+  async function send() {
     const text = draft.trim();
-    if (!text || typing) return;
+    if (!text || busy) return;
     setDraft("");
     const userMsg: Msg = { id: nextId.current++, role: "user", text };
     // Forward the visible conversation (minus the canned welcome) + this turn.
     const history = [...messages.filter((m) => m.id !== WELCOME.id), userMsg];
     setMessages((m) => [...m, userMsg]);
     setTyping(true);
+    setBusy(true);
 
     const controller = new AbortController();
     abortRef.current = controller;
@@ -127,8 +144,21 @@ export function AssistantPanel() {
       }
     } finally {
       setTyping(false);
+      setBusy(false);
       abortRef.current = null;
     }
+  }
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    void send();
+  }
+
+  // Enter sends (like WhatsApp); Shift+Enter breaks a line.
+  function onComposerKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key !== "Enter" || e.shiftKey) return;
+    e.preventDefault();
+    void send();
   }
 
   return (
@@ -181,13 +211,17 @@ export function AssistantPanel() {
               <div
                 key={msg.id}
                 className={cn(
-                  "max-w-[85%] whitespace-pre-wrap rounded-2xl px-3.5 py-2 text-sm leading-relaxed",
+                  "max-w-[85%] rounded-2xl px-3.5 py-2 text-sm leading-relaxed",
                   msg.role === "assistant"
                     ? "self-start rounded-ss-sm bg-white/70 text-zinc-800 ring-1 ring-black/5 backdrop-blur-sm dark:bg-white/10 dark:text-zinc-100 dark:ring-white/10"
-                    : "self-end rounded-se-sm bg-gradient-to-l from-violet-600 to-sky-600 text-white shadow-md"
+                    : "self-end whitespace-pre-wrap rounded-se-sm bg-gradient-to-l from-violet-600 to-sky-600 text-white shadow-md"
                 )}
               >
-                {msg.text}
+                {msg.role === "assistant" ? (
+                  <AssistantMarkdown text={msg.text} />
+                ) : (
+                  msg.text
+                )}
               </div>
             ))}
             {typing && (
@@ -199,26 +233,39 @@ export function AssistantPanel() {
             )}
           </div>
 
-          {/* Composer */}
+          {/* Composer — Enter sends, Shift+Enter breaks a line. */}
           <form
             onSubmit={handleSubmit}
-            className="flex items-center gap-2 border-t border-white/40 p-3 dark:border-white/10"
+            className="flex items-end gap-2 border-t border-white/40 p-3 dark:border-white/10"
           >
-            <input
+            <textarea
               ref={inputRef}
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={onComposerKeyDown}
+              rows={1}
               placeholder="שאלו אותי משהו…"
-              className="h-10 min-w-0 flex-1 rounded-full border border-white/50 bg-white/60 px-4 text-sm text-zinc-800 outline-none transition placeholder:text-zinc-400 focus:border-violet-400/60 focus:ring-2 focus:ring-violet-400/30 dark:border-white/10 dark:bg-white/5 dark:text-zinc-100"
+              className="min-w-0 flex-1 resize-none rounded-2xl border border-white/50 bg-white/60 px-4 py-2.5 text-sm leading-relaxed text-zinc-800 outline-none transition placeholder:text-zinc-400 focus:border-violet-400/60 focus:ring-2 focus:ring-violet-400/30 dark:border-white/10 dark:bg-white/5 dark:text-zinc-100"
             />
-            <button
-              type="submit"
-              disabled={!draft.trim() || typing}
-              aria-label="שליחה"
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-violet-600 to-sky-600 text-white shadow-md transition enabled:hover:brightness-110 disabled:opacity-40"
-            >
-              <SendHorizontal size={17} className="-scale-x-100" />
-            </button>
+            {busy ? (
+              <button
+                type="button"
+                onClick={() => abortRef.current?.abort()}
+                aria-label="עצירת התשובה"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-rose-500 to-orange-500 text-white shadow-md transition hover:brightness-110"
+              >
+                <Square size={13} fill="currentColor" />
+              </button>
+            ) : (
+              <button
+                type="submit"
+                disabled={!draft.trim()}
+                aria-label="שליחה"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-violet-600 to-sky-600 text-white shadow-md transition enabled:hover:brightness-110 disabled:opacity-40"
+              >
+                <SendHorizontal size={17} className="-scale-x-100" />
+              </button>
+            )}
           </form>
         </motion.div>
       )}

@@ -10,13 +10,16 @@ from __future__ import annotations
 
 import http.cookiejar
 import json
+import os
 import ssl
 import urllib.parse
 import urllib.request
 
 
 class GeoVisionDoor:
-    BASE = "https://localhost/ASWeb"
+    # Same GEOVISION_URL override as the app's src/lib/doors.ts — set it when the
+    # sentry runs on a different box than GeoVision.
+    BASE = os.environ.get("GEOVISION_URL", "https://localhost/ASWeb")
     ENDPOINT = BASE + "/bin/ControllerList.srf"
     USER, PASS = "admin", "Sami0207!"
 

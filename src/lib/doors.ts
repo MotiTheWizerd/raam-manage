@@ -18,7 +18,9 @@ import https from "node:https";
 // gotcha: operation="OPEN" is an ALARM-EVENT name, not a command (returns
 // errcode 4). The real open command is UNLOCK_DOOR.
 
-const BASE = "https://localhost/ASWeb";
+// Where ASWeb lives. Defaults to this machine; when the app runs on a different
+// box than GeoVision, point GEOVISION_URL at it (e.g. the lobby PC over Tailscale).
+const BASE = process.env.GEOVISION_URL ?? "https://localhost/ASWeb";
 const ENDPOINT = `${BASE}/bin/ControllerList.srf`;
 const USER = "admin";
 const PASS = "Sami0207!";

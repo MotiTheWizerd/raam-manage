@@ -178,7 +178,7 @@ export function CameraFeed({
               onError={() => setDetectError(true)}
               className={cn(
                 "block h-full w-full",
-                isFullscreen ? "object-contain" : "object-cover"
+                isFullscreen || fill ? "object-contain" : "object-cover"
               )}
             />
           ) : null
@@ -187,7 +187,12 @@ export function CameraFeed({
           <img
             src={src}
             alt={`מצלמת ${title}`}
-            className={cn("block h-full w-full", isFullscreen ? "object-contain" : "object-cover")}
+            // Spotlight (fill) and fullscreen show the WHOLE frame (contain) so
+            // nothing is cropped; fixed thumbnails crop to fill (cover).
+            className={cn(
+              "block h-full w-full",
+              isFullscreen || fill ? "object-contain" : "object-cover"
+            )}
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center text-sm text-zinc-500">

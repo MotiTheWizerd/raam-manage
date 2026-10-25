@@ -4,7 +4,11 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import net from "node:net";
 
-const CONFIG_PATH = "C:\\SLPR\\data\\Local.properties";
+// Where the SLPR install writes its DB config. Only exists on a box that has
+// SLPR installed locally (the old lobby PC). Override the path with
+// SLPR_CONFIG_PATH, or skip the file entirely by setting the SLPR_DB_* env vars
+// below (so a box without SLPR can still reach its MySQL over the network).
+const CONFIG_PATH = process.env.SLPR_CONFIG_PATH || "C:\\SLPR\\data\\Local.properties";
 
 const CLIENT_LONG_PASSWORD = 0x00000001;
 const CLIENT_LONG_FLAG = 0x00000004;
@@ -50,7 +54,33 @@ function parseProperties(text: string): Record<string, string> {
   return result;
 }
 
+// SLPR connection straight from the environment — lets a box WITHOUT SLPR
+// installed (e.g. the GPU box) reach the SLPR MySQL on the old lobby PC over
+// Tailscale, no C:\SLPR\data\Local.properties needed. Returns null unless the
+// required vars are all set, so the file path stays the default. SLPR_DB_PASS is
+// plaintext here (.env.local is already a secret) — the file's DBPass is base64.
+function readEnvConfig(): SlprConfig | null {
+  const host = process.env.SLPR_DB_HOST;
+  const port = Number(process.env.SLPR_DB_PORT);
+  const database = process.env.SLPR_DB_NAME;
+  const user = process.env.SLPR_DB_USER;
+  if (!host || !port || !database || !user) return null;
+
+  return {
+    host,
+    port,
+    database,
+    user,
+    password: process.env.SLPR_DB_PASS || "",
+    remoteUrl: process.env.SLPR_REMOTE_URL || null,
+  };
+}
+
 function readConfig(): SlprConfig {
+  // Env override first — a box can point at a remote SLPR without the install.
+  const envConfig = readEnvConfig();
+  if (envConfig) return envConfig;
+
   const config = parseProperties(fs.readFileSync(CONFIG_PATH, "utf8"));
   const port = Number(config.DBPort);
 

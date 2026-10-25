@@ -82,8 +82,10 @@ class Settings:
     # buffalo_s (w600k_mbf, MobileFaceNet) was only ever a CPU-speed compromise;
     # on the RTX 5060 the r50 embeds in a few ms. Embeddings are model-specific —
     # changing rec_pack means RE-ENROLLING faces_db.json.
+    # rec_pack is buffalo_s for now: every template in faces_db.json was enrolled
+    # with it. Switch to buffalo_l only after the gallery holds r50 templates.
     det_pack: str = "buffalo_l"
-    rec_pack: str = "buffalo_l"
+    rec_pack: str = "buffalo_s"
     # onnxruntime providers, in preference order. CUDA first (the 5060); ORT falls
     # back to CPU on its own if CUDA can't load, so the sentry still runs.
     providers: tuple = ("CUDAExecutionProvider", "CPUExecutionProvider")

@@ -1,16 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { FACE_URL } from "./constants";
+import { FACE_CAM_PATH } from "./constants";
 
 export function LiveCam({ sentryUp }: { sentryUp: boolean }) {
   // Cache-bust so re-mount revives an idled-out worker.
-  const [src, setSrc] = useState(() => `${FACE_URL}/lobby?t=${Date.now()}`);
+  const [src, setSrc] = useState(() => `${FACE_CAM_PATH}?t=${Date.now()}`);
   const [error, setError] = useState(false);
 
   function reconnect() {
     setError(false);
-    setSrc(`${FACE_URL}/lobby?t=${Date.now()}`);
+    setSrc(`${FACE_CAM_PATH}?t=${Date.now()}`);
   }
 
   return (

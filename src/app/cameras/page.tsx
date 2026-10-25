@@ -34,6 +34,14 @@ export default async function CamerasPage() {
         name: c.name,
       })),
     },
+    {
+      key: "rtsp",
+      label: "מצלמות RTSP",
+      cameras: FLEET_CAMERAS.filter((c) => c.group === "rtsp").map((c) => ({
+        id: c.id,
+        name: c.name,
+      })),
+    },
   ];
 
   const savedGroups = await listCameraGroups();

@@ -1,17 +1,39 @@
 import { getCurrentUser } from "@/lib/auth";
 import { fetchCameraSnapshot } from "@/lib/camera";
-import { getFleetCamera } from "@/lib/fleet-cameras";
+import { fleetRtspUrl, getFleetCamera } from "@/lib/fleet-cameras";
 import { getCamera, getGate } from "@/lib/gates";
 
 export const dynamic = "force-dynamic";
 
-// Live snapshot of a gate's camera. Auth-gated (the /api/* paths bypass the
-// proxy redirect, so we re-check here) — keeps the camera feed to logged-in
-// staff only. The camera password never reaches the browser.
+// The vision service (OpenCV) that decodes RTSP cameras into frames. Same box,
+// localhost — it's the only thing that can read the non-ISAPI cameras.
+const VISION_INTERNAL_URL =
+  process.env.VISION_INTERNAL_URL ?? "http://127.0.0.1:8089";
+
+// Pull one JPEG from an RTSP camera via the vision service. The RTSP URL (with
+// credentials) is built server-side and sent over localhost only.
+async function fetchRtspFrame(rtspUrl: string): Promise<Response> {
+  try {
+    const res = await fetch(
+      `${VISION_INTERNAL_URL}/rtsp?url=${encodeURIComponent(rtspUrl)}`,
+      { cache: "no-store", signal: AbortSignal.timeout(20000) }
+    );
+    if (!res.ok) return new Response("Camera unavailable", { status: 502 });
+    return new Response(await res.arrayBuffer(), {
+      headers: { "Content-Type": "image/jpeg", "Cache-Control": "no-store" },
+    });
+  } catch {
+    // Most likely the vision service isn't running on :8089.
+    return new Response("Vision service unavailable", { status: 502 });
+  }
+}
+
+// Live snapshot of a camera. Auth-gated (the /api/* paths bypass the proxy
+// redirect, so we re-check here) — logged-in staff only. Credentials never
+// reach the browser.
 //
-// Accepts ?cam=<CameraId> (the curated entrance cameras + the wider discovered
-// fleet, e.g. net-152 / dvr-24 — used by the cameras explorer) or the legacy
-// ?gate=<GateId> (a gate's own live view).
+// Accepts ?cam=<CameraId> (curated entrance cameras + the discovered fleet, e.g.
+// net-152 / dvr-24 / rtsp-180) or the legacy ?gate=<GateId> (a gate's live view).
 export async function GET(request: Request) {
   const user = await getCurrentUser();
   if (!user) return new Response("Unauthorized", { status: 401 });
@@ -19,8 +41,18 @@ export async function GET(request: Request) {
   const params = new URL(request.url).searchParams;
   const camId = params.get("cam");
   const gateId = params.get("gate");
+
+  // RTSP fleet camera → decode a frame via the vision service.
+  const fleetCam = camId ? getFleetCamera(camId) : undefined;
+  if (fleetCam) {
+    const rtspUrl = fleetRtspUrl(fleetCam);
+    if (rtspUrl) return fetchRtspFrame(rtspUrl);
+  }
+
+  // Otherwise an ISAPI HTTP snapshot (curated camera, gate camera, or an ISAPI
+  // fleet camera).
   const cam = camId
-    ? getCamera(camId) ?? getFleetCamera(camId)
+    ? getCamera(camId) ?? fleetCam
     : gateId
       ? getGate(gateId)?.cam
       : undefined;

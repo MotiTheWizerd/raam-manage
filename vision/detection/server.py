@@ -9,10 +9,11 @@ from __future__ import annotations
 import json
 import time
 from http.server import BaseHTTPRequestHandler
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 from detect import CAMERAS
 
+from .raw_grabber import get_raw_grabber
 from .service import get_worker, running_workers
 from .settings import BOUNDARY
 
@@ -41,6 +42,10 @@ class Handler(BaseHTTPRequestHandler):
             })
             return
 
+        if path == "/rtsp":
+            self._serve_rtsp()
+            return
+
         if path.startswith("/snapshot/"):
             cam = self._cam_from_path("/snapshot/")
             if not cam:
@@ -66,6 +71,35 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         self._send_json(404, {"error": "not found"})
+
+    def _serve_rtsp(self):
+        """Single JPEG from an arbitrary RTSP URL (view-only, no detection).
+
+        The app calls this server-side over localhost for its RTSP cameras, so
+        credentials in the URL never reach a browser. Only rtsp:// is accepted,
+        and the server binds 127.0.0.1, so this isn't a general network proxy.
+        """
+        qs = parse_qs(urlparse(self.path).query)
+        url = (qs.get("url") or [""])[0]
+        if not url.startswith("rtsp://"):
+            self._send_json(400, {"error": "url must be rtsp://"})
+            return
+        grabber = get_raw_grabber(url)
+        grabber.touch()
+        grabber.ensure_running()
+        jpeg = grabber.wait_for_frame(timeout=15.0)
+        if jpeg is None:
+            self._send_json(503, {"error": "no frame yet"})
+            return
+        self.close_connection = True
+        self.send_response(200)
+        self.send_header("Content-Type", "image/jpeg")
+        self.send_header("Content-Length", str(len(jpeg)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Connection", "close")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        self.wfile.write(jpeg)
 
     def _serve_snapshot(self, cam: str):
         worker = get_worker(cam)

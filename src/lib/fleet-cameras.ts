@@ -9,12 +9,24 @@ import type { CameraCreds } from "@/lib/gates";
 // identify by eye in the cameras explorer and rename. Credentials stay
 // server-side — only id + name + group reach the browser.
 //
-// Two groups:
-//   network — IP cameras reachable directly (ISAPI snapshot, creds below)
+// Three groups:
+//   network — Hikvision IP cameras reachable directly (ISAPI snapshot)
 //   dvr     — analog channels behind the .137 DVR (the supplier-yard boom
 //             camera 'רחבת ספקים' is analog channel 24 here)
-export type FleetGroup = "network" | "dvr";
-export type FleetCameraDef = CameraCreds & { id: string; name: string; group: FleetGroup };
+//   rtsp    — RTSP-only cameras (non-Hikvision "Easy-Rtsp" units, NVR channels,
+//             elevators). No ISAPI snapshot, so these are fetched as frames
+//             through the vision service (OpenCV) — see the `rtsp` field.
+export type FleetGroup = "network" | "dvr" | "rtsp";
+export type FleetCameraDef = CameraCreds & {
+  id: string;
+  name: string;
+  group: FleetGroup;
+  // When set, this is an RTSP camera: the path after rtsp://host:554 (e.g. "/"
+  // for Easy-Rtsp, "/Streaming/Channels/101" for a Hik NVR channel). The route
+  // builds the full URL (with host + creds) and pulls a frame via the vision
+  // service, instead of the ISAPI HTTP snapshot.
+  rtsp?: string;
+};
 
 export const FLEET_CAMERAS: readonly FleetCameraDef[] = [
   { id: "net-70", name: "עמדת חוץ (70)", group: "network", host: "10.0.0.70", user: "admin", pass: "Sami0207" },
@@ -82,8 +94,23 @@ export const FLEET_CAMERAS: readonly FleetCameraDef[] = [
   { id: "dvr-30", name: "ערוץ DVR 30", group: "dvr", host: "10.0.0.137", user: "admin", pass: "Sami0207", path: "/ISAPI/Streaming/channels/3001/picture" },
   { id: "dvr-31", name: "ערוץ DVR 31", group: "dvr", host: "10.0.0.137", user: "admin", pass: "Sami0207", path: "/ISAPI/Streaming/channels/3101/picture" },
   { id: "dvr-32", name: "ערוץ DVR 32", group: "dvr", host: "10.0.0.137", user: "admin", pass: "Sami0207", path: "/ISAPI/Streaming/channels/3201/picture" },
+  // RTSP-only cameras (Easy-Rtsp brand, no auth) — fetched via the vision service.
+  { id: "rtsp-180", name: "שער חשמלי (180)", group: "rtsp", host: "10.0.0.180", user: "", pass: "", rtsp: "/" },
+  { id: "rtsp-140", name: "מבט חוץ (140)", group: "rtsp", host: "10.0.0.140", user: "", pass: "", rtsp: "/" },
+  { id: "rtsp-200", name: "רחבת ספקים — אשפה (200)", group: "rtsp", host: "10.0.0.200", user: "", pass: "", rtsp: "/" },
 ];
 
 export function getFleetCamera(id: string): FleetCameraDef | undefined {
   return FLEET_CAMERAS.find((c) => c.id === id);
+}
+
+// Full RTSP URL for an RTSP fleet camera (null for ISAPI cameras). Credentials
+// are embedded here and this runs server-side only, so they never reach a
+// browser — the frame comes back as a plain JPEG via the vision service.
+export function fleetRtspUrl(cam: FleetCameraDef): string | null {
+  if (cam.rtsp === undefined) return null;
+  const auth = cam.user
+    ? `${encodeURIComponent(cam.user)}:${encodeURIComponent(cam.pass)}@`
+    : "";
+  return `rtsp://${auth}${cam.host}:554${cam.rtsp}`;
 }

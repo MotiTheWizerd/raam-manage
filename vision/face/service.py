@@ -30,7 +30,7 @@ class Service:
         self.events = EventLog(settings.events_capacity)
         self.door = GeoVisionDoor(armed=armed)
         self.engine = FaceEngine(det)
-        self.gallery = FaceGallery()
+        self.gallery = FaceGallery(self.engine.rec_id)
 
     def get_worker(self, cam_id: str) -> CameraWorker:
         with self._lock:

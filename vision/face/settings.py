@@ -78,12 +78,12 @@ class Settings:
     # Detection and recognition are decoupled into separate insightface packs.
     # DETECTION = buffalo_l SCRFD (det_10g): finds the small 30-65px faces at this
     # ceiling fisheye — that reach is what makes the early/distance open possible.
-    # RECOGNITION = buffalo_l (w600k_r50, ArcFace ResNet50): the accurate model.
-    # buffalo_s (w600k_mbf, MobileFaceNet) was only ever a CPU-speed compromise;
-    # on the RTX 5060 the r50 embeds in a few ms. Embeddings are model-specific —
-    # changing rec_pack means RE-ENROLLING faces_db.json.
-    # rec_pack is buffalo_s for now: every template in faces_db.json was enrolled
-    # with it. Switch to buffalo_l only after the gallery holds r50 templates.
+    # RECOGNITION = buffalo_s (w600k_mbf, MobileFaceNet) — Moti's decision
+    # 2026-10-26: it opens the door well, from a decent distance, even at this
+    # high angled ceiling camera, so we keep it. buffalo_l (w600k_r50) benchmarks
+    # stronger but was never shown better at THIS door; switching costs every
+    # resident's template. Embeddings are model-specific — changing rec_pack
+    # means RE-ENROLLING faces_db.json (the gallery warns at load if they differ).
     det_pack: str = "buffalo_l"
     rec_pack: str = "buffalo_s"
     # onnxruntime providers, in preference order. CUDA first (the 5060); ORT falls

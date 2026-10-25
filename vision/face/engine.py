@@ -61,6 +61,9 @@ class FaceEngine:
             raise RuntimeError(f"no recognition model (w600k_*.onnx) in {pack_dir}")
         self.rec_model = get_model(rec_files[0], providers=providers)
         self.rec_model.prepare(ctx_id=0)
+        # The embedding space's identity (e.g. "w600k_mbf") — the gallery stamps
+        # every template with it, so a template from another model is caught.
+        self.rec_id = os.path.splitext(os.path.basename(rec_files[0]))[0]
         # say which provider ACTUALLY bound — ORT silently drops to CPU if CUDA fails.
         print(f"[face] recognition running on {self.rec_model.session.get_providers()[0]}")
 

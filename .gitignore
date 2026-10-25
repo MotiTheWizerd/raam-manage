@@ -1,4 +1,4 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+﻿# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
 # dependencies
 /node_modules
@@ -46,7 +46,7 @@ next-env.d.ts
 *.db-shm
 *.db-wal
 
-# source spreadsheets — contain resident PII (names, phones), never commit
+# source spreadsheets â€” contain resident PII (names, phones), never commit
 *.xlsx
 
 # pm2 runtime logs
@@ -65,11 +65,12 @@ next-env.d.ts
 /vision/.venv/
 __pycache__/
 *.pyc
-# YOLO model weights — auto-downloaded, never committed (can land at repo root
+# YOLO model weights â€” auto-downloaded, never committed (can land at repo root
 # or in vision/ depending on the run CWD)
 *.pt
 *.onnx
-# enrolled face templates — residents' biometric data, runtime not source
+# enrolled face templates â€” residents' biometric data, runtime not source
 vision/faces_db.json
+vision/faces_db.json.*
 # throwaway debug snapshots
 vision/_*.jpg

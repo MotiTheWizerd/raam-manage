@@ -69,6 +69,8 @@ class Handler(BaseHTTPRequestHandler):
 
         if head == "list":
             self._json(200, {"enrolled": service.gallery.names(),
+                             "model": service.gallery.model_id,
+                             "stale": service.gallery.stale(),
                              "armed": service.door.armed,
                              "running": service.running(), **_knobs()})
             return

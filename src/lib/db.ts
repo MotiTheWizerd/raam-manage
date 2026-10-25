@@ -5,7 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 const DB_PATH = path.join(process.cwd(), "data", "raam.db");
-const SCHEMA_EVOLUTION_VERSION = 13;
+const SCHEMA_EVOLUTION_VERSION = 14;
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS zones (
@@ -303,6 +303,24 @@ CREATE TABLE IF NOT EXISTS face_events (
 );
 
 CREATE INDEX IF NOT EXISTS idx_face_events_created ON face_events(created_at);
+
+CREATE TABLE IF NOT EXISTS camera_groups (
+  id         INTEGER PRIMARY KEY,
+  name       TEXT NOT NULL,
+  position   INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS camera_group_members (
+  id        INTEGER PRIMARY KEY,
+  group_id  INTEGER NOT NULL REFERENCES camera_groups(id) ON DELETE CASCADE,
+  cam_id    TEXT NOT NULL,
+  position  INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_camera_group_members_group
+  ON camera_group_members(group_id);
 `;
 
 function ensureColumn(
@@ -435,6 +453,25 @@ function applySchemaEvolution(db: Database.Database) {
     );
     CREATE INDEX IF NOT EXISTS idx_suggestion_comments_suggestion
       ON suggestion_comments(suggestion_id);
+
+    -- Custom camera groups (multi-camera walls the user builds in the cameras
+    -- page). A group is a named, ordered set of camera ids; members reference
+    -- the camera registry by string id (curated or fleet), not a FK.
+    CREATE TABLE IF NOT EXISTS camera_groups (
+      id         INTEGER PRIMARY KEY,
+      name       TEXT NOT NULL,
+      position   INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS camera_group_members (
+      id        INTEGER PRIMARY KEY,
+      group_id  INTEGER NOT NULL REFERENCES camera_groups(id) ON DELETE CASCADE,
+      cam_id    TEXT NOT NULL,
+      position  INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS idx_camera_group_members_group
+      ON camera_group_members(group_id);
   `);
 
   // Migration v10: face_enrollments grew a 'kind' (resident|staff) + 'name' so

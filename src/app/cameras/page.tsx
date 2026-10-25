@@ -1,3 +1,4 @@
+import { listCameraGroups } from "@/app/cameras/actions";
 import { CameraExplorer, type CameraGroup } from "@/components/camera/CameraExplorer";
 import { FLEET_CAMERAS } from "@/lib/fleet-cameras";
 import { CAMERAS } from "@/lib/gates";
@@ -8,12 +9,10 @@ export const dynamic = "force-dynamic";
 // only id + name + group reach the browser. Live frames come through the
 // auth-gated /api/gate-cam route, so passwords never leave the server.
 //
-// Three groups feed the explorer's side menu:
-//   כניסה        — the 6 curated entrance cameras (gates.ts)
-//   מצלמות רשת   — the wider IP-camera fleet discovered on the LAN
-//   ערוצי DVR    — analog channels behind the .137 DVR (incl. רחבת ספקים ch24)
-export default function CamerasPage() {
-  const groups: CameraGroup[] = [
+// The side menu shows the registry groups (entrance / network / DVR) plus the
+// user's own saved multi-camera groups, loaded from the DB.
+export default async function CamerasPage() {
+  const registryGroups: CameraGroup[] = [
     {
       key: "entrance",
       label: "כניסה",
@@ -37,5 +36,7 @@ export default function CamerasPage() {
     },
   ];
 
-  return <CameraExplorer groups={groups} />;
+  const savedGroups = await listCameraGroups();
+
+  return <CameraExplorer registryGroups={registryGroups} savedGroups={savedGroups} />;
 }

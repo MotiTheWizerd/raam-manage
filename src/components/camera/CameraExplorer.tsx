@@ -1,40 +1,78 @@
 "use client";
 
-import { Cctv, ChevronDown } from "lucide-react";
+import { Cctv, ChevronDown, Pencil, Plus } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
+import type { CameraGroup as SavedGroup } from "@/app/cameras/actions";
+import { CameraGroupEditor } from "@/components/camera/CameraGroupEditor";
 import { CameraTile } from "@/components/camera/CameraTile";
 import { PageHeading } from "@/components/PageHeading";
 import { cn } from "@/lib/cn";
 
 export type CameraInfo = { id: string; name: string };
+// A registry group that feeds the side menu (entrance / network / DVR).
 export type CameraGroup = { key: string; label: string; cameras: CameraInfo[] };
 
-// The cameras explorer: a scrollable side menu listing EVERY reachable camera
-// (grouped, each group collapsible), and ONE live spotlight in the center. Click
-// a name to throw that camera into the spotlight. Only the spotlight streams —
-// so a 70+ camera fleet costs one live feed, not seventy. Built for the
-// discovery pass: eyeball each camera, learn what it shows, then rename it.
-//
-// The view is pinned to a definite height (100dvh minus the app header/padding)
-// so the long menu scrolls WITHIN it and the spotlight always fits the screen —
-// the page's main region grows with its content, so an unpinned tall menu would
-// otherwise stretch the whole view past the viewport.
-export function CameraExplorer({ groups }: { groups: CameraGroup[] }) {
-  const all = groups.flatMap((g) => g.cameras);
-  const [activeId, setActiveId] = useState<string>(all[0]?.id ?? "");
-  // Only the first group is open initially — the big discovered groups start
-  // collapsed so the menu isn't a wall of 70 names on open.
-  const [open, setOpen] = useState<Record<string, boolean>>(() =>
-    Object.fromEntries(groups.map((g, i) => [g.key, i === 0]))
+// What's currently in the spotlight / wall: one camera, or a saved group.
+type Selection = { kind: "camera"; id: string } | { kind: "group"; id: number };
+
+// How many columns to lay a wall of n cameras out in — kept squarish so each
+// feed stays as large as possible while all fit on one screen.
+function gridCols(n: number): number {
+  if (n <= 1) return 1;
+  if (n <= 4) return 2;
+  if (n <= 9) return 3;
+  if (n <= 16) return 4;
+  return 5;
+}
+
+// The cameras explorer: a scrollable side menu of every camera (grouped,
+// collapsible) plus the user's own saved camera groups. Picking a single camera
+// fills the center spotlight; picking a group tiles all its cameras as a live
+// wall. Groups are created/edited in a modal. Pinned to a definite viewport
+// height so the menu scrolls within it and the view always fits the screen.
+export function CameraExplorer({
+  registryGroups,
+  savedGroups,
+}: {
+  registryGroups: CameraGroup[];
+  savedGroups: SavedGroup[];
+}) {
+  const router = useRouter();
+  const all = registryGroups.flatMap((g) => g.cameras);
+
+  const [sel, setSel] = useState<Selection>(() =>
+    savedGroups[0]
+      ? { kind: "group", id: savedGroups[0].id }
+      : { kind: "camera", id: all[0]?.id ?? "" }
   );
+  const [open, setOpen] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(registryGroups.map((g, i) => [g.key, i === 0]))
+  );
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editing, setEditing] = useState<SavedGroup | null>(null);
 
-  const active = all.find((c) => c.id === activeId) ?? all[0];
+  const activeGroup =
+    sel.kind === "group" ? savedGroups.find((g) => g.id === sel.id) ?? null : null;
+  const activeCamera =
+    sel.kind === "camera" ? all.find((c) => c.id === sel.id) ?? all[0] : null;
 
-  const select = (cam: CameraInfo, groupKey: string) => {
-    setActiveId(cam.id);
-    // Make sure the group you picked from stays open.
+  function pickCamera(cam: CameraInfo, groupKey: string) {
+    setSel({ kind: "camera", id: cam.id });
     setOpen((o) => ({ ...o, [groupKey]: true }));
-  };
+  }
+
+  function openCreate() {
+    setEditing(null);
+    setEditorOpen(true);
+  }
+
+  function openEdit(group: SavedGroup) {
+    setEditing(group);
+    setEditorOpen(true);
+  }
+
+  const pickGroups = registryGroups.map((g) => ({ label: g.label, cameras: g.cameras }));
 
   return (
     <div className="flex h-[calc(100dvh-10rem)] flex-col">
@@ -50,9 +88,73 @@ export function CameraExplorer({ groups }: { groups: CameraGroup[] }) {
         </div>
       ) : (
         <div className="flex min-h-0 flex-1 gap-3">
-          {/* Side menu — the full fleet, grouped + collapsible, scrollable. */}
           <nav className="flex w-64 shrink-0 flex-col gap-2 overflow-y-auto rounded-xl border border-black/10 bg-black/[0.02] p-2 dark:border-white/10 dark:bg-white/[0.02]">
-            {groups.map((group) => {
+            {/* My groups — the user-built multi-camera walls. */}
+            <div className="flex flex-col">
+              <div className="flex items-center justify-between px-2 py-1.5">
+                <span className="text-xs font-semibold uppercase tracking-wide text-foreground/50">
+                  הקבוצות שלי ({savedGroups.length})
+                </span>
+                <button
+                  type="button"
+                  onClick={openCreate}
+                  className="rounded-md p-1 text-foreground/50 transition-colors hover:bg-black/5 hover:text-foreground dark:hover:bg-white/5"
+                  title="קבוצה חדשה"
+                  aria-label="קבוצה חדשה"
+                >
+                  <Plus className="size-4" />
+                </button>
+              </div>
+              {savedGroups.length === 0 ? (
+                <p className="px-2 pb-1 text-xs text-foreground/40">
+                  צור קבוצה כדי לראות כמה מצלמות יחד
+                </p>
+              ) : (
+                <div className="flex flex-col gap-0.5">
+                  {savedGroups.map((group) => {
+                    const isActive = sel.kind === "group" && sel.id === group.id;
+                    return (
+                      <div
+                        key={group.id}
+                        className={cn(
+                          "group flex items-center rounded-lg transition-colors",
+                          isActive
+                            ? "bg-emerald-500/15"
+                            : "hover:bg-black/5 dark:hover:bg-white/5"
+                        )}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => setSel({ kind: "group", id: group.id })}
+                          className={cn(
+                            "min-w-0 flex-1 truncate px-3 py-1.5 text-right text-sm",
+                            isActive
+                              ? "font-semibold text-emerald-700 dark:text-emerald-300"
+                              : "text-foreground/70"
+                          )}
+                          title={group.name}
+                        >
+                          {group.name}{" "}
+                          <span className="text-xs opacity-60">({group.cameras.length})</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openEdit(group)}
+                          className="shrink-0 rounded-md p-1.5 text-foreground/40 opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100"
+                          title="ערוך קבוצה"
+                          aria-label="ערוך קבוצה"
+                        >
+                          <Pencil className="size-3.5" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Registry groups — every reachable camera, collapsible. */}
+            {registryGroups.map((group) => {
               const isOpen = open[group.key];
               return (
                 <div key={group.key} className="flex flex-col">
@@ -78,10 +180,10 @@ export function CameraExplorer({ groups }: { groups: CameraGroup[] }) {
                         <button
                           key={cam.id}
                           type="button"
-                          onClick={() => select(cam, group.key)}
+                          onClick={() => pickCamera(cam, group.key)}
                           className={cn(
                             "truncate rounded-lg px-3 py-1.5 text-right text-sm transition-colors",
-                            cam.id === active?.id
+                            sel.kind === "camera" && cam.id === activeCamera?.id
                               ? "bg-emerald-500/15 font-semibold text-emerald-700 dark:text-emerald-300"
                               : "text-foreground/70 hover:bg-black/5 dark:hover:bg-white/5"
                           )}
@@ -97,16 +199,48 @@ export function CameraExplorer({ groups }: { groups: CameraGroup[] }) {
             })}
           </nav>
 
-          {/* Spotlight — the one live feed. Constant key so switching cameras
-              swaps the source without remounting (shows the last frame until the
-              new one loads). */}
-          {active && (
-            <div className="min-h-0 flex-1">
-              <CameraTile key="spotlight" camId={active.id} title={active.name} />
-            </div>
-          )}
+          {/* View — a group's wall, or one camera's spotlight. */}
+          <div className="min-h-0 flex-1">
+            {activeGroup ? (
+              activeGroup.cameras.length === 0 ? (
+                <div className="grid h-full place-items-center rounded-xl border border-black/10 text-sm text-foreground/50 dark:border-white/10">
+                  אין מצלמות בקבוצה זו
+                </div>
+              ) : (
+                <div
+                  className="grid h-full gap-2"
+                  style={{
+                    gridTemplateColumns: `repeat(${gridCols(
+                      activeGroup.cameras.length
+                    )}, minmax(0, 1fr))`,
+                    gridTemplateRows: `repeat(${Math.ceil(
+                      activeGroup.cameras.length / gridCols(activeGroup.cameras.length)
+                    )}, minmax(0, 1fr))`,
+                  }}
+                >
+                  {activeGroup.cameras.map((cam) => (
+                    <CameraTile key={cam.id} camId={cam.id} title={cam.name} />
+                  ))}
+                </div>
+              )
+            ) : activeCamera ? (
+              <CameraTile key="spotlight" camId={activeCamera.id} title={activeCamera.name} />
+            ) : (
+              <div className="grid h-full place-items-center rounded-xl border border-black/10 text-sm text-foreground/50 dark:border-white/10">
+                בחר מצלמה או קבוצה מהתפריט
+              </div>
+            )}
+          </div>
         </div>
       )}
+
+      <CameraGroupEditor
+        open={editorOpen}
+        onClose={() => setEditorOpen(false)}
+        pickGroups={pickGroups}
+        editing={editing}
+        onSaved={() => router.refresh()}
+      />
     </div>
   );
 }

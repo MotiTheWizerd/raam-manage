@@ -37,3 +37,23 @@ os.environ.setdefault("OPENCV_FFMPEG_LOGLEVEL", "-8")
 # Cap the RTSP decoder's threads so software-decoding the 30fps 1080p stream
 # doesn't fan out across every core and starve the recognizer on this CPU box.
 os.environ.setdefault("OPENCV_FFMPEG_CAPTURE_OPTIONS", "rtsp_transport;tcp|threads;2")
+
+
+def _load_env_local() -> None:
+    """Read the app's .env.local (repo root) so a hand-launched sentry gets the same
+    config as the website (e.g. GEOVISION_URL) — Python doesn't read it on its own.
+    setdefault: a value already in the environment (pm2, a `set`) still wins."""
+    path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".env.local")
+    try:
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, val = line.split("=", 1)
+                os.environ.setdefault(key.strip(), val.strip().strip('"').strip("'"))
+    except FileNotFoundError:
+        pass
+
+
+_load_env_local()

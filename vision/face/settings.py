@@ -78,11 +78,15 @@ class Settings:
     # Detection and recognition are decoupled into separate insightface packs.
     # DETECTION = buffalo_l SCRFD (det_10g): finds the small 30-65px faces at this
     # ceiling fisheye — that reach is what makes the early/distance open possible.
-    # RECOGNITION = buffalo_s (w600k_mbf, MobileFaceNet): ~10-20x lighter than
-    # buffalo_l's ArcFace ResNet50, for fast per-frame embeddings. Embeddings are
-    # model-specific — changing rec_pack means RE-ENROLLING faces_db.json.
+    # RECOGNITION = buffalo_l (w600k_r50, ArcFace ResNet50): the accurate model.
+    # buffalo_s (w600k_mbf, MobileFaceNet) was only ever a CPU-speed compromise;
+    # on the RTX 5060 the r50 embeds in a few ms. Embeddings are model-specific —
+    # changing rec_pack means RE-ENROLLING faces_db.json.
     det_pack: str = "buffalo_l"
-    rec_pack: str = "buffalo_s"
+    rec_pack: str = "buffalo_l"
+    # onnxruntime providers, in preference order. CUDA first (the 5060); ORT falls
+    # back to CPU on its own if CUDA can't load, so the sentry still runs.
+    providers: tuple = ("CUDAExecutionProvider", "CPUExecutionProvider")
 
     # --- performance (the keys to scaling across cameras on a CPU box) ---
     ort_threads: int = 4            # cap onnxruntime cores (default grabs ALL 16)

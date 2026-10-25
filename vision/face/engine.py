@@ -35,8 +35,9 @@ class FaceEngine:
         ort.InferenceSession = _capped
         # DETECTION: keep buffalo_l's SCRFD (det_10g) — it finds the small 30-65px
         # faces at this fisheye, which is what makes the early/distance open work.
-        print(f"[face] loading detection: {settings.det_pack} SCRFD on CPU…")
-        self.app = FaceAnalysis(name=settings.det_pack, providers=["CPUExecutionProvider"],
+        providers = list(settings.providers)
+        print(f"[face] loading detection: {settings.det_pack} SCRFD on {providers[0]}…")
+        self.app = FaceAnalysis(name=settings.det_pack, providers=providers,
                                 allowed_modules=["detection"])
         self.app.prepare(ctx_id=0, det_size=(det, det))
         # RECOGNITION: load ONLY the recognition model from a (possibly different,
@@ -46,7 +47,7 @@ class FaceEngine:
         # NB: FaceAnalysis can't load recognition alone (it asserts a detector), so
         # we load the ArcFace ONNX directly via model_zoo. The recognition file in a
         # buffalo_* pack is w600k_*.onnx (r50 for buffalo_l, mbf for buffalo_s).
-        print(f"[face] loading recognition: {settings.rec_pack} on CPU…")
+        print(f"[face] loading recognition: {settings.rec_pack} on {providers[0]}…")
         import glob as _glob
         from insightface.model_zoo import get_model
         pack_dir = os.path.join(os.path.expanduser("~"), ".insightface", "models", settings.rec_pack)
@@ -54,12 +55,14 @@ class FaceEngine:
         if not rec_files:
             # cold cache — let FaceAnalysis pull the pack (it loads the detector too,
             # which we discard), then re-glob for the recognition onnx.
-            FaceAnalysis(name=settings.rec_pack, providers=["CPUExecutionProvider"])
+            FaceAnalysis(name=settings.rec_pack, providers=providers)
             rec_files = _glob.glob(os.path.join(pack_dir, "w600k_*.onnx"))
         if not rec_files:
             raise RuntimeError(f"no recognition model (w600k_*.onnx) in {pack_dir}")
-        self.rec_model = get_model(rec_files[0], providers=["CPUExecutionProvider"])
+        self.rec_model = get_model(rec_files[0], providers=providers)
         self.rec_model.prepare(ctx_id=0)
+        # say which provider ACTUALLY bound — ORT silently drops to CPU if CUDA fails.
+        print(f"[face] recognition running on {self.rec_model.session.get_providers()[0]}")
 
     def detect_recognize_biggest(self, frame) -> Face | None:
         """Detect every face (cheap, ~0.1s) but run the COSTLY ArcFace recognition
@@ -71,6 +74,7 @@ class FaceEngine:
         if bboxes is None or len(bboxes) == 0:
             return None
         i = int((bboxes[:, 3] - bboxes[:, 1]).argmax())   # tallest bbox = closest
+        # (on the GPU this is cheap, but the gallery/accumulator only use the biggest.)
         face = Face(bbox=bboxes[i, 0:4], kps=kpss[i], det_score=float(bboxes[i, 4]))
         self.rec_model.get(frame, face)
         return face

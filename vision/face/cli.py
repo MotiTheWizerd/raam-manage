@@ -47,6 +47,7 @@ def main() -> None:
           f"consensus>={settings.accum_consensus} votes>={settings.accum_min_votes} "
           f"window={settings.accum_window}s px {settings.px_floor}-{settings.px_full} "
           f"| armed={service.door.armed} ort_threads={settings.ort_threads}")
+    print(f"[face] doors via {service.door.BASE}")
 
     service.get_worker(args.cam)  # pre-warm the main camera
 

@@ -1,4 +1,22 @@
+const fs = require("fs");
 const path = require("path");
+
+// Reads the given keys out of .env.local (KEY=value lines; # comments skipped).
+// Per-machine settings live there, untracked — not in this file.
+function pickEnv(keys) {
+  const out = {};
+  let text = "";
+  try {
+    text = fs.readFileSync(path.join(__dirname, ".env.local"), "utf8");
+  } catch {
+    return out;
+  }
+  for (const line of text.split(/\r?\n/)) {
+    const m = /^\s*([A-Z0-9_]+)\s*=\s*(.*?)\s*$/.exec(line);
+    if (m && keys.includes(m[1])) out[m[1]] = m[2];
+  }
+  return out;
+}
 
 module.exports = {
   apps: [
@@ -60,6 +78,9 @@ module.exports = {
       instances: 1,
       autorestart: true,
       max_memory_restart: "1500M",
+      // Python doesn't read .env.local, so hand the sentry the GeoVision address
+      // from there (unset = localhost, i.e. GeoVision on this same box).
+      env: pickEnv(["GEOVISION_URL"]),
       out_file: path.join(__dirname, "logs", "pm2-face-out.log"),
       error_file: path.join(__dirname, "logs", "pm2-face-error.log"),
       merge_logs: true,

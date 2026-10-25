@@ -15,11 +15,9 @@ export async function register() {
     const { whatsappTest } = await import("./lib/whatsapp-test");
     void whatsappTest.connectIfLinked();
 
-    // Face-rec is moving to its own dedicated machine (session 44) — the sentry
-    // it drains (raam-face / port 8090) is shut down on this box, so don't start
-    // the watcher here or it just polls a dead service every 3s. Re-enable (and
-    // repoint at the new box's sentry URL) when face-rec is back online.
-    // const { startFaceWatcher } = await import("./lib/face-watcher");
-    // startFaceWatcher();
+    // Drain the face sentry's entry events into the entry log. The sentry
+    // (raam-face, :8090) runs on this same box again since the RTX 5060 move.
+    const { startFaceWatcher } = await import("./lib/face-watcher");
+    startFaceWatcher();
   }
 }

@@ -3,7 +3,7 @@ import "server-only";
 import { db } from "./db";
 import { fireGate, GATES } from "./gates";
 import { normalizePlate } from "./plate";
-import { querySlpr } from "./slpr-mysql";
+import { isSlprConfigured, querySlpr } from "./slpr-mysql";
 
 // Auto-opens the gate for explicitly-approved guest cars (resident_guests with
 // auto_open = 1) when their plate is seen at the entrance — no lobbyist needed.
@@ -45,6 +45,10 @@ function logGateEvent(
 }
 
 async function tick() {
+  // No SLPR wired up on this box → nothing to watch. Skip quietly instead of
+  // throwing ENOENT every tick (the plate DB lives on the old lobby PC).
+  if (!isSlprConfigured()) return;
+
   // First run: anchor to the current newest entrance read so we only ever react
   // to cars that arrive AFTER the watcher starts (never replay history).
   if (globalThis.__raamGateWatcherLastId === undefined) {

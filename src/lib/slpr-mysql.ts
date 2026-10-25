@@ -76,6 +76,19 @@ function readEnvConfig(): SlprConfig | null {
   };
 }
 
+// True if SLPR can be reached at all — either the env vars are set, or the
+// local properties file exists. Callers use this to degrade gracefully (show no
+// data) when the plate-recognition DB simply isn't wired up on this box, instead
+// of throwing an ENOENT that crashes the cars history / spams the gate-watcher.
+export function isSlprConfigured(): boolean {
+  if (readEnvConfig()) return true;
+  try {
+    return fs.existsSync(CONFIG_PATH);
+  } catch {
+    return false;
+  }
+}
+
 function readConfig(): SlprConfig {
   // Env override first — a box can point at a remote SLPR without the install.
   const envConfig = readEnvConfig();

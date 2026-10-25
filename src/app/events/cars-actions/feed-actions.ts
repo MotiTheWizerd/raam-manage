@@ -1,7 +1,7 @@
 "use server";
 
 import { normalizePlate } from "@/lib/plate";
-import { querySlpr } from "@/lib/slpr-mysql";
+import { isSlprConfigured, querySlpr } from "@/lib/slpr-mysql";
 import { matchKnownGuests } from "./resident-guests";
 import { getPlateVisitStats } from "./plate-stats";
 import { parseNullableNumber } from "./slpr-sql";
@@ -48,6 +48,7 @@ function toRegisteredOwner(row: SlprRawLogRow): RegisteredOwner | null {
  * still tags/filters בוטיק vs מנהטן for the considered view.
  */
 export async function getLatestCarEvent(): Promise<LatestCarEvent | null> {
+  if (!isSlprConfigured()) return null;
   const rows = await querySlpr<SlprRawLogRow>(
     `SELECT
        l.ID, l.LP, l.LOG_DATE, l.STATUS, l.CAM_ID, l.DURATION, l.FILE, l.Customer_Id,
@@ -80,6 +81,7 @@ export async function getLatestCarEvent(): Promise<LatestCarEvent | null> {
 
 /** The single most recent plate seen at the entry camera (autofill helper). */
 export async function getLastCarPlate(): Promise<string | null> {
+  if (!isSlprConfigured()) return null;
   const rows = await querySlpr<{ LP: string | null }>(
     `SELECT LP FROM \`log\`
      WHERE CAM_ID = 1
@@ -93,6 +95,7 @@ export async function getLastCarPlate(): Promise<string | null> {
 export async function getRecentCarEvents(
   days: number = 3
 ): Promise<SlprCarEventRow[]> {
+  if (!isSlprConfigured()) return [];
   const safeDays = Math.max(1, Math.min(30, Math.floor(days)));
   const rows = await querySlpr<SlprRawLogRow>(
     `SELECT

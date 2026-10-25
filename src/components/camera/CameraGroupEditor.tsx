@@ -3,6 +3,7 @@
 import { Search, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
+import { CameraThumb } from "@/components/camera/CameraThumb";
 import {
   createCameraGroup,
   deleteCameraGroup,
@@ -134,7 +135,7 @@ export function CameraGroupEditor({
                 <div className="px-2 pb-1 text-xs font-semibold uppercase tracking-wide text-foreground/40">
                   {group.label}
                 </div>
-                <div className="grid grid-cols-2 gap-1 sm:grid-cols-3">
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                   {group.cameras.map((cam) => {
                     const on = selected.has(cam.id);
                     return (
@@ -143,24 +144,37 @@ export function CameraGroupEditor({
                         type="button"
                         onClick={() => toggle(cam.id)}
                         className={cn(
-                          "flex items-center gap-2 truncate rounded-lg px-2 py-1.5 text-right text-sm transition-colors",
+                          "group/thumb flex flex-col overflow-hidden rounded-lg border text-right transition-colors",
                           on
-                            ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
-                            : "text-foreground/70 hover:bg-black/5 dark:hover:bg-white/5"
+                            ? "border-emerald-500 bg-emerald-500/10"
+                            : "border-black/10 hover:border-foreground/30 dark:border-white/10"
                         )}
                         title={cam.name}
                       >
+                        {/* Live still so you can match the name to the view. */}
+                        <div className="relative aspect-video w-full bg-black">
+                          <CameraThumb camId={cam.id} />
+                          <span
+                            className={cn(
+                              "absolute right-1.5 top-1.5 grid size-5 place-items-center rounded border text-[11px] shadow",
+                              on
+                                ? "border-emerald-500 bg-emerald-500 text-white"
+                                : "border-white/60 bg-black/40 text-transparent"
+                            )}
+                          >
+                            ✓
+                          </span>
+                        </div>
                         <span
                           className={cn(
-                            "grid size-4 shrink-0 place-items-center rounded border text-[10px]",
+                            "truncate px-2 py-1.5 text-sm",
                             on
-                              ? "border-emerald-500 bg-emerald-500 text-white"
-                              : "border-foreground/30"
+                              ? "text-emerald-700 dark:text-emerald-300"
+                              : "text-foreground/70"
                           )}
                         >
-                          {on ? "✓" : ""}
+                          {cam.name}
                         </span>
-                        <span className="truncate">{cam.name}</span>
                       </button>
                     );
                   })}

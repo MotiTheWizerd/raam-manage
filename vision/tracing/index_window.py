@@ -132,17 +132,17 @@ def frames_in_window(clip: Path, seg: Segment, start: dt.datetime, end: dt.datet
             yield seen, frame.to_ndarray(format="bgr24")
 
 
-def drop_window(db, camera_id: str, start: dt.datetime, end: dt.datetime, model: str) -> None:
-    """Idempotent re-runs: remove this camera's earlier sightings (and their
-    crop files) in the window."""
+def drop_window(db, camera_id: str, start: dt.datetime, end: dt.datetime, model: str) -> list[str]:
+    """Idempotent re-runs: remove this camera's earlier sightings in the
+    window. Returns their crop paths — unlink them only AFTER the commit, or
+    a run killed mid-camera rolls the rows back onto deleted crops."""
     params = (camera_id, start.replace(tzinfo=TZ), end.replace(tzinfo=TZ), model)
     old = db.execute(
         """DELETE FROM sightings WHERE camera_id = %s AND seen_at >= %s AND seen_at < %s
            AND model = %s RETURNING crop_path""",
         params,
     ).fetchall()
-    for (rel,) in old:
-        (DATA / rel).unlink(missing_ok=True)
+    return [rel for (rel,) in old]
 
 
 def main() -> None:
@@ -181,7 +181,7 @@ def main() -> None:
             if not certain:
                 warn("a segment runs >48h past the window edges; its times can't be pinned, camera skipped")
                 segs = []
-            drop_window(db, cam["id"], start, end, model_name)
+            stale = drop_window(db, cam["id"], start, end, model_name)
 
             video_s = frames = found = 0
             spent = {"download": 0.0, "decode": 0.0, "detect": 0.0}
@@ -233,6 +233,9 @@ def main() -> None:
                     rows,
                 )
             db.commit()
+            reused = {r[4] for r in rows}  # same frame time → same name, now the new crop
+            for rel in set(stale) - reused:
+                (DATA / rel).unlink(missing_ok=True)
             label = cam["name_he"] or cam["device_name"] or ""
             print(f"  {cam['id']:14} {label[:18]:18} segs {len(segs):3}  video {video_s / 60:6.1f} min"
                   f"  frames {frames:5}  people {found:5}  ({time.time() - t0:.0f}s: "

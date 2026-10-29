@@ -7,3 +7,6 @@
 #   ultralytics 8.4.60, opencv-python 4.13.0, torch 2.12.0+cpu
 ultralytics
 opencv-python
+# tracing/ (camera registry + person tracing in Postgres/pgvector)
+psycopg[binary]
+requests

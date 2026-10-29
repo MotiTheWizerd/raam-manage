@@ -6,6 +6,7 @@ import { PageHeading } from "@/components/PageHeading";
 import { Tabs, type TabItem } from "@/components/ui/Tabs";
 import { onSuggestionsChanged } from "@/lib/suggestions-events";
 import { BackupTab } from "./BackupTab";
+import { CameraManagementTab } from "./camera-mgmt/CameraManagementTab";
 import { FaceRecTab } from "./face-rec";
 import { RegisteredCarsTab } from "./RegisteredCarsTab";
 import { SuggestionsTab } from "./SuggestionsTab";
@@ -41,6 +42,7 @@ export function SettingsView() {
     { value: "zones", label: "אזורים" },
     { value: "registered-cars", label: "רכבים רשומים" },
     { value: "face-rec", label: "זיהוי פנים" },
+    { value: "cameras", label: "ניהול מצלמות" },
     { value: "backup", label: "גיבוי" },
   ];
 
@@ -57,6 +59,7 @@ export function SettingsView() {
         {tab === "zones" && <ZonesTab />}
         {tab === "registered-cars" && <RegisteredCarsTab />}
         {tab === "face-rec" && <FaceRecTab />}
+        {tab === "cameras" && <CameraManagementTab />}
         {tab === "backup" && <BackupTab />}
       </section>
     </div>

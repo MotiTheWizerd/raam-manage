@@ -7,7 +7,8 @@ import { cn } from "@/lib/cn";
 // recognize which physical camera a placeholder name is. Uses native lazy
 // loading so scrolling a long list only fetches the thumbnails in view, and it
 // never polls (one frame, not a live feed). Fills its (aspect-video) parent.
-export function CameraThumb({ camId }: { camId: string }) {
+// `src` overrides the default gate-cam URL (e.g. a recorder-channel snapshot).
+export function CameraThumb({ camId, src }: { camId?: string; src?: string }) {
   const [state, setState] = useState<"loading" | "ok" | "error">("loading");
 
   return (
@@ -19,7 +20,7 @@ export function CameraThumb({ camId }: { camId: string }) {
       )}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src={`/api/gate-cam?cam=${camId}`}
+        src={src ?? `/api/gate-cam?cam=${camId}`}
         alt=""
         loading="lazy"
         onLoad={() => setState("ok")}

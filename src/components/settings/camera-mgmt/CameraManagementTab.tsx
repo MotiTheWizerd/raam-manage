@@ -1,13 +1,18 @@
 "use client";
 
-import { Pencil } from "lucide-react";
+import { Layers, Pencil } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/cn";
 import { CameraEditor } from "./CameraEditor";
+import { CameraGroupsManager } from "./CameraGroupsManager";
 
-// ניהול מצלמות — a side menu of camera-admin tools. First tool: editing the
-// camera registry (names + locations). More (recorders, tracing) slot in here.
-const SECTIONS = [{ value: "edit", label: "עריכת מצלמות", icon: Pencil }] as const;
+// ניהול מצלמות — a side menu of camera-admin tools: editing the camera
+// registry, and the building-area groups cameras sort into. More (recorders,
+// tracing) slot in here.
+const SECTIONS = [
+  { value: "edit", label: "עריכת מצלמות", icon: Pencil },
+  { value: "groups", label: "קבוצות", icon: Layers },
+] as const;
 
 type Section = (typeof SECTIONS)[number]["value"];
 
@@ -35,7 +40,10 @@ export function CameraManagementTab() {
         ))}
       </nav>
 
-      <div>{section === "edit" && <CameraEditor />}</div>
+      <div>
+        {section === "edit" && <CameraEditor />}
+        {section === "groups" && <CameraGroupsManager />}
+      </div>
     </div>
   );
 }

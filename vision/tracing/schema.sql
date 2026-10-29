@@ -37,3 +37,18 @@ CREATE TABLE IF NOT EXISTS cameras (
   updated_at   timestamptz NOT NULL DEFAULT now(),
   UNIQUE (recorder_id, channel)
 );
+
+-- Areas of the building (parking, lobby, gym…), set by staff in the camera
+-- management tab. A camera can sit in several groups.
+CREATE TABLE IF NOT EXISTS camera_groups (
+  id          serial PRIMARY KEY,
+  name        text NOT NULL UNIQUE,
+  position    int  NOT NULL DEFAULT 0,
+  created_at  timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS camera_group_members (
+  group_id   int  NOT NULL REFERENCES camera_groups(id) ON DELETE CASCADE,
+  camera_id  text NOT NULL REFERENCES cameras(id) ON DELETE CASCADE,
+  PRIMARY KEY (group_id, camera_id)
+);

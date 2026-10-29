@@ -1,6 +1,6 @@
 "use client";
 
-import { Maximize2, Minimize2, ScanEye, X } from "lucide-react";
+import { FunnelX, Maximize2, Minimize2, ScanEye, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/cn";
 
@@ -21,6 +21,8 @@ type Props = {
   onToggleFullscreen: () => void;
   /** When provided, a close (X) button is shown. The grid tiles omit it. */
   onClose?: () => void;
+  /** When provided (the motion-follow wall), a "hide from follow" button is shown. */
+  onExclude?: () => void;
   /** Snapshot refresh interval. Slower for the multi-camera wall. */
   refreshMs?: number;
   /** Notified when detection mode toggles (lets the popup pause its auto-close). */
@@ -39,6 +41,7 @@ export function CameraFeed({
   isFullscreen,
   onToggleFullscreen,
   onClose,
+  onExclude,
   refreshMs = REFRESH_MS,
   onDetectChange,
   fill = false,
@@ -122,6 +125,17 @@ export function CameraFeed({
           className="flex shrink-0 items-center gap-1"
           onClick={(e) => e.stopPropagation()}
         >
+          {onExclude && (
+            <button
+              type="button"
+              onClick={onExclude}
+              aria-label="הסתר ממעקב תנועה"
+              title="הסתר ממעקב תנועה"
+              className="rounded-md p-1 text-zinc-400 transition-colors hover:bg-white/10 hover:text-white"
+            >
+              <FunnelX className="size-4" />
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setDetect((d) => !d)}

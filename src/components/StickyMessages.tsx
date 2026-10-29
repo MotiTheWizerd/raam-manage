@@ -14,6 +14,10 @@ import {
   getActiveSystemMessages,
   type SystemMessageRow,
 } from "@/app/lobby-messages/actions";
+import {
+  useLobbyMessagesDismissed,
+  useSetLobbyMessagesDismissed,
+} from "@/components/PreferencesProvider";
 import { cn } from "@/lib/cn";
 import { onSystemMessagesChanged } from "@/lib/system-messages-events";
 import { LobbyMessageCard } from "./lobby-messages/LobbyMessageCard";
@@ -60,6 +64,8 @@ export function StickyMessages() {
   const [page, setPage] = useState(0);
   const [expanded, setExpanded] = useState(false);
   const collapseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dismissed = useLobbyMessagesDismissed();
+  const setDismissed = useSetLobbyMessagesDismissed();
 
   const cancelCollapse = useCallback(() => {
     if (collapseTimer.current) {
@@ -113,12 +119,13 @@ export function StickyMessages() {
   // Pop the drawer open for a long beat whenever the *set* of visible messages
   // changes — i.e. the first load after a refresh/login, or a newly published
   // message. The signature is value-compared, so the 60s refetch (same ids)
-  // does NOT keep re-opening it.
+  // does NOT keep re-opening it. If the lobbyist hid this exact set (persisted
+  // in preferences), a refresh leaves it tucked.
   const signature = messages.map((m) => m.id).join(",");
   useEffect(() => {
-    if (!signature) return;
+    if (!signature || signature === dismissed) return;
     surfaceFromTop();
-  }, [signature, surfaceFromTop]);
+  }, [signature, dismissed, surfaceFromTop]);
 
   // Clear any pending timer on unmount.
   useEffect(() => cancelCollapse, [cancelCollapse]);
@@ -188,6 +195,7 @@ export function StickyMessages() {
               onClick={() => {
                 cancelCollapse();
                 setOpen(false);
+                setDismissed(signature);
               }}
               label="סגור"
             >

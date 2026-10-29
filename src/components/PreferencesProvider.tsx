@@ -81,5 +81,13 @@ export const useSetSelectedResident = () =>
   usePreferencesStore((s) => s.setSelectedResident);
 export const useClearSelectedResident = () =>
   usePreferencesStore((s) => s.clearSelectedResident);
+export const useLobbyMessagesDismissed = () =>
+  usePreferencesStore((s) => s.lobbyMessages.dismissedSignature);
+export const useSetLobbyMessagesDismissed = () =>
+  usePreferencesStore((s) => s.setLobbyMessagesDismissed);
+export const useMotionExcluded = () =>
+  usePreferencesStore((s) => s.motionFollow.excluded);
+export const useSetMotionExcluded = () =>
+  usePreferencesStore((s) => s.setMotionExcluded);
 export const useActiveLobbyist = () =>
   usePreferencesStore((s) => s.activeLobbyist);

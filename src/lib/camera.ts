@@ -24,7 +24,7 @@ function parseAuthHeader(header: string): Record<string, string> {
   return out;
 }
 
-function buildDigest(challenge: string, path: string, user: string, pass: string): string {
+export function buildDigest(challenge: string, path: string, user: string, pass: string): string {
   const d = parseAuthHeader(challenge);
   const nc = "00000001";
   const cnonce = crypto.randomBytes(8).toString("hex");

@@ -1,12 +1,27 @@
 "use client";
 
-import { Cctv, ChevronDown, Pencil, Plus } from "lucide-react";
+import {
+  Activity,
+  Car,
+  Cctv,
+  ChevronDown,
+  FunnelX,
+  PawPrint,
+  Pencil,
+  PersonStanding,
+  Plus,
+  X,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { CameraGroup as SavedGroup } from "@/app/cameras/actions";
 import { CameraGroupEditor } from "@/components/camera/CameraGroupEditor";
 import { CameraTile } from "@/components/camera/CameraTile";
 import { PageHeading } from "@/components/PageHeading";
+import {
+  useMotionExcluded,
+  useSetMotionExcluded,
+} from "@/components/PreferencesProvider";
 import { cn } from "@/lib/cn";
 
 export type CameraInfo = { id: string; name: string };
@@ -24,6 +39,91 @@ function gridCols(n: number): number {
   if (n <= 9) return 3;
   if (n <= 16) return 4;
   return 5;
+}
+
+type MotionKind = "person" | "vehicle" | "animal";
+type ActiveMotion = { id: string; startedAt: number; lastAt: number; kinds: MotionKind[] };
+
+// The object filters, in button order. None selected = any motion at all.
+const MOTION_FILTERS: { kind: MotionKind; label: string; Icon: typeof PersonStanding }[] = [
+  { kind: "person", label: "אנשים", Icon: PersonStanding },
+  { kind: "vehicle", label: "רכבים", Icon: Car },
+  { kind: "animal", label: "בעלי חיים", Icon: PawPrint },
+];
+
+const MOTION_POLL_MS = 1000;
+// A camera stays on the wall this long after its last motion, so tiles don't
+// pop in and out every time someone pauses.
+const MOTION_LINGER_MS = 8000;
+// Most tiles the wall shows at once (the most recently moving win).
+const MOTION_MAX_TILES = 9;
+
+// Motion-follow mode: polls /api/motion (the cameras' own motion detection)
+// and keeps the wall of cameras that moved recently. Tiles keep their place in
+// order of arrival so the layout doesn't reshuffle under the viewer.
+function useMotionFollow(enabled: boolean, filters: MotionKind[], excluded: string[]) {
+  const [active, setActive] = useState<ActiveMotion[]>([]);
+  const [wall, setWall] = useState<string[]>([]);
+  const lastSeen = useRef(new Map<string, number>());
+
+  useEffect(() => {
+    if (!enabled) return;
+    let alive = true;
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      try {
+        const res = await fetch("/api/motion", { cache: "no-store" });
+        if (res.ok && alive) {
+          const all: ActiveMotion[] = (await res.json()).active;
+          setActive(
+            all.filter(
+              (m) =>
+                !excluded.includes(m.id) &&
+                (filters.length === 0 || m.kinds.some((k) => filters.includes(k)))
+            )
+          );
+        }
+      } catch {
+        // Transient — keep the last picture.
+      }
+      if (alive) timer = setTimeout(poll, MOTION_POLL_MS);
+    };
+    poll();
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+    };
+  }, [enabled, filters, excluded]);
+
+  useEffect(() => {
+    if (!enabled) return;
+    const now = Date.now();
+    const seen = lastSeen.current;
+    for (const m of active) seen.set(m.id, now);
+    setWall((prev) => {
+      const kept = prev.filter((id) => now - (seen.get(id) ?? 0) <= MOTION_LINGER_MS);
+      const added = active.map((m) => m.id).filter((id) => !kept.includes(id));
+      const next = [...kept, ...added];
+      // Over the cap: drop whichever has been quiet the longest.
+      while (next.length > MOTION_MAX_TILES) {
+        let oldest = 0;
+        for (let i = 1; i < next.length; i++) {
+          if ((seen.get(next[i]) ?? 0) < (seen.get(next[oldest]) ?? 0)) oldest = i;
+        }
+        next.splice(oldest, 1);
+      }
+      return next.length === prev.length && next.every((id, i) => id === prev[i])
+        ? prev
+        : next;
+    });
+  }, [active, enabled]);
+
+  return {
+    // camera id -> what it's showing right now (absent = lingering, quiet)
+    active: new Map(enabled ? active.map((m) => [m.id, m.kinds]) : []),
+    // A just-hidden camera leaves the wall at once, not after its linger.
+    wall: enabled ? wall.filter((id) => !excluded.includes(id)) : [],
+  };
 }
 
 // The cameras explorer: a scrollable side menu of every camera (grouped,
@@ -51,6 +151,14 @@ export function CameraExplorer({
   );
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<SavedGroup | null>(null);
+  const [follow, setFollow] = useState(true);
+  const [filters, setFilters] = useState<MotionKind[]>(["person", "vehicle", "animal"]);
+  const excluded = useMotionExcluded();
+  const setExcluded = useSetMotionExcluded();
+  const motion = useMotionFollow(follow, filters, excluded);
+  const toggleFilter = (kind: MotionKind) =>
+    setFilters((f) => (f.includes(kind) ? f.filter((k) => k !== kind) : [...f, kind]));
+  const nameOf = (id: string) => all.find((c) => c.id === id)?.name ?? id;
 
   const activeGroup =
     sel.kind === "group" ? savedGroups.find((g) => g.id === sel.id) ?? null : null;
@@ -59,6 +167,7 @@ export function CameraExplorer({
 
   function pickCamera(cam: CameraInfo, groupKey: string) {
     setSel({ kind: "camera", id: cam.id });
+    setFollow(false);
     setOpen((o) => ({ ...o, [groupKey]: true }));
   }
 
@@ -80,6 +189,48 @@ export function CameraExplorer({
         <Cctv size={22} aria-hidden="true" className="text-foreground/70" />
         <PageHeading href="/cameras" fallback="מצלמות" className="text-xl" />
         <span className="text-sm text-foreground/50">({all.length})</span>
+        {follow && (
+          <div
+            className="ms-auto flex items-center gap-1"
+            title="בחר מה להציג — בלי סינון מוצגת כל תנועה"
+          >
+            {MOTION_FILTERS.map(({ kind, label, Icon }) => {
+              const on = filters.includes(kind);
+              return (
+                <button
+                  key={kind}
+                  type="button"
+                  onClick={() => toggleFilter(kind)}
+                  aria-pressed={on}
+                  className={cn(
+                    "flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm transition-colors",
+                    on
+                      ? "border-emerald-500/40 bg-emerald-500/15 font-semibold text-emerald-700 dark:text-emerald-300"
+                      : "border-black/10 text-foreground/70 hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/5"
+                  )}
+                >
+                  <Icon className="size-4" />
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        )}
+        <button
+          type="button"
+          onClick={() => setFollow((f) => !f)}
+          aria-pressed={follow}
+          className={cn(
+            !follow && "ms-auto",
+            "flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm transition-colors",
+            follow
+              ? "border-red-500/40 bg-red-500/15 font-semibold text-red-600 dark:text-red-300"
+              : "border-black/10 text-foreground/70 hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/5"
+          )}
+        >
+          <Activity className={cn("size-4", follow && "animate-pulse")} />
+          מעקב תנועה
+        </button>
       </div>
 
       {all.length === 0 ? (
@@ -125,7 +276,10 @@ export function CameraExplorer({
                       >
                         <button
                           type="button"
-                          onClick={() => setSel({ kind: "group", id: group.id })}
+                          onClick={() => {
+                            setSel({ kind: "group", id: group.id });
+                            setFollow(false);
+                          }}
                           className={cn(
                             "min-w-0 flex-1 truncate px-3 py-1.5 text-right text-sm",
                             isActive
@@ -201,7 +355,97 @@ export function CameraExplorer({
 
           {/* View — a group's wall, or one camera's spotlight. */}
           <div className="min-h-0 flex-1">
-            {activeGroup ? (
+            {follow ? (
+              <div className="flex h-full flex-col gap-2">
+                <div className="flex min-h-9 shrink-0 flex-wrap items-center gap-1.5">
+                  {motion.wall.length === 0 ? (
+                    <span className="text-sm text-foreground/50">אין תנועה כרגע…</span>
+                  ) : (
+                    motion.wall.map((id) => {
+                      const kinds = motion.active.get(id);
+                      return (
+                        <span
+                          key={id}
+                          className={cn(
+                            "flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs",
+                            kinds
+                              ? "border-red-500/50 bg-red-500/15 font-semibold text-red-600 dark:text-red-300"
+                              : "border-black/10 text-foreground/50 dark:border-white/10"
+                          )}
+                        >
+                          <span
+                            className={cn(
+                              "size-1.5 rounded-full",
+                              kinds ? "animate-pulse bg-red-500" : "bg-zinc-500"
+                            )}
+                          />
+                          {nameOf(id)}
+                          {MOTION_FILTERS.filter((f) => kinds?.includes(f.kind)).map(
+                            ({ kind, Icon }) => (
+                              <Icon key={kind} className="size-3.5" />
+                            )
+                          )}
+                        </span>
+                      );
+                    })
+                  )}
+                  {/* Cameras hidden from follow — X brings one back. */}
+                  {excluded.length > 0 && (
+                    <div className="ms-auto flex flex-wrap items-center gap-1.5">
+                      <span className="flex items-center gap-1 text-xs text-foreground/50">
+                        <FunnelX className="size-3.5" aria-hidden />
+                        מוסתרות ממעקב:
+                      </span>
+                      {excluded.map((id) => (
+                        <span
+                          key={id}
+                          className="flex items-center gap-1 rounded-full border border-black/10 py-0.5 pe-1 ps-2.5 text-xs text-foreground/70 dark:border-white/10"
+                        >
+                          {nameOf(id)}
+                          <button
+                            type="button"
+                            onClick={() => setExcluded(id, false)}
+                            aria-label={`החזר את ${nameOf(id)} למעקב`}
+                            title="החזר למעקב"
+                            className="rounded-full p-0.5 text-foreground/50 transition-colors hover:bg-black/10 hover:text-foreground dark:hover:bg-white/10"
+                          >
+                            <X className="size-3" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="min-h-0 flex-1">
+                  {motion.wall.length > 0 ? (
+                    <div
+                      className="grid h-full gap-2"
+                      style={{
+                        gridTemplateColumns: `repeat(${gridCols(
+                          motion.wall.length
+                        )}, minmax(0, 1fr))`,
+                        gridTemplateRows: `repeat(${Math.ceil(
+                          motion.wall.length / gridCols(motion.wall.length)
+                        )}, minmax(0, 1fr))`,
+                      }}
+                    >
+                      {motion.wall.map((id) => (
+                        <CameraTile
+                          key={id}
+                          camId={id}
+                          title={nameOf(id)}
+                          onExclude={() => setExcluded(id, true)}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="grid h-full place-items-center rounded-xl border border-black/10 text-sm text-foreground/50 dark:border-white/10">
+                      ממתין לתנועה במצלמות…
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : activeGroup ? (
               activeGroup.cameras.length === 0 ? (
                 <div className="grid h-full place-items-center rounded-xl border border-black/10 text-sm text-foreground/50 dark:border-white/10">
                   אין מצלמות בקבוצה זו

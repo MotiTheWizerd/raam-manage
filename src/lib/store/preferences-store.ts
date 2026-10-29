@@ -16,6 +16,8 @@ export type PreferencesActions = {
   setTabLabel: (key: string, value: string, label: string) => void;
   setSelectedResident: (r: SelectedResident | null) => void;
   clearSelectedResident: () => void;
+  setLobbyMessagesDismissed: (signature: string) => void;
+  setMotionExcluded: (id: string, excluded: boolean) => void;
 };
 
 export type PreferencesState = Preferences &
@@ -61,6 +63,13 @@ export function createPreferencesStore(
       }),
     setSelectedResident: (r) => set({ selectedResident: r }),
     clearSelectedResident: () => set({ selectedResident: null }),
+    setLobbyMessagesDismissed: (signature) =>
+      set({ lobbyMessages: { dismissedSignature: signature } }),
+    setMotionExcluded: (id, excluded) =>
+      set((s) => {
+        const rest = s.motionFollow.excluded.filter((x) => x !== id);
+        return { motionFollow: { excluded: excluded ? [...rest, id] : rest } };
+      }),
   }));
 }
 
@@ -70,5 +79,7 @@ export function extractPreferences(state: PreferencesState): Preferences {
     tabOrders: state.tabOrders,
     tabLabels: state.tabLabels,
     selectedResident: state.selectedResident,
+    lobbyMessages: state.lobbyMessages,
+    motionFollow: state.motionFollow,
   };
 }

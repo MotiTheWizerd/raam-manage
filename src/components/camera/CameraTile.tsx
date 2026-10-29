@@ -17,10 +17,12 @@ export function CameraTile({
   camId,
   title,
   onSelect,
+  onExclude,
 }: {
   camId: string;
   title: string;
   onSelect?: () => void;
+  onExclude?: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const { isFullscreen, toggle: toggleFullscreen } = useFullscreen(ref);
@@ -56,6 +58,7 @@ export function CameraTile({
         title={title}
         isFullscreen={isFullscreen}
         onToggleFullscreen={toggleFullscreen}
+        onExclude={onExclude}
         refreshMs={WALL_REFRESH_MS}
         fill
       />

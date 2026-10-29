@@ -13,6 +13,7 @@ from urllib.parse import parse_qs, urlparse
 
 from detect import CAMERAS
 
+from .objects import check_objects
 from .raw_grabber import get_raw_grabber
 from .service import get_worker, running_workers
 from .settings import BOUNDARY
@@ -71,6 +72,18 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         self._send_json(404, {"error": "not found"})
+
+    def do_POST(self):
+        """POST /objects — body is one JPEG; counts people / vehicles / animals in it."""
+        if urlparse(self.path).path != "/objects":
+            self._send_json(404, {"error": "not found"})
+            return
+        length = int(self.headers.get("Content-Length") or 0)
+        if not 0 < length <= 10_000_000:
+            self._send_json(400, {"error": "need a JPEG body"})
+            return
+        result = check_objects(self.rfile.read(length))
+        self._send_json(200 if result["ok"] else 400, result)
 
     def _serve_rtsp(self):
         """Single JPEG from an arbitrary RTSP URL (view-only, no detection).

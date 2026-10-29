@@ -37,6 +37,13 @@ export type Preferences = {
   // label. Blank values are dropped on save.
   tabLabels: Record<string, Record<string, string>>;
   selectedResident: SelectedResident | null;
+  // The lobby-messages drawer: the set of message ids (StickyMessages'
+  // signature) the lobbyist hid. While the set is unchanged a refresh keeps it
+  // tucked; a new or removed message changes the set and pops it open again.
+  lobbyMessages: { dismissedSignature: string };
+  // Camera ids hidden from the /cameras motion-follow wall (a duplicate angle
+  // of the same room, or a camera that keeps picking the wrong view).
+  motionFollow: { excluded: string[] };
 };
 
 const DEFAULTS: Preferences = {
@@ -44,6 +51,8 @@ const DEFAULTS: Preferences = {
   tabOrders: {},
   tabLabels: {},
   selectedResident: null,
+  lobbyMessages: { dismissedSignature: "" },
+  motionFollow: { excluded: [] },
 };
 
 function sanitizeLabels(value: unknown): Record<string, string> {
@@ -93,6 +102,17 @@ function merge(stored: Partial<Preferences>): Preferences {
     tabOrders: sanitizeTabOrders(stored.tabOrders),
     tabLabels: sanitizeTabLabels(stored.tabLabels),
     selectedResident: stored.selectedResident ?? DEFAULTS.selectedResident,
+    lobbyMessages: {
+      dismissedSignature:
+        typeof stored.lobbyMessages?.dismissedSignature === "string"
+          ? stored.lobbyMessages.dismissedSignature
+          : DEFAULTS.lobbyMessages.dismissedSignature,
+    },
+    motionFollow: {
+      excluded: Array.isArray(stored.motionFollow?.excluded)
+        ? stored.motionFollow.excluded.filter((id): id is string => typeof id === "string")
+        : DEFAULTS.motionFollow.excluded,
+    },
   };
 }
 

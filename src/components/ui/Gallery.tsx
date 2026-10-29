@@ -9,6 +9,8 @@ import { cn } from "@/lib/cn";
 
 export type GalleryImage = {
   src: string;
+  /** Lighter image for the thumbnail strip (defaults to `src`). */
+  thumbSrc?: string;
   alt?: string;
   /** Optional caption shown at the bottom-center of the viewer. */
   caption?: React.ReactNode;
@@ -164,7 +166,7 @@ export function Gallery({ images, open, onClose, startIndex = 0 }: Props) {
                   )}
                 >
                   <NextImage
-                    src={img.src}
+                    src={img.thumbSrc ?? img.src}
                     alt={img.alt ?? `תמונה ${i + 1}`}
                     width={160}
                     height={112}

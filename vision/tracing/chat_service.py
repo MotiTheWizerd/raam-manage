@@ -23,17 +23,22 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+import threading
+from zoneinfo import ZoneInfo
+
+import cv2
 import psycopg
 import uvicorn
 from claude_agent_sdk import (AssistantMessage, ClaudeAgentOptions, ClaudeSDKClient, ResultMessage,
                               TextBlock, ToolUseBlock, create_sdk_mcp_server, tool)
 from starlette.applications import Starlette
 from starlette.requests import Request
-from starlette.responses import JSONResponse, StreamingResponse
+from starlette.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from starlette.routing import Route
 
 import tools as T
-from hik import ROOT, load_env
+from hik import ROOT, Recorder, _file_name, load_env
+from index_window import frames_in_window
 
 HERE = Path(__file__).resolve().parent
 PY = sys.executable
@@ -340,6 +345,101 @@ async def chat(request: Request):
     return StreamingResponse(stream(), media_type="application/x-ndjson")
 
 
+# ───────────────────────── full frames ─────────────────────────
+# The gallery's full-resolution view: the whole camera frame at a sighting's
+# moment, the person boxed. Pulled from the recording (same timing logic the
+# indexer uses), so it's the real picture, not an upscaled crop. Recordings
+# are cached on disk (one download serves every sighting in that file), and
+# rendered frames are cached by sighting id.
+
+TZ = ZoneInfo("Asia/Jerusalem")
+SEGMENT_CACHE = DATA / "cache"
+FRAME_CACHE = DATA / "frames"
+SEGMENT_CACHE_BYTES = 3 * 1024**3
+_segment_locks: dict[str, threading.Lock] = {}
+_segment_locks_guard = threading.Lock()
+
+
+def _cached_segment(rec: Recorder, key: str, seg) -> Path:
+    path = SEGMENT_CACHE / f"{key}.mp4"
+    with _segment_locks_guard:
+        lock = _segment_locks.setdefault(key, threading.Lock())
+    with lock:  # one download per recording, however many frames want it
+        if not path.exists():
+            SEGMENT_CACHE.mkdir(parents=True, exist_ok=True)
+            tmp = path.with_suffix(".part")
+            rec.download(seg, tmp)
+            tmp.replace(path)
+            files = sorted(SEGMENT_CACHE.glob("*.mp4"), key=lambda p: p.stat().st_mtime)
+            total = sum(p.stat().st_size for p in files)
+            for old in files:  # oldest first, never the one just fetched
+                if total <= SEGMENT_CACHE_BYTES or old == path:
+                    break
+                total -= old.stat().st_size
+                old.unlink(missing_ok=True)
+        path.touch()
+    return path
+
+
+def _render_frame(sighting_id: int) -> bytes | None:
+    with _db() as db:
+        row = db.execute(
+            """SELECT s.seen_at, s.bbox, c.id, c.channel, COALESCE(c.name_he, c.device_name, c.id),
+                      r.host, r.http_port, r.cred_env
+                 FROM sightings s JOIN cameras c ON c.id = s.camera_id
+                 JOIN recorders r ON r.id = c.recorder_id
+                WHERE s.id = %s""",
+            (sighting_id,),
+        ).fetchone()
+    if not row:
+        return None
+    seen_at, bbox, cam_id, channel, cam_name, host, port, cred_env = row
+    seen = seen_at.astimezone(TZ).replace(tzinfo=None)
+    rec = Recorder(host, port, cred_env)
+    segs, _ = rec.segments_covering(channel, seen - dt.timedelta(seconds=1), seen + dt.timedelta(seconds=1))
+    # the file can start up to ~30s before its listed start (pre-record)
+    seg = next((s for s in segs if s.start - dt.timedelta(seconds=30) <= seen <= s.end), None)
+    if seg is None:
+        return None
+    key = f"{cam_id}_{_file_name(seg.uri) or seg.start.strftime('%Y%m%d%H%M%S')}"
+    clip = _cached_segment(rec, key, seg)
+    best = None
+    for t, frame in frames_in_window(clip, seg, seen - dt.timedelta(seconds=0.5),
+                                     seen + dt.timedelta(seconds=0.5), 0.0, lambda m: None):
+        gap = abs((t - seen).total_seconds())
+        if best is None or gap < best[0]:
+            best = (gap, frame)
+        elif gap > best[0]:
+            break  # moving away from the sighting's moment
+    if best is None:
+        return None
+    frame = best[1]
+    x1, y1, x2, y2 = bbox
+    thick = max(2, frame.shape[0] // 270)
+    cv2.rectangle(frame, (x1, y1), (x2, y2), (40, 40, 230), thick)
+    ok, jpeg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 90])
+    return jpeg.tobytes() if ok else None
+
+
+async def frame(request: Request):
+    try:
+        sid = int(request.query_params.get("s", ""))
+    except ValueError:
+        return JSONResponse({"error": "bad id"}, status_code=400)
+    cached = FRAME_CACHE / f"{sid}.jpg"
+    if cached.exists():
+        return FileResponse(cached, media_type="image/jpeg")
+    try:
+        jpeg = await asyncio.to_thread(_render_frame, sid)
+    except Exception as e:  # recorder unreachable, file gone from the recorder, …
+        return JSONResponse({"error": f"{type(e).__name__}: {e}"}, status_code=502)
+    if jpeg is None:
+        return JSONResponse({"error": "frame not found"}, status_code=404)
+    FRAME_CACHE.mkdir(parents=True, exist_ok=True)
+    cached.write_bytes(jpeg)
+    return Response(jpeg, media_type="image/jpeg")
+
+
 async def health(request: Request):
     return JSONResponse({"ok": True, "sessions": len(SESSIONS), "model": MODEL})
 
@@ -354,7 +454,8 @@ async def lifespan(app):
 
 
 load_env()
-app = Starlette(routes=[Route("/chat", chat, methods=["POST"]), Route("/health", health)],
+app = Starlette(routes=[Route("/chat", chat, methods=["POST"]), Route("/frame", frame),
+                        Route("/health", health)],
                 lifespan=lifespan)
 
 if __name__ == "__main__":

@@ -3,6 +3,7 @@
 import { Loader2, MessageSquarePlus, Send } from "lucide-react";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
+import { Gallery, type GalleryImage } from "@/components/ui/Gallery";
 import { cn } from "@/lib/cn";
 
 // "Talk to the cameras": a conversation with the camera investigation agent
@@ -51,6 +52,28 @@ const EXAMPLES = [
 ];
 
 const hms = (t: string) => t.slice(11, 19);
+
+// Gallery entry for a sighting: the full camera frame (person boxed) on the
+// stage, the small crop in the thumbnail strip.
+const galleryImage = (sightingId: number, title: string, detail: string): GalleryImage => ({
+  src: `/api/tracing/frame?s=${sightingId}`,
+  thumbSrc: `/api/tracing/crop?s=${sightingId}`,
+  alt: title,
+  caption: (
+    <div className="text-sm">
+      <span className="font-semibold">{title}</span> · <span dir="ltr">{detail}</span>
+    </div>
+  ),
+});
+
+// One gallery per card: clicking any picture opens it at that picture.
+function useCardGallery(images: GalleryImage[]) {
+  const [start, setStart] = useState<number | null>(null);
+  const gallery = (
+    <Gallery images={images} open={start !== null} startIndex={start ?? 0} onClose={() => setStart(null)} />
+  );
+  return { open: setStart, gallery };
+}
 
 export function CameraChat() {
   const [sessionId, setSessionId] = useState(() => crypto.randomUUID());
@@ -243,44 +266,59 @@ function PartView({ part }: { part: Part }) {
         {part.text}
       </div>
     );
-  if (part.kind === "people")
-    return (
-      <div className="space-y-2">
-        <div className="text-xs opacity-60">
-          {part.people.length} אנשים · {part.window[0]} – {part.window[1].slice(11)}
-        </div>
-        <div className="grid grid-cols-3 gap-2 sm:grid-cols-5 lg:grid-cols-7">
-          {part.people.map((p) => (
-            <div key={p.person} className="overflow-hidden rounded-md border border-black/10 dark:border-white/10">
-              <Crop sightingId={p.best_sighting_id} />
-              <div className="space-y-0.5 p-1.5 text-[11px] leading-tight">
-                <div className="font-semibold">#{p.person}</div>
-                <div dir="ltr" className="text-end opacity-80">
-                  {hms(p.first_seen)}–{hms(p.last_seen)}
-                </div>
-                <div className="truncate opacity-60" title={p.cameras.join(", ")}>
-                  {p.cameras.join(", ")}
-                </div>
+  if (part.kind === "people") return <PeopleView part={part} />;
+  return <TraceView part={part} />;
+}
+
+function PeopleView({ part }: { part: Extract<Part, { kind: "people" }> }) {
+  const { open, gallery } = useCardGallery(
+    part.people.map((p) =>
+      galleryImage(p.best_sighting_id, `#${p.person}`, `${hms(p.first_seen)}–${hms(p.last_seen)} · ${p.cameras.join(", ")}`)
+    )
+  );
+  return (
+    <div className="space-y-2">
+      <div className="text-xs opacity-60">
+        {part.people.length} אנשים · {part.window[0]} – {part.window[1].slice(11)}
+      </div>
+      <div className="grid grid-cols-3 gap-2 sm:grid-cols-5 lg:grid-cols-7">
+        {part.people.map((p, i) => (
+          <div key={p.person} className="overflow-hidden rounded-md border border-black/10 dark:border-white/10">
+            <Crop sightingId={p.best_sighting_id} onClick={() => open(i)} />
+            <div className="space-y-0.5 p-1.5 text-[11px] leading-tight">
+              <div className="font-semibold">#{p.person}</div>
+              <div dir="ltr" className="text-end opacity-80">
+                {hms(p.first_seen)}–{hms(p.last_seen)}
+              </div>
+              <div className="truncate opacity-60" title={p.cameras.join(", ")}>
+                {p.cameras.join(", ")}
               </div>
             </div>
-          ))}
-        </div>
+          </div>
+        ))}
       </div>
-    );
-  return <TraceView part={part} />;
+      {gallery}
+    </div>
+  );
 }
 
 function TraceView({ part }: { part: Extract<Part, { kind: "trace" }> }) {
   const [showPossible, setShowPossible] = useState(false);
+  // one gallery for the whole route: the stays, then the possible sightings
+  const { open, gallery } = useCardGallery([
+    ...part.stays.map((s) => galleryImage(s.best_sighting_id, s.place, `${hms(s.from)}–${hms(s.to)} · ${s.cameras.join(", ")}`)),
+    ...part.possible.map((v) => galleryImage(v.best_sighting_id, `אפשרי · ${v.camera_name}`, `${hms(v.from)}–${hms(v.to)}`)),
+  ]);
   return (
     <div className="space-y-2 rounded-lg border border-black/10 dark:border-white/10 p-3">
+      {gallery}
       <div className="text-xs font-medium opacity-70">מסלול {part.label ?? ""}</div>
       {part.stays.length === 0 && <div className="text-xs opacity-60">לא נמצאו שהיות ודאיות</div>}
       <ol className="space-y-2">
         {part.stays.map((s, i) => (
           <li key={i} className="flex items-center gap-3">
             <div className="w-14 shrink-0 overflow-hidden rounded">
-              <Crop sightingId={s.best_sighting_id} />
+              <Crop sightingId={s.best_sighting_id} onClick={() => open(i)} />
             </div>
             <div className="min-w-0 text-sm">
               <div className="font-semibold">{s.place}</div>
@@ -307,7 +345,7 @@ function TraceView({ part }: { part: Extract<Part, { kind: "trace" }> }) {
             <div className="mt-2 grid grid-cols-4 gap-2 sm:grid-cols-8">
               {part.possible.map((v, i) => (
                 <div key={i} className="text-[10px] leading-tight opacity-80">
-                  <Crop sightingId={v.best_sighting_id} />
+                  <Crop sightingId={v.best_sighting_id} onClick={() => open(part.stays.length + i)} />
                   <div dir="ltr" className="text-end">{hms(v.from)}</div>
                   <div className="truncate">{v.camera_name}</div>
                 </div>
@@ -320,9 +358,15 @@ function TraceView({ part }: { part: Extract<Part, { kind: "trace" }> }) {
   );
 }
 
-function Crop({ sightingId }: { sightingId: number }) {
+// A person crop; clicking opens the card's gallery at the full camera frame.
+function Crop({ sightingId, onClick }: { sightingId: number; onClick?: () => void }) {
   return (
-    <div className="aspect-[3/5] bg-black/40">
+    <button
+      type="button"
+      onClick={onClick}
+      title="הצג בגודל מלא"
+      className="block aspect-[3/5] w-full cursor-zoom-in bg-black/40 transition-opacity hover:opacity-85"
+    >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={`/api/tracing/crop?s=${sightingId}`}
@@ -330,7 +374,7 @@ function Crop({ sightingId }: { sightingId: number }) {
         loading="lazy"
         className="h-full w-full object-contain"
       />
-    </div>
+    </button>
   );
 }
 

@@ -86,5 +86,25 @@ module.exports = {
       merge_logs: true,
       time: true,
     },
+    {
+      // Camera chat (vision/tracing/chat_service.py) — the "talk to the
+      // cameras" agent behind ניהול מצלמות → שיחה עם המצלמות, on localhost
+      // :8095 (NOT 8090 — that's raam-face). Runs Claude through the Claude
+      // Code CLI, so `claude` must be on this user's PATH and logged in. Reads
+      // DATABASE_URL / recorder logins from .env.local itself.
+      name: "raam-tracing-chat",
+      script: "chat_service.py",
+      interpreter: path.join(__dirname, "vision", ".venv", "Scripts", "pythonw.exe"),
+      interpreter_args: "-u",
+      cwd: path.join(__dirname, "vision", "tracing"),
+      exec_mode: "fork",
+      instances: 1,
+      autorestart: true,
+      max_memory_restart: "1G",
+      out_file: path.join(__dirname, "logs", "pm2-tracing-chat-out.log"),
+      error_file: path.join(__dirname, "logs", "pm2-tracing-chat-error.log"),
+      merge_logs: true,
+      time: true,
+    },
   ],
 };

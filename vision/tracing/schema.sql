@@ -52,3 +52,53 @@ CREATE TABLE IF NOT EXISTS camera_group_members (
   camera_id  text NOT NULL REFERENCES cameras(id) ON DELETE CASCADE,
   PRIMARY KEY (group_id, camera_id)
 );
+
+-- One row per person seen in one sampled frame of a recording (index_window.py).
+-- `embedding` is an appearance fingerprint (OSNet-AIN re-ID, 512-d, L2-normed):
+-- the same person on another camera lands close in cosine distance.
+CREATE TABLE IF NOT EXISTS sightings (
+  id         bigserial PRIMARY KEY,
+  camera_id  text NOT NULL REFERENCES cameras(id) ON DELETE CASCADE,
+  seen_at    timestamptz NOT NULL,
+  bbox       int[] NOT NULL,          -- x1, y1, x2, y2 in the source frame
+  score      real NOT NULL,           -- person-detector confidence
+  crop_path  text NOT NULL,           -- relative to data/tracing/
+  embedding  vector(512) NOT NULL,
+  model      text NOT NULL,           -- re-ID weights that made the embedding
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS sightings_camera_time ON sightings (camera_id, seen_at);
+CREATE INDEX IF NOT EXISTS sightings_time ON sightings (seen_at);
+CREATE INDEX IF NOT EXISTS sightings_embedding ON sightings USING hnsw (embedding vector_cosine_ops);
+
+-- A track = one person's continuous presence on one camera: consecutive
+-- sightings linked by look + position (tracks.py). Its embedding is the
+-- normalized mean of its sightings — steadier than any single frame — so
+-- tracing and "who was there" work on tracks, not frames.
+CREATE TABLE IF NOT EXISTS tracks (
+  id                bigserial PRIMARY KEY,
+  camera_id         text NOT NULL REFERENCES cameras(id) ON DELETE CASCADE,
+  start_at          timestamptz NOT NULL,
+  end_at            timestamptz NOT NULL,
+  n                 int NOT NULL,          -- sightings in the track
+  best_sighting_id  bigint,                -- clearest crop (largest, most confident)
+  embedding         vector(512) NOT NULL,
+  model             text NOT NULL
+);
+CREATE INDEX IF NOT EXISTS tracks_camera_time ON tracks (camera_id, start_at);
+CREATE INDEX IF NOT EXISTS tracks_time ON tracks (start_at);
+
+ALTER TABLE sightings ADD COLUMN IF NOT EXISTS track_id bigint REFERENCES tracks(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS sightings_track ON sightings (track_id);
+
+-- Every search the camera chat runs: who asked, what was searched. Tracing
+-- people is sensitive; this is the record that it was used for incidents.
+CREATE TABLE IF NOT EXISTS trace_audit (
+  id          bigserial PRIMARY KEY,
+  at          timestamptz NOT NULL DEFAULT now(),
+  user_name   text,
+  session_id  text NOT NULL,
+  tool        text NOT NULL,
+  input       jsonb NOT NULL
+);
+CREATE INDEX IF NOT EXISTS trace_audit_at ON trace_audit (at);

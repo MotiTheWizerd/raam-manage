@@ -12,15 +12,11 @@ location, notes, active) are never touched.
 import datetime as dt
 import os
 import re
-import uuid
-import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import psycopg
-import requests
-from requests.auth import HTTPDigestAuth
 
-ROOT = Path(__file__).resolve().parents[2]
+from hik import ROOT, Recorder, load_env
 
 # Every recorder iVMS knows about. Ones we can't reach yet still get a row so
 # the gap is visible (accessible = false).
@@ -34,78 +30,12 @@ RECORDERS = [
 ]
 
 
-def load_env() -> None:
-    for line in (ROOT / ".env.local").read_text(encoding="utf-8-sig").splitlines():
-        m = re.match(r"^([A-Z0-9_]+)=(.*)$", line.strip())
-        if m:
-            os.environ.setdefault(m.group(1), m.group(2))
-
-
-def strip_ns(root: ET.Element) -> ET.Element:
-    for el in root.iter():
-        el.tag = el.tag.split("}", 1)[-1]
-    return root
-
-
-class Recorder:
-    def __init__(self, cfg: dict):
-        self.cfg = cfg
-        env = cfg.get("cred_env", "HIK_DEFAULT")
-        user, pw = os.environ.get(f"{env}_USER"), os.environ.get(f"{env}_PASS")
-        self.auth = HTTPDigestAuth(user, pw) if user and pw else None
-        self.base = f"http://{cfg['host']}:{cfg['http_port']}"
-
-    def get(self, path: str) -> ET.Element:
-        r = requests.get(self.base + path, auth=self.auth, timeout=10)
-        r.raise_for_status()
-        return strip_ns(ET.fromstring(r.content))
-
-    def model(self) -> str | None:
-        if not self.auth:
-            return None
-        try:
-            return self.get("/ISAPI/System/deviceInfo").findtext("model")
-        except (requests.RequestException, ET.ParseError):
-            return None
-
-    def channels(self) -> list[dict]:
-        out = []
-        try:  # analog inputs (DVR only; an NVR answers 4xx/empty)
-            for ch in self.get("/ISAPI/System/Video/inputs/channels").iter("VideoInputChannel"):
-                out.append({"channel": int(ch.findtext("id")), "kind": "analog",
-                            "device_name": ch.findtext("name"), "camera_ip": None})
-        except (requests.RequestException, ET.ParseError):
-            pass
-        for ch in self.get("/ISAPI/ContentMgmt/InputProxy/channels").iter("InputProxyChannel"):
-            out.append({"channel": int(ch.findtext("id")), "kind": "ip",
-                        "device_name": (ch.findtext("name") or "").strip() or None,
-                        "camera_ip": ch.findtext(".//ipAddress")})
-        return out
-
-    def recorded_24h(self, channel: int) -> tuple[float, int, float]:
-        """(hours, segments, GB) of footage on this channel in the last 24h."""
-        end = dt.datetime.now()
-        start = end - dt.timedelta(hours=24)
-        fmt = lambda t: t.strftime("%Y-%m-%dT%H:%M:%SZ")
-        secs = size = 0.0
-        segs = 0
-        while True:
-            body = f"""<?xml version="1.0" encoding="UTF-8"?><CMSearchDescription>
-<searchID>{uuid.uuid4()}</searchID><trackList><trackID>{channel * 100 + 1}</trackID></trackList>
-<timeSpanList><timeSpan><startTime>{fmt(start)}</startTime><endTime>{fmt(end)}</endTime></timeSpan></timeSpanList>
-<maxResults>50</maxResults><searchResultPostion>{segs}</searchResultPostion>
-<metadataList><metadataDescriptor>//recordType.meta.std-cgi.com</metadataDescriptor></metadataList></CMSearchDescription>"""
-            r = requests.post(self.base + "/ISAPI/ContentMgmt/search", data=body, auth=self.auth, timeout=20)
-            if r.status_code != 200:
-                break
-            items = re.findall(r"<startTime>(.*?)</startTime>\s*<endTime>(.*?)</endTime>", r.text)
-            p = lambda s: dt.datetime.strptime(s[:19], "%Y-%m-%dT%H:%M:%S")
-            secs += sum(max(0.0, (p(b) - p(a)).total_seconds()) for a, b in items)
-            size += sum(int(x) for x in re.findall(r"size=(\d+)", r.text))
-            segs += len(items)
-            if "MORE" not in r.text or not items:
-                break
-        return secs / 3600, segs, size / 1e9
+def recorded_24h(rec: Recorder, channel: int) -> tuple[float, int, float]:
+    """(hours, segments, GB) of footage on this channel in the last 24h."""
+    end = dt.datetime.now()
+    segs = rec.search(channel, end - dt.timedelta(hours=24), end)
+    hours = sum(max(0.0, (s.end - s.start).total_seconds()) for s in segs) / 3600
+    return hours, len(segs), sum(s.size for s in segs) / 1e9
 
 
 def app_camera_ids() -> tuple[dict[str, str], dict[tuple[str, int], str]]:
@@ -142,7 +72,7 @@ def main() -> None:
     with psycopg.connect(os.environ["DATABASE_URL"]) as db:
         db.execute((Path(__file__).with_name("schema.sql")).read_text(encoding="utf-8"))
         for cfg in RECORDERS:
-            rec = Recorder(cfg)
+            rec = Recorder(cfg["host"], cfg["http_port"], cfg.get("cred_env", "HIK_DEFAULT"))
             model = rec.model()
             db.execute(
                 """INSERT INTO recorders (id, name, host, http_port, model, cred_env, accessible, notes)
@@ -159,7 +89,7 @@ def main() -> None:
                 continue
             chans = rec.channels()
             for ch in chans:
-                hours, segs, gb = rec.recorded_24h(ch["channel"])
+                hours, segs, gb = recorded_24h(rec, ch["channel"])
                 live_id = (by_ip.get(ch["camera_ip"]) if ch["camera_ip"]
                            else by_channel.get((cfg["host"], ch["channel"])))
                 db.execute(

@@ -10,3 +10,5 @@ opencv-python
 # tracing/ (camera registry + person tracing in Postgres/pgvector)
 psycopg[binary]
 requests
+boxmot  # re-ID weights/runtime; install with --no-deps (it pins an older opencv)
+claude-agent-sdk  # camera chat; needs the Claude Code CLI on PATH

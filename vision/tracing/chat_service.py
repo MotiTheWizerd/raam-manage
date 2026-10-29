@@ -405,7 +405,8 @@ def _render_frame(sighting_id: int) -> bytes | None:
     clip = _cached_segment(rec, key, seg)
     best = None
     for t, frame in frames_in_window(clip, seg, seen - dt.timedelta(seconds=0.5),
-                                     seen + dt.timedelta(seconds=0.5), 0.0, lambda m: None):
+                                     seen + dt.timedelta(seconds=0.5), 0.0, lambda m: None,
+                                     keyframes_only=False):
         gap = abs((t - seen).total_seconds())
         if best is None or gap < best[0]:
             best = (gap, frame)

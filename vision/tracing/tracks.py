@@ -23,7 +23,9 @@ from scipy.optimize import linear_sum_assignment
 from hik import load_env
 
 TZ = ZoneInfo("Asia/Jerusalem")
-MAX_GAP_S = 3.0  # unseen this long → the track is closed
+# Unseen this long → the track is closed. Indexing samples keyframes, ~2 s
+# apart on most recorders, so this survives one missed detection.
+MAX_GAP_S = 5.0
 MATCH_MAX_DIST = 0.30  # cosine distance; same person frame-to-frame is ~0.05–0.2
 # Spatial gate: a person moves at most this many of their own heights per
 # second (+ a fixed slack for detector jitter and partial occlusion).

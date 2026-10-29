@@ -73,16 +73,20 @@ def _file_length_s(container, stream) -> float | None:
 
 
 def frames_in_window(clip: Path, seg: Segment, start: dt.datetime, end: dt.datetime,
-                     interval_s: float, warn) -> Iterator[tuple[dt.datetime, np.ndarray]]:
+                     interval_s: float, warn,
+                     keyframes_only: bool = True) -> Iterator[tuple[dt.datetime, np.ndarray]]:
     """Yield (time, frame) about every `interval_s` of video inside [start, end).
 
-    Only KEYFRAMES are decoded (the decoder skips everything between them):
-    the recorders put one every ~1–2 s, about the rate we sample at anyway,
-    and decoding all 25 fps to keep 1 was nearly all of the indexing time.
-    PTS is counted from the stream's start_time, as OpenCV's POS_MSEC was."""
+    keyframes_only (indexing): the decoder skips everything between
+    keyframes — the recorders put one every ~1–2 s, about the rate we sample
+    at anyway, and decoding all 25 fps to keep 1 was wasted work. Pass False
+    to land on an exact moment (sightings indexed before this were on any
+    frame). PTS is counted from the stream's start_time, as OpenCV's
+    POS_MSEC was — checked frame-exact against it."""
     with av.open(str(clip)) as container:
         stream = container.streams.video[0]
-        stream.codec_context.skip_frame = "NONKEY"
+        if keyframes_only:
+            stream.codec_context.skip_frame = "NONKEY"
         stream.thread_type = "AUTO"
         length = _file_length_s(container, stream)
         if length:
@@ -114,7 +118,8 @@ def frames_in_window(clip: Path, seg: Segment, start: dt.datetime, end: dt.datet
                 return
             if pts < last_pts:  # small reorder jitter
                 continue
-            if last_key is not None and pts - last_key > 2 * interval_s and not wide_gop_warned:
+            if (keyframes_only and last_key is not None and pts - last_key > 2 * interval_s
+                    and not wide_gop_warned):
                 warn(f"keyframes {pts - last_key:.1f}s apart ({seg.start:%H:%M:%S}); sampling is sparser than asked")
                 wide_gop_warned = True
             last_key = last_pts = pts

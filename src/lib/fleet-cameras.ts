@@ -11,8 +11,8 @@ import type { CameraCreds } from "@/lib/gates";
 //
 // Three groups:
 //   network — Hikvision IP cameras reachable directly (ISAPI snapshot)
-//   dvr     — analog channels behind the .137 DVR (the supplier-yard boom
-//             camera 'רחבת ספקים' is analog channel 24 here)
+//   dvr     — channels behind the .137 DVR: analog 1-32 (the supplier-yard boom
+//             camera 'רחבת ספקים' is analog channel 24 here) + IP 33-40
 //   rtsp    — RTSP-only cameras (non-Hikvision "Easy-Rtsp" units, NVR channels,
 //             elevators). No ISAPI snapshot, so these are fetched as frames
 //             through the vision service (OpenCV) — see the `rtsp` field.
@@ -94,6 +94,17 @@ export const FLEET_CAMERAS: readonly FleetCameraDef[] = [
   { id: "dvr-30", name: "ערוץ DVR 30", group: "dvr", host: "10.0.0.137", user: "admin", pass: "Sami0207", path: "/ISAPI/Streaming/channels/3001/picture" },
   { id: "dvr-31", name: "ערוץ DVR 31", group: "dvr", host: "10.0.0.137", user: "admin", pass: "Sami0207", path: "/ISAPI/Streaming/channels/3101/picture" },
   { id: "dvr-32", name: "ערוץ DVR 32", group: "dvr", host: "10.0.0.137", user: "admin", pass: "Sami0207", path: "/ISAPI/Streaming/channels/3201/picture" },
+  // The DVR's IP channels: non-Hikvision cameras (.130 .131 .5 .4 .6 .3 .249
+  // .132) with no ISAPI of their own — reachable only through the DVR. Mostly
+  // parking. 41 (.210) and 42 (.161) were offline on 2026-10-30.
+  { id: "dvr-33", name: "ערוץ DVR 33", group: "dvr", host: "10.0.0.137", user: "admin", pass: "Sami0207", path: "/ISAPI/Streaming/channels/3301/picture" },
+  { id: "dvr-34", name: "ערוץ DVR 34", group: "dvr", host: "10.0.0.137", user: "admin", pass: "Sami0207", path: "/ISAPI/Streaming/channels/3401/picture" },
+  { id: "dvr-35", name: "ערוץ DVR 35", group: "dvr", host: "10.0.0.137", user: "admin", pass: "Sami0207", path: "/ISAPI/Streaming/channels/3501/picture" },
+  { id: "dvr-36", name: "ערוץ DVR 36", group: "dvr", host: "10.0.0.137", user: "admin", pass: "Sami0207", path: "/ISAPI/Streaming/channels/3601/picture" },
+  { id: "dvr-37", name: "ערוץ DVR 37", group: "dvr", host: "10.0.0.137", user: "admin", pass: "Sami0207", path: "/ISAPI/Streaming/channels/3701/picture" },
+  { id: "dvr-38", name: "ערוץ DVR 38", group: "dvr", host: "10.0.0.137", user: "admin", pass: "Sami0207", path: "/ISAPI/Streaming/channels/3801/picture" },
+  { id: "dvr-39", name: "ערוץ DVR 39", group: "dvr", host: "10.0.0.137", user: "admin", pass: "Sami0207", path: "/ISAPI/Streaming/channels/3901/picture" },
+  { id: "dvr-40", name: "ערוץ DVR 40", group: "dvr", host: "10.0.0.137", user: "admin", pass: "Sami0207", path: "/ISAPI/Streaming/channels/4001/picture" },
   // RTSP-only cameras (Easy-Rtsp brand, no auth) — fetched via the vision service.
   { id: "rtsp-180", name: "שער חשמלי (180)", group: "rtsp", host: "10.0.0.180", user: "", pass: "", rtsp: "/" },
   { id: "rtsp-140", name: "מבט חוץ (140)", group: "rtsp", host: "10.0.0.140", user: "", pass: "", rtsp: "/" },

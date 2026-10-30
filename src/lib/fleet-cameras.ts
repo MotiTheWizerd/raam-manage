@@ -9,14 +9,18 @@ import type { CameraCreds } from "@/lib/gates";
 // identify by eye in the cameras explorer and rename. Credentials stay
 // server-side — only id + name + group reach the browser.
 //
-// Three groups:
+// Groups:
 //   network — Hikvision IP cameras reachable directly (ISAPI snapshot)
 //   dvr     — channels behind the .137 DVR: analog 1-32 (the supplier-yard boom
 //             camera 'רחבת ספקים' is analog channel 24 here) + IP 33-40
-//   rtsp    — RTSP-only cameras (non-Hikvision "Easy-Rtsp" units, NVR channels,
-//             elevators). No ISAPI snapshot, so these are fetched as frames
-//             through the vision service (OpenCV) — see the `rtsp` field.
-export type FleetGroup = "network" | "dvr" | "rtsp";
+//   nvr     — channels behind the .100 NVR (web on :81) whose cameras don't
+//             speak ISAPI themselves (.141-.147: lobby + lift hall). Pictures
+//             come over the NVR's RTSP (its snapshot fails on most of them);
+//             motion over the NVR's own event stream.
+//   rtsp    — RTSP-only cameras (non-Hikvision "Easy-Rtsp" units). No ISAPI
+//             snapshot, so these are fetched as frames through the vision
+//             service (OpenCV) — see the `rtsp` field.
+export type FleetGroup = "network" | "dvr" | "nvr" | "rtsp";
 export type FleetCameraDef = CameraCreds & {
   id: string;
   name: string;
@@ -105,6 +109,14 @@ export const FLEET_CAMERAS: readonly FleetCameraDef[] = [
   { id: "dvr-38", name: "ערוץ DVR 38", group: "dvr", host: "10.0.0.137", user: "admin", pass: "Sami0207", path: "/ISAPI/Streaming/channels/3801/picture" },
   { id: "dvr-39", name: "ערוץ DVR 39", group: "dvr", host: "10.0.0.137", user: "admin", pass: "Sami0207", path: "/ISAPI/Streaming/channels/3901/picture" },
   { id: "dvr-40", name: "ערוץ DVR 40", group: "dvr", host: "10.0.0.137", user: "admin", pass: "Sami0207", path: "/ISAPI/Streaming/channels/4001/picture" },
+  // NVR .100 channels 25-31 (cameras .141-.147). Names from a live look, 2026-10-30.
+  { id: "nvr-25", name: "מבואת מעליות (141)", group: "nvr", host: "10.0.0.100:81", user: "admin", pass: "Sami0207", path: "/ISAPI/Streaming/channels/2501/picture", rtsp: "/Streaming/Channels/2501" },
+  { id: "nvr-26", name: "מבואת מעליות — יציאה (142)", group: "nvr", host: "10.0.0.100:81", user: "admin", pass: "Sami0207", path: "/ISAPI/Streaming/channels/2601/picture", rtsp: "/Streaming/Channels/2601" },
+  { id: "nvr-27", name: "לובי — ספה (143)", group: "nvr", host: "10.0.0.100:81", user: "admin", pass: "Sami0207", path: "/ISAPI/Streaming/channels/2701/picture", rtsp: "/Streaming/Channels/2701" },
+  { id: "nvr-28", name: "לובי — כניסה ודלפק (144)", group: "nvr", host: "10.0.0.100:81", user: "admin", pass: "Sami0207", path: "/ISAPI/Streaming/channels/2801/picture", rtsp: "/Streaming/Channels/2801" },
+  { id: "nvr-29", name: "לובי — ספה מלמעלה (145)", group: "nvr", host: "10.0.0.100:81", user: "admin", pass: "Sami0207", path: "/ISAPI/Streaming/channels/2901/picture", rtsp: "/Streaming/Channels/2901" },
+  { id: "nvr-30", name: "לובי — דלפק (146)", group: "nvr", host: "10.0.0.100:81", user: "admin", pass: "Sami0207", path: "/ISAPI/Streaming/channels/3001/picture", rtsp: "/Streaming/Channels/3001" },
+  { id: "nvr-31", name: "לובי — עמדת לוביסט (147)", group: "nvr", host: "10.0.0.100:81", user: "admin", pass: "Sami0207", path: "/ISAPI/Streaming/channels/3101/picture", rtsp: "/Streaming/Channels/3101" },
   // RTSP-only cameras (Easy-Rtsp brand, no auth) — fetched via the vision service.
   { id: "rtsp-180", name: "שער חשמלי (180)", group: "rtsp", host: "10.0.0.180", user: "", pass: "", rtsp: "/" },
   { id: "rtsp-140", name: "מבט חוץ (140)", group: "rtsp", host: "10.0.0.140", user: "", pass: "", rtsp: "/" },
@@ -123,5 +135,6 @@ export function fleetRtspUrl(cam: FleetCameraDef): string | null {
   const auth = cam.user
     ? `${encodeURIComponent(cam.user)}:${encodeURIComponent(cam.pass)}@`
     : "";
-  return `rtsp://${auth}${cam.host}:554${cam.rtsp}`;
+  // host may carry the web port (the NVR's "10.0.0.100:81"); RTSP is on 554.
+  return `rtsp://${auth}${cam.host.split(":")[0]}:554${cam.rtsp}`;
 }

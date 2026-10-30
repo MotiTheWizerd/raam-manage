@@ -44,6 +44,14 @@ export default async function CamerasPage() {
       })),
     },
     {
+      key: "nvr",
+      label: "ערוצי NVR",
+      cameras: FLEET_CAMERAS.filter((c) => c.group === "nvr").map((c) => ({
+        id: c.id,
+        name: c.name,
+      })),
+    },
+    {
       key: "rtsp",
       label: "מצלמות RTSP",
       cameras: FLEET_CAMERAS.filter((c) => c.group === "rtsp").map((c) => ({

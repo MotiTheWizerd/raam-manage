@@ -15,8 +15,8 @@ from detect import CAMERAS
 
 from .objects import check_objects
 from .raw_grabber import get_raw_grabber
-from .service import get_worker, running_workers
-from .settings import BOUNDARY
+from .service import get_named_worker, get_worker, running_workers
+from .settings import BOUNDARY, settings
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -45,6 +45,10 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/rtsp":
             self._serve_rtsp()
+            return
+
+        if path == "/frame":
+            self._serve_frame()
             return
 
         if path.startswith("/snapshot/"):
@@ -114,8 +118,49 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(jpeg)
 
+    def _serve_frame(self):
+        """Annotated JPEG from any RTSP stream — the app's /api/detect-frame
+        polls this server-side (camera credentials never reach a browser).
+
+        ?url=rtsp://...  the stream; ?fps=N caps its inference rate (the app asks
+        less for wall tiles); ?moving=1 draws only objects that move (parked
+        cars stay unmarked); ?after=<seq> waits for a frame newer than the one
+        the caller has (long-poll), and the reply's X-Frame-Seq is the next one.
+        """
+        qs = parse_qs(urlparse(self.path).query)
+        url = (qs.get("url") or [""])[0]
+        if not url.startswith("rtsp://"):
+            self._send_json(400, {"error": "url must be rtsp://"})
+            return
+        try:
+            fps = min(max(float((qs.get("fps") or [settings.max_infer_fps])[0]), 0.5), 25.0)
+            after = int((qs.get("after") or ["-1"])[0])
+        except ValueError:
+            self._send_json(400, {"error": "bad fps / after"})
+            return
+        moving = (qs.get("moving") or ["0"])[0] == "1"
+        worker = get_worker(url, fps, moving)
+        worker.ensure_running()
+        # Cold start = model load + RTSP open; after that a frame is due within
+        # one inference period, so a long wait means the camera stalled.
+        jpeg, seq = worker.wait_for_frame(
+            after, timeout=15.0 if worker.latest_jpeg is None else 5.0
+        )
+        if jpeg is None:
+            self._send_json(503, {"error": "no frame yet"})
+            return
+        self.close_connection = True
+        self.send_response(200)
+        self.send_header("Content-Type", "image/jpeg")
+        self.send_header("Content-Length", str(len(jpeg)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Frame-Seq", str(seq))
+        self.send_header("Connection", "close")
+        self.end_headers()
+        self.wfile.write(jpeg)
+
     def _serve_snapshot(self, cam: str):
-        worker = get_worker(cam)
+        worker = get_named_worker(cam)
         worker.touch()
         worker.ensure_running()
         # Cold first frame = model load + RTSP open; give it room.
@@ -134,7 +179,7 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(jpeg)
 
     def _serve_stream(self, cam: str):
-        worker = get_worker(cam)
+        worker = get_named_worker(cam)
         worker.touch()
         worker.ensure_running()
 
@@ -164,7 +209,7 @@ class Handler(BaseHTTPRequestHandler):
             pass  # viewer closed the tab — normal
 
     def _serve_detections(self, cam: str):
-        worker = get_worker(cam)
+        worker = get_named_worker(cam)
         worker.touch()
         worker.ensure_running()
         # Wait for a real frame so detections exist (cold start = model load +

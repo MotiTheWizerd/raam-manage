@@ -1,17 +1,21 @@
 """Vision detection service package.
 
 Serves live YOLO object-detection feeds over localhost HTTP so the Next app can
-embed them behind a "detection mode" toggle. Design for a CPU-only box: detection
-workers are LAZY — a camera only runs YOLO while someone is viewing its stream,
-and the worker auto-stops a few seconds after the last viewer disconnects.
+embed them behind a "detection mode" toggle. YOLO runs on the GPU when there is
+one. Detection workers are LAZY — a camera only runs YOLO while someone is
+viewing its stream, and the worker auto-stops a few seconds after the last
+viewer disconnects.
 
 Refactor of the original single-file server.py into single-responsibility modules
 (mirrors the vision/face/ package):
 
-    settings    — the one Settings object (model/stream/conf + perf knobs)
+    settings    — the one Settings object (model/stream/conf/device + perf knobs)
     detections  — pure YOLO-result -> structured detection dicts
-    worker      — per-camera grabber + inference threads (newest-frame, no lag)
-    service     — worker registry (composition root)
+    capture     — opening an RTSP stream (decoder threads)
+    worker      — per-stream grabber + inference threads (newest-frame, no lag)
+    raw_grabber — per-stream plain JPEGs, no detection
+    objects     — one-shot people/vehicles/animals check (motion-follow filter)
+    service     — worker registry by RTSP URL (composition root)
     server      — HTTP handler + routing
     cli         — argparse + thread budgeting + main()
 

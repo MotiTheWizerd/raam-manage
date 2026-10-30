@@ -30,21 +30,32 @@ _lock = threading.Lock()
 _model: YOLO | None = None
 
 
-def check_objects(jpeg: bytes) -> dict:
-    frame = cv2.imdecode(np.frombuffer(jpeg, np.uint8), cv2.IMREAD_COLOR)
-    if frame is None:
-        return {"ok": False, "error": "bad image"}
+def _predict(frame: np.ndarray):
     global _model
     with _lock:
         if _model is None:
             _model = YOLO(settings.model)
-        result = _model.predict(
+        return _model.predict(
             frame,
             imgsz=settings.imgsz,
             conf=MIN_CONF,
             classes=list(_CLASS_KIND),
+            device=settings.device,
             verbose=False,
         )[0]
+
+
+def warm_up() -> None:
+    """Load the model and run it once at startup: the first GPU inference takes
+    seconds, and motion.ts gives a check only 5 s."""
+    _predict(np.zeros((480, 640, 3), np.uint8))
+
+
+def check_objects(jpeg: bytes) -> dict:
+    frame = cv2.imdecode(np.frombuffer(jpeg, np.uint8), cv2.IMREAD_COLOR)
+    if frame is None:
+        return {"ok": False, "error": "bad image"}
+    result = _predict(frame)
     counts = {kind: 0 for kind in KINDS}
     # Vehicle boxes as [x1, y1, x2, y2] fractions of the frame, so the caller
     # can tell a parked car (same box as last check) from a moving one.

@@ -12,7 +12,12 @@ export function IntercomWall({ panels }: { panels: { camId: string; name: string
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
       {panels.map((p) => (
         <div key={p.camId} className="aspect-[16/10]">
-          <CameraTile camId={p.camId} title={p.name} footer={<DoorKey camId={p.camId} />} />
+          <CameraTile
+            camId={p.camId}
+            title={p.name}
+            footer={<DoorKey camId={p.camId} />}
+            detectLite
+          />
         </div>
       ))}
     </div>

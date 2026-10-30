@@ -4,21 +4,27 @@
     .venv/Scripts/python server.py --port 8089 --stream sub --conf 0.35
 
 Endpoints (all localhost-only):
+    GET /frame?url=&fps=&after=  annotated JPEG from any RTSP stream (long-poll);
+                          the app's /api/detect-frame proxies it for every camera
     GET /stream/<cam>     annotated MJPEG (multipart/x-mixed-replace) — for <img>
     GET /snapshot/<cam>   single annotated JPEG (latest frame)
     GET /detections/<cam> latest frame's detections as JSON
+    GET /rtsp?url=        plain JPEG from any RTSP stream (no detection)
+    POST /objects         people / vehicles / animals in one JPEG
     GET /healthz          liveness + which workers are running
 """
 
 from __future__ import annotations
 
 import argparse
+import threading
 from http.server import ThreadingHTTPServer
 
 import cv2
 
 from detect import CAMERAS
 
+from . import objects
 from .server import Handler
 from .settings import settings
 
@@ -30,17 +36,21 @@ def main() -> None:
     p.add_argument("--model", default=settings.model)
     p.add_argument("--stream", choices=["main", "sub"], default=settings.stream)
     p.add_argument("--conf", type=float, default=settings.conf)
+    p.add_argument("--device", default=None, help="cpu / cuda:0 (default: the GPU if usable)")
     args = p.parse_args()
     settings.model, settings.stream, settings.conf = args.model, args.stream, args.conf
 
     # CPU thread budgeting: give torch the physical cores for inference and keep
     # OpenCV's own parallelism small so frame decode/encode doesn't fight it.
     import torch
+    settings.device = args.device or ("cuda:0" if torch.cuda.is_available() else "cpu")
     torch.set_num_threads(settings.torch_threads)
     cv2.setNumThreads(settings.cv2_threads)
-    print(f"[vision] torch threads={settings.torch_threads} cv2 threads={settings.cv2_threads} "
+    print(f"[vision] device={settings.device} torch threads={settings.torch_threads} "
+          f"cv2 threads={settings.cv2_threads} decode threads={settings.decode_threads} "
           f"imgsz={settings.imgsz} max_infer_fps={settings.max_infer_fps}")
 
+    threading.Thread(target=objects.warm_up, name="warm-up", daemon=True).start()
     httpd = ThreadingHTTPServer((args.host, args.port), Handler)
     print(f"[vision] serving on http://{args.host}:{args.port}")
     print(f"[vision] cameras: {', '.join(sorted(CAMERAS))}")

@@ -19,12 +19,18 @@ export function CameraTile({
   onSelect,
   onExclude,
   footer,
+  autoDetect,
+  detectLite,
 }: {
   camId: string;
   title: string;
   onSelect?: () => void;
   onExclude?: () => void;
   footer?: ReactNode;
+  /** Object detection switched on from outside (the follow wall's button). */
+  autoDetect?: boolean;
+  /** One of several tiles: lighter detection (see CameraFeed). */
+  detectLite?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const { isFullscreen, toggle: toggleFullscreen } = useFullscreen(ref);
@@ -64,6 +70,8 @@ export function CameraTile({
         footer={footer}
         refreshMs={WALL_REFRESH_MS}
         fill
+        autoDetect={autoDetect}
+        detectLite={detectLite}
       />
     </div>
   );

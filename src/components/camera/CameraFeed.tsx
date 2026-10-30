@@ -2,15 +2,14 @@
 
 import { FunnelX, Maximize2, Minimize2, ScanEye, X } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
+import {
+  DETECT_STATUS_LABEL,
+  DetectView,
+  type DetectStatus,
+} from "@/components/camera/DetectView";
 import { cn } from "@/lib/cn";
 
 const REFRESH_MS = 400;
-
-// The local vision service (vision/server.py) that serves annotated MJPEG
-// detection feeds. Runs on the lobby PC alongside the app; override per-machine
-// with NEXT_PUBLIC_VISION_URL if the port ever changes.
-const VISION_URL =
-  process.env.NEXT_PUBLIC_VISION_URL ?? "http://127.0.0.1:8089";
 
 type Props = {
   camId: string;
@@ -31,12 +30,16 @@ type Props = {
   onDetectChange?: (detect: boolean) => void;
   /** Stretch the body to fill its container (the wall) instead of a fixed 16:9. */
   fill?: boolean;
+  /** Detection on from outside (the wall's global button); the tile's own toggle can still override it. */
+  autoDetect?: boolean;
+  /** A tile in a wall: lighter detection (sub stream, a few frames a second) unless fullscreen. */
+  detectLite?: boolean;
 };
 
 // The live camera panel: header controls (object-detection toggle, fullscreen,
-// optional close) + the body (auth-gated snapshot polling, or the annotated
-// MJPEG detection stream). Shared by the gate popup (GateLiveView) and the
-// cameras wall (CameraTile) so both windows stay identical as features grow.
+// optional close) + the body (auth-gated snapshot polling, or the object
+// detection frames). Shared by the gate popup (GateLiveView) and the cameras
+// wall (CameraTile) so both windows stay identical as features grow.
 export function CameraFeed({
   camId,
   title,
@@ -48,11 +51,23 @@ export function CameraFeed({
   refreshMs = REFRESH_MS,
   onDetectChange,
   fill = false,
+  autoDetect = false,
+  detectLite = false,
 }: Props) {
   const [src, setSrc] = useState<string | null>(null);
-  const [detect, setDetect] = useState(false);
-  const [detectStream, setDetectStream] = useState<string | null>(null);
-  const [detectError, setDetectError] = useState(false);
+  // The tile's own choice; null = follow autoDetect.
+  const [manualDetect, setManualDetect] = useState<boolean | null>(null);
+  const [prevAuto, setPrevAuto] = useState(autoDetect);
+  if (prevAuto !== autoDetect) {
+    // The global button flipped: it wins over a tile's own earlier choice.
+    setPrevAuto(autoDetect);
+    setManualDetect(null);
+  }
+  const detect = manualDetect ?? autoDetect;
+  const [detectStatus, setDetectStatus] = useState<DetectStatus>("starting");
+  // Boxes on screen. Until then (a camera's stream can take seconds to start)
+  // and after a failure, the plain live picture stays up.
+  const detectLive = detect && detectStatus === "live";
   const [docVisible, setDocVisible] = useState(true);
 
   // Pause snapshot polling while the tab is hidden — otherwise a wall of
@@ -65,9 +80,9 @@ export function CameraFeed({
   }, []);
 
   useEffect(() => {
-    // While detection mode is on we show the MJPEG stream instead, and while
-    // the tab is hidden we idle — either way, don't poll snapshots.
-    if (detect || !docVisible) return;
+    // While detection frames are showing we don't need snapshots, and while
+    // the tab is hidden we idle — either way, don't poll.
+    if (detectLive || !docVisible) return;
 
     let active = true;
     let timer: ReturnType<typeof setTimeout>;
@@ -95,20 +110,11 @@ export function CameraFeed({
       active = false;
       clearTimeout(timer);
     };
-  }, [camId, detect, docVisible, refreshMs]);
+  }, [camId, detectLive, docVisible, refreshMs]);
 
-  // Open / close the detection MJPEG stream as the toggle flips. The cache-bust
-  // token forces a fresh stream each time it's turned on (so re-opening revives
-  // an idled-out worker).
   useEffect(() => {
     onDetectChange?.(detect);
-    if (detect) {
-      setDetectError(false);
-      setDetectStream(`${VISION_URL}/stream/${camId}?t=${Date.now()}`);
-    } else {
-      setDetectStream(null);
-    }
-  }, [detect, camId, onDetectChange]);
+  }, [detect, onDetectChange]);
 
   return (
     <>
@@ -141,7 +147,7 @@ export function CameraFeed({
           )}
           <button
             type="button"
-            onClick={() => setDetect((d) => !d)}
+            onClick={() => setManualDetect(!detect)}
             aria-label={detect ? "כבה זיהוי אובייקטים" : "הפעל זיהוי אובייקטים"}
             title={detect ? "כבה זיהוי אובייקטים" : "הפעל זיהוי אובייקטים"}
             className={cn(
@@ -177,29 +183,34 @@ export function CameraFeed({
 
       <div
         className={cn(
-          "w-full bg-black",
+          "relative w-full bg-black",
           isFullscreen || fill ? "min-h-0 flex-1" : "aspect-video"
         )}
       >
-        {detect ? (
-          detectError ? (
-            <div className="flex h-full w-full flex-col items-center justify-center gap-1 px-4 text-center text-sm text-zinc-400">
-              <span>שירות הזיהוי אינו פעיל</span>
-              <span className="text-xs text-zinc-500">הפעל את vision/server.py</span>
-            </div>
-          ) : detectStream ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={detectStream}
-              alt={`זיהוי אובייקטים — ${title}`}
-              onError={() => setDetectError(true)}
-              className={cn(
-                "block h-full w-full",
-                isFullscreen || fill ? "object-contain" : "object-cover"
-              )}
-            />
-          ) : null
-        ) : src ? (
+        {detect && (
+          <DetectView
+            key={camId}
+            camId={camId}
+            title={title}
+            lite={detectLite && !isFullscreen}
+            paused={!docVisible}
+            contain={isFullscreen || fill}
+            onStatus={setDetectStatus}
+          />
+        )}
+        {detect && detectStatus !== "live" && (
+          <span
+            className={cn(
+              "absolute start-2 top-2 rounded-md px-2 py-0.5 text-xs",
+              detectStatus === "starting"
+                ? "bg-black/60 text-zinc-300"
+                : "bg-red-950/80 text-red-200"
+            )}
+          >
+            {DETECT_STATUS_LABEL[detectStatus]}
+          </span>
+        )}
+        {detectLive ? null : src ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={src}

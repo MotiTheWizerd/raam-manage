@@ -4,7 +4,8 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 
 import { buildDigest, fetchCameraSnapshot } from "@/lib/camera";
-import { FLEET_CAMERAS } from "@/lib/fleet-cameras";
+import { cameraRtspUrl, hikChannel } from "@/lib/camera-rtsp";
+import { FLEET_CAMERAS, getFleetCamera } from "@/lib/fleet-cameras";
 import { CAMERAS, type CameraCreds } from "@/lib/gates";
 import { INTERCOM_PANELS } from "@/lib/intercom";
 
@@ -66,6 +67,9 @@ const DEVICE_TARGETS: Record<string, MotionKind> = { human: "person", vehicle: "
 type MotionState = {
   started: boolean;
   tailing?: boolean;
+  // Hosts with a running listener — kept across dev hot-reloads, so a device
+  // added to the fleet starts listening without a server restart.
+  listening?: Set<string>;
   bursts: Map<string, Burst>;
   creds: Map<string, CameraCreds>;
   inFlight: number;
@@ -105,12 +109,6 @@ function vehicleMoved(id: string, boxes: Box[]): boolean {
   return boxes.some((b) => !prev.some((p) => iou(p, b) >= STILL_IOU));
 }
 
-// Channel number from a snapshot path (/ISAPI/Streaming/channels/2901/... -> 29).
-function channelOf(cam: CameraCreds): number {
-  const m = cam.path ? /channels\/(\d+)\d{2}\//.exec(cam.path) : null;
-  return m ? Number(m[1]) : 1;
-}
-
 // Group every ISAPI camera by device host. Curated cameras go first so a
 // shared channel (road = DVR ch29) reports under its curated id.
 function buildDevices(): Device[] {
@@ -121,15 +119,15 @@ function buildDevices(): Device[] {
       dev = { host: cam.host, user: cam.user, pass: cam.pass, channels: new Map() };
       byHost.set(cam.host, dev);
     }
-    const ch = channelOf(cam);
+    const ch = hikChannel(cam);
     if (!dev.channels.has(ch)) dev.channels.set(ch, id);
     state.creds.set(id, cam);
   };
   for (const cam of CAMERAS) add(cam.id, cam);
-  // Intercom panels show their RTSP video on cards but still answer ISAPI
-  // snapshots — good enough for the object check (their motion comes via the SDK log).
-  for (const cam of FLEET_CAMERAS)
-    if (cam.rtsp === undefined || panelIds.has(cam.host)) add(cam.id, cam);
+  // Everything on a Hikvision device: the ISAPI cams, the intercom panels
+  // (their motion comes via the SDK log) and the NVR channels (the NVR's own
+  // stream). Only the Easy-Rtsp units have no device to listen to.
+  for (const cam of FLEET_CAMERAS) if (cam.group !== "rtsp") add(cam.id, cam);
   return [...byHost.values()];
 }
 
@@ -244,13 +242,27 @@ async function tailIntercomLog() {
   }
 }
 
+// A camera whose device snapshot fails (most NVR channels): one frame of its
+// lighter sub stream over RTSP via the vision service. Only for cameras that
+// have an RTSP path — an unreachable ISAPI camera shouldn't tie up a check.
+async function rtspFrame(id: string): Promise<ArrayBuffer | null> {
+  if (getFleetCamera(id)?.rtsp === undefined) return null;
+  const url = cameraRtspUrl(id, "sub");
+  if (!url) return null;
+  const res = await fetch(`${VISION_INTERNAL_URL}/rtsp?url=${encodeURIComponent(url)}`, {
+    cache: "no-store",
+    signal: AbortSignal.timeout(15000),
+  });
+  return res.ok ? res.arrayBuffer() : null;
+}
+
 // Snapshot the moving camera and ask the vision service what's in it.
 async function checkObjects(id: string, burst: Burst) {
   const cam = state.creds.get(id);
   if (!cam) return;
   state.inFlight++;
   try {
-    const jpeg = await fetchCameraSnapshot(cam);
+    const jpeg = (await fetchCameraSnapshot(cam)) ?? (await rtspFrame(id));
     if (!jpeg) return;
     const res = await fetch(`${VISION_INTERNAL_URL}/objects`, {
       method: "POST",
@@ -316,17 +328,30 @@ async function listen(dev: Device) {
   }
 }
 
-// Start the listeners once, on first use.
+// This module instance has started whatever listeners were missing.
+let listenersChecked = false;
+
+// Start the listeners on first use — and, after a dev hot-reload, any device
+// that's new in the fleet since.
 export function ensureMotionListener() {
   // Separate flag: a listener from before the tail existed (dev hot-reload) still gets it.
   if (!state.tailing) {
     state.tailing = true;
     void tailIntercomLog();
   }
-  if (state.started) return;
+  if (listenersChecked) return;
+  listenersChecked = true;
+  // Started by an older module instance that kept no record of its hosts:
+  // only a server restart can add devices safely (no double listeners).
+  if (state.started && !state.listening) return;
   state.started = true;
-  // Panels answer alertStream with an empty reply; they report via the SDK log.
-  for (const dev of buildDevices()) if (!panelIds.has(dev.host)) void listen(dev);
+  const listening = (state.listening ??= new Set());
+  for (const dev of buildDevices()) {
+    // Panels answer alertStream with an empty reply; they report via the SDK log.
+    if (panelIds.has(dev.host) || listening.has(dev.host)) continue;
+    listening.add(dev.host);
+    void listen(dev);
+  }
 }
 
 export type ActiveMotion = {

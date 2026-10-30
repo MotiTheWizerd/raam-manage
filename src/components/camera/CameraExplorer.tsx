@@ -10,6 +10,7 @@ import {
   Pencil,
   PersonStanding,
   Plus,
+  ScanEye,
   X,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -229,6 +230,7 @@ export function CameraExplorer({
   const [editing, setEditing] = useState<SavedGroup | null>(null);
   const [follow, setFollow] = useState(true);
   const [filters, setFilters] = useState<MotionKind[]>(["person", "vehicle", "animal"]);
+  const [wallDetect, setWallDetect] = useState(true);
   const excluded = useMotionExcluded();
   const setExcluded = useSetMotionExcluded();
   const motion = useMotionFollow(follow, filters, excluded);
@@ -266,30 +268,50 @@ export function CameraExplorer({
         <PageHeading href="/cameras" fallback="מצלמות" className="text-xl" />
         <span className="text-sm text-foreground/50">({all.length})</span>
         {follow && (
-          <div
-            className="ms-auto flex items-center gap-1"
-            title="בחר מה להציג — בלי סינון מוצגת כל תנועה"
-          >
-            {MOTION_FILTERS.map(({ kind, label, Icon }) => {
-              const on = filters.includes(kind);
-              return (
-                <button
-                  key={kind}
-                  type="button"
-                  onClick={() => toggleFilter(kind)}
-                  aria-pressed={on}
-                  className={cn(
-                    "flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm transition-colors",
-                    on
-                      ? "border-emerald-500/40 bg-emerald-500/15 font-semibold text-emerald-700 dark:text-emerald-300"
-                      : "border-black/10 text-foreground/70 hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/5"
-                  )}
-                >
-                  <Icon className="size-4" />
-                  {label}
-                </button>
-              );
-            })}
+          <div className="ms-auto flex items-center gap-1">
+            <div
+              className="flex items-center gap-1"
+              title="בחר מה להציג — בלי סינון מוצגת כל תנועה"
+            >
+              {MOTION_FILTERS.map(({ kind, label, Icon }) => {
+                const on = filters.includes(kind);
+                return (
+                  <button
+                    key={kind}
+                    type="button"
+                    onClick={() => toggleFilter(kind)}
+                    aria-pressed={on}
+                    className={cn(
+                      "flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm transition-colors",
+                      on
+                        ? "border-emerald-500/40 bg-emerald-500/15 font-semibold text-emerald-700 dark:text-emerald-300"
+                        : "border-black/10 text-foreground/70 hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/5"
+                    )}
+                  >
+                    <Icon className="size-4" />
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+            <span className="mx-1 h-5 w-px bg-black/10 dark:bg-white/10" aria-hidden />
+            {/* Object detection on every tile in the wall — boxes make far-off
+                people and cars easy to spot. A tile's own eye button overrides. */}
+            <button
+              type="button"
+              onClick={() => setWallDetect((d) => !d)}
+              aria-pressed={wallDetect}
+              title="הצג זיהוי אובייקטים בכל המצלמות במעקב"
+              className={cn(
+                "flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm transition-colors",
+                wallDetect
+                  ? "border-emerald-500/40 bg-emerald-500/15 font-semibold text-emerald-700 dark:text-emerald-300"
+                  : "border-black/10 text-foreground/70 hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/5"
+              )}
+            >
+              <ScanEye className="size-4" />
+              זיהוי אובייקטים
+            </button>
           </div>
         )}
         <button
@@ -511,6 +533,8 @@ export function CameraExplorer({
                           camId={id}
                           title={nameOf(id)}
                           onExclude={() => setExcluded(id, true)}
+                          autoDetect={wallDetect}
+                          detectLite
                           footer={
                             <MotionInfo
                               info={motion.info.get(id)}
@@ -546,7 +570,12 @@ export function CameraExplorer({
                   }}
                 >
                   {activeGroup.cameras.map((cam) => (
-                    <CameraTile key={cam.id} camId={cam.id} title={cam.name} />
+                    <CameraTile
+                      key={cam.id}
+                      camId={cam.id}
+                      title={cam.name}
+                      detectLite={activeGroup.cameras.length > 1}
+                    />
                   ))}
                 </div>
               )

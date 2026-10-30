@@ -267,13 +267,43 @@ export function CameraExplorer({
         <Cctv size={22} aria-hidden="true" className="text-foreground/70" />
         <PageHeading href="/cameras" fallback="מצלמות" className="text-xl" />
         <span className="text-sm text-foreground/50">({all.length})</span>
-        {follow && (
-          <div className="ms-auto flex items-center gap-1">
-            <div
-              className="flex items-center gap-1"
-              title="בחר מה להציג — בלי סינון מוצגת כל תנועה"
-            >
-              {MOTION_FILTERS.map(({ kind, label, Icon }) => {
+        {/* The wall's controls as plain icons, right after the title: follow
+            first, then detection, then the object filters. Colour = on. */}
+        <div className="ms-3 flex items-center gap-0.5">
+          <button
+            type="button"
+            onClick={() => setFollow((f) => !f)}
+            aria-pressed={follow}
+            aria-label="מעקב תנועה"
+            title="מעקב תנועה"
+            className={cn(
+              "rounded-md p-1.5 transition-colors",
+              follow ? "text-red-500" : "text-foreground/40 hover:text-foreground/70"
+            )}
+          >
+            <Activity className={cn("size-5", follow && "animate-pulse")} />
+          </button>
+          {follow && (
+            <>
+              {/* Object detection on every tile in the wall — boxes make far-off
+                  people and cars easy to spot. A tile's own eye button overrides. */}
+              <button
+                type="button"
+                onClick={() => setWallDetect((d) => !d)}
+                aria-pressed={wallDetect}
+                aria-label="זיהוי אובייקטים"
+                title="זיהוי אובייקטים בכל המצלמות במעקב"
+                className={cn(
+                  "rounded-md p-1.5 transition-colors",
+                  wallDetect
+                    ? "text-emerald-600 dark:text-emerald-400"
+                    : "text-foreground/40 hover:text-foreground/70"
+                )}
+              >
+                <ScanEye className="size-5" />
+              </button>
+              <span className="mx-1 h-5 w-px bg-black/10 dark:bg-white/10" aria-hidden />
+              {MOTION_FILTERS.toReversed().map(({ kind, label, Icon }) => {
                 const on = filters.includes(kind);
                 return (
                   <button
@@ -281,54 +311,22 @@ export function CameraExplorer({
                     type="button"
                     onClick={() => toggleFilter(kind)}
                     aria-pressed={on}
+                    aria-label={label}
+                    title={`${label} — בלי סינון מוצגת כל תנועה`}
                     className={cn(
-                      "flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm transition-colors",
+                      "rounded-md p-1.5 transition-colors",
                       on
-                        ? "border-emerald-500/40 bg-emerald-500/15 font-semibold text-emerald-700 dark:text-emerald-300"
-                        : "border-black/10 text-foreground/70 hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/5"
+                        ? "text-emerald-600 dark:text-emerald-400"
+                        : "text-foreground/40 hover:text-foreground/70"
                     )}
                   >
-                    <Icon className="size-4" />
-                    {label}
+                    <Icon className="size-5" />
                   </button>
                 );
               })}
-            </div>
-            <span className="mx-1 h-5 w-px bg-black/10 dark:bg-white/10" aria-hidden />
-            {/* Object detection on every tile in the wall — boxes make far-off
-                people and cars easy to spot. A tile's own eye button overrides. */}
-            <button
-              type="button"
-              onClick={() => setWallDetect((d) => !d)}
-              aria-pressed={wallDetect}
-              title="הצג זיהוי אובייקטים בכל המצלמות במעקב"
-              className={cn(
-                "flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm transition-colors",
-                wallDetect
-                  ? "border-emerald-500/40 bg-emerald-500/15 font-semibold text-emerald-700 dark:text-emerald-300"
-                  : "border-black/10 text-foreground/70 hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/5"
-              )}
-            >
-              <ScanEye className="size-4" />
-              זיהוי אובייקטים
-            </button>
-          </div>
-        )}
-        <button
-          type="button"
-          onClick={() => setFollow((f) => !f)}
-          aria-pressed={follow}
-          className={cn(
-            !follow && "ms-auto",
-            "flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm transition-colors",
-            follow
-              ? "border-red-500/40 bg-red-500/15 font-semibold text-red-600 dark:text-red-300"
-              : "border-black/10 text-foreground/70 hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/5"
+            </>
           )}
-        >
-          <Activity className={cn("size-4", follow && "animate-pulse")} />
-          מעקב תנועה
-        </button>
+        </div>
       </div>
 
       {all.length === 0 ? (

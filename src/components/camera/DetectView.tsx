@@ -49,7 +49,7 @@ export function DetectView({
   lite: boolean;
   /** Tab hidden — stop asking (the camera's worker idles out on its own). */
   paused: boolean;
-  /** Show the whole frame (spotlight / fullscreen) rather than crop to fill. */
+  /** Show the whole frame stretched to the box (spotlight / wall / fullscreen) rather than crop to fill. */
   contain: boolean;
   onStatus: (status: DetectStatus) => void;
 }) {
@@ -120,7 +120,7 @@ export function DetectView({
       src={src}
       alt={`זיהוי אובייקטים — ${title}`}
       onLoad={() => onShown(src)}
-      className={cn("block h-full w-full", contain ? "object-contain" : "object-cover")}
+      className={cn("block h-full w-full", contain ? "object-fill" : "object-cover")}
     />
   );
 }

@@ -215,11 +215,12 @@ export function CameraFeed({
           <img
             src={src}
             alt={`מצלמת ${title}`}
-            // Spotlight (fill) and fullscreen show the WHOLE frame (contain) so
-            // nothing is cropped; fixed thumbnails crop to fill (cover).
+            // Spotlight / wall (fill) and fullscreen show the WHOLE frame
+            // stretched to the box — no black bars, nothing cropped; fixed
+            // thumbnails crop to fill (cover).
             className={cn(
               "block h-full w-full",
-              isFullscreen || fill ? "object-contain" : "object-cover"
+              isFullscreen || fill ? "object-fill" : "object-cover"
             )}
           />
         ) : (

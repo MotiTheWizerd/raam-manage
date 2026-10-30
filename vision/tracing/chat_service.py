@@ -17,6 +17,7 @@ import contextlib
 import datetime as dt
 import json
 import os
+import re
 import sys
 import time
 import uuid
@@ -24,8 +25,10 @@ from pathlib import Path
 from typing import Any
 
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from zoneinfo import ZoneInfo
 
+import av
 import cv2
 import psycopg
 import uvicorn
@@ -375,8 +378,12 @@ def _cached_segment(rec: Recorder, key: str, seg) -> Path:
             for old in files:  # oldest first, never the one just fetched
                 if total <= SEGMENT_CACHE_BYTES or old == path:
                     break
-                total -= old.stat().st_size
-                old.unlink(missing_ok=True)
+                size = old.stat().st_size
+                try:
+                    old.unlink(missing_ok=True)
+                    total -= size
+                except PermissionError:  # Windows: a player is still streaming it
+                    pass
         path.touch()
     return path
 
@@ -441,6 +448,162 @@ async def frame(request: Request):
     return Response(jpeg, media_type="image/jpeg")
 
 
+# ───────────────────────── recordings ─────────────────────────
+# The הקלטות page's timeline: which stretches each camera recorded inside a
+# window. One recording search per camera, a few in parallel; every search is
+# audited like the chat's tools.
+
+RECORDINGS_MAX_CAMERAS = 16
+RECORDINGS_MAX_SPAN = dt.timedelta(hours=24)
+
+
+def _recorded_spans(rec: Recorder, channel: int, start: dt.datetime, end: dt.datetime) -> list[dict]:
+    spans: list[list[dt.datetime]] = []
+    for s in sorted(rec.search(channel, start, end), key=lambda s: s.start):
+        a, b = max(s.start, start), min(s.end, end)  # some recorders don't clip to the window
+        if b <= a:
+            continue
+        if spans and a <= spans[-1][1] + dt.timedelta(seconds=1):  # one file can be listed in pieces
+            spans[-1][1] = max(spans[-1][1], b)
+        else:
+            spans.append([a, b])
+    return [{"start": a.isoformat(timespec="seconds"), "end": b.isoformat(timespec="seconds")} for a, b in spans]
+
+
+def _search_recordings(cam_ids: list[str], start: dt.datetime, end: dt.datetime) -> dict:
+    with _db() as db:
+        rows = db.execute(
+            """SELECT c.id, c.channel, r.host, r.http_port, r.cred_env
+                 FROM cameras c JOIN recorders r ON r.id = c.recorder_id
+                WHERE c.id = ANY(%s) AND r.accessible""",
+            (cam_ids,),
+        ).fetchall()
+    found: dict[str, list[dict]] = {}
+    errors: dict[str, str] = {cid: "unknown camera" for cid in set(cam_ids) - {r[0] for r in rows}}
+
+    def one(row):
+        cid, channel, host, port, cred_env = row
+        try:
+            found[cid] = _recorded_spans(Recorder(host, port, cred_env), channel, start, end)
+        except Exception as e:  # recorder unreachable, …
+            errors[cid] = f"{type(e).__name__}: {e}"
+
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        list(pool.map(one, rows))
+    return {"cameras": found, "errors": errors}
+
+
+async def recordings(request: Request):
+    q = request.query_params
+    cam_ids = [c for c in q.get("cams", "").split(",") if c][:RECORDINGS_MAX_CAMERAS]
+    try:  # naive building-local times, as the recorders keep them
+        start, end = dt.datetime.fromisoformat(q.get("from", "")), dt.datetime.fromisoformat(q.get("to", ""))
+    except ValueError:
+        return JSONResponse({"error": "bad time"}, status_code=400)
+    if not cam_ids or not start < end <= start + RECORDINGS_MAX_SPAN:
+        return JSONResponse({"error": "bad window"}, status_code=400)
+    args = {"query": q.get("q", ""), "cameras": cam_ids, "from": start.isoformat(), "to": end.isoformat()}
+    await asyncio.to_thread(_audit, q.get("user"), "recordings", "recordings_search", args)
+    return JSONResponse(await asyncio.to_thread(_search_recordings, cam_ids, start, end))
+
+
+# Playback: the recording FILE holding a moment, downloaded whole (the
+# recorders ignore both a narrowed time and an HTTP Range) into the segment
+# cache, then remuxed once to an MP4 the browser plays and seeks in — no
+# re-encode, the H.264/H.265 stream is copied as is. Audio (G.711) is dropped:
+# browsers can't play it in MP4.
+
+def _web_mp4(raw: Path | None, dest: Path) -> float:
+    """Remux a recorder download to a browser MP4 (unless already done); returns its duration in seconds."""
+    if not dest.exists():
+        if raw is None:
+            raise FileNotFoundError(f"{dest.name} was evicted; play it again")
+        tmp = dest.with_suffix(".part")
+        with av.open(str(raw)) as src, av.open(str(tmp), "w", format="mp4",
+                                               options={"movflags": "+faststart"}) as out:
+            iv = src.streams.video[0]
+            ov = out.add_stream_from_template(iv)
+            if iv.codec_context.name == "hevc":
+                ov.codec_tag = "hvc1"  # Chrome/Edge want hvc1, PyAV writes hev1
+            first = None
+            for pkt in src.demux(iv):
+                if pkt.dts is None or pkt.pts is None:
+                    continue
+                if first is None:
+                    if not pkt.is_keyframe:
+                        continue
+                    first = pkt.dts
+                pkt.dts -= first
+                pkt.pts -= first
+                pkt.stream = ov
+                out.mux(pkt)
+        tmp.replace(dest)
+    dest.touch()
+    with av.open(str(dest)) as c:
+        return c.duration / 1e6 if c.duration else 0.0
+
+
+def _clip(cam_id: str, at: dt.datetime) -> dict | None:
+    with _db() as db:
+        row = db.execute(
+            """SELECT c.channel, r.host, r.http_port, r.cred_env
+                 FROM cameras c JOIN recorders r ON r.id = c.recorder_id
+                WHERE c.id = %s AND r.accessible""",
+            (cam_id,),
+        ).fetchone()
+    if not row:
+        return None
+    channel, host, port, cred_env = row
+    rec = Recorder(host, port, cred_env)
+    # The file holding `at`, or — clicked between recordings — the next one.
+    segs, _ = rec.segments_covering(channel, at - dt.timedelta(seconds=5), at + dt.timedelta(minutes=30))
+    seg = next((s for s in segs if s.end > at), None)
+    if seg is None:
+        return None
+    key = f"{cam_id}_{_file_name(seg.uri) or seg.start.strftime('%Y%m%d%H%M%S')}"
+    web = SEGMENT_CACHE / f"{key}.web.mp4"
+    raw = None if web.exists() else _cached_segment(rec, key, seg)
+    with _segment_locks_guard:
+        lock = _segment_locks.setdefault(key, threading.Lock())
+    with lock:
+        duration = _web_mp4(raw, web)
+        if raw is not None:
+            try:  # the MP4 has it all; don't hold a big file twice (frames re-fetch if needed)
+                raw.unlink(missing_ok=True)
+            except PermissionError:  # Windows: the frame renderer is reading it
+                pass
+    # A listed start is when recording was triggered; motion files hold some
+    # pre-record before it, so the file's real start is anchored on its end.
+    start = seg.end - dt.timedelta(seconds=duration)
+    return {"file": key, "start": start.isoformat(timespec="milliseconds"),
+            "end": seg.end.isoformat(timespec="seconds")}
+
+
+async def recording_clip(request: Request):
+    q = request.query_params
+    cam_id = q.get("cam", "")
+    try:
+        at = dt.datetime.fromisoformat(q.get("at", ""))
+    except ValueError:
+        return JSONResponse({"error": "bad time"}, status_code=400)
+    await asyncio.to_thread(_audit, q.get("user"), "recordings", "recordings_play", {"camera": cam_id, "at": at.isoformat()})
+    try:
+        clip = await asyncio.to_thread(_clip, cam_id, at)
+    except Exception as e:  # recorder unreachable, file gone from the recorder, …
+        return JSONResponse({"error": f"{type(e).__name__}: {e}"}, status_code=502)
+    if clip is None:
+        return JSONResponse({"error": "no recording"}, status_code=404)
+    return JSONResponse(clip)
+
+
+async def recording_file(request: Request):
+    key = request.query_params.get("f", "")
+    path = SEGMENT_CACHE / f"{key}.web.mp4"
+    if not re.fullmatch(r"[\w.-]+", key) or not path.exists():
+        return JSONResponse({"error": "not found"}, status_code=404)
+    return FileResponse(path, media_type="video/mp4")  # answers Range requests (seeking)
+
+
 async def health(request: Request):
     return JSONResponse({"ok": True, "sessions": len(SESSIONS), "model": MODEL})
 
@@ -456,7 +619,8 @@ async def lifespan(app):
 
 load_env()
 app = Starlette(routes=[Route("/chat", chat, methods=["POST"]), Route("/frame", frame),
-                        Route("/health", health)],
+                        Route("/recordings", recordings), Route("/recordings/clip", recording_clip),
+                        Route("/recordings/file", recording_file), Route("/health", health)],
                 lifespan=lifespan)
 
 if __name__ == "__main__":

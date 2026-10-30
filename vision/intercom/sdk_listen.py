@@ -8,7 +8,8 @@ Read-only: nothing on the panels is changed.
 
 Run from vision/:  .venv/Scripts/python.exe intercom/sdk_listen.py
 SDK DLLs (64-bit, copied from the iVMS install) live in data/hik-sdk/ (gitignored).
-Events go to stdout and logs/intercom-events.jsonl.
+Events go to logs/intercom-events.jsonl (src/lib/motion.ts tails it); the rarer
+non-motion ones are also printed. Runs under pm2 as raam-intercom-listener.
 """
 
 import ctypes as C
@@ -23,6 +24,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 SDK = ROOT / "data" / "hik-sdk"
 LOG = ROOT / "logs" / "intercom-events.jsonl"
+# The elevator recorder alone sends ~1 motion alarm a second, so the log is
+# capped: past this size it moves to intercom-events.1.jsonl and starts over.
+LOG_MAX_BYTES = 20 * 1024 * 1024
 
 PANELS = ["10.0.0.70", "10.0.0.71", "10.0.0.72", "10.0.0.73", "10.0.0.173", "10.0.0.174"]
 PORT = 8000
@@ -94,8 +98,13 @@ def describe(cmd: int, buf: int, size: int) -> dict:
     if cmd == 0x4000 and len(raw) >= 232:
         # NET_DVR_ALARMINFO_V30: dwAlarmType (3 = motion), ... byChannel[64] at
         # offset 168: flag i set = channel i+1 moved (33+ = IP channels).
-        out["type"] = int.from_bytes(raw[0:4], "little")
-        out["channels"] = [i + 1 for i in range(64) if raw[168 + i]]
+        # These are the bulk of the log and fully decoded, so the raw dump is
+        # cut to the alarm-type bytes (what older motion.ts builds match on).
+        return {
+            "hex": raw[:4].hex(" "),
+            "type": int.from_bytes(raw[0:4], "little"),
+            "channels": [i + 1 for i in range(64) if raw[168 + i]],
+        }
     if cmd == 0x6009 and len(raw) >= 12:
         # NET_DVR_ALARM_ISAPI_INFO: char* pAlarmData; DWORD dwAlarmDataLen; ...
         ptr = int.from_bytes(raw[0:8], "little")
@@ -118,7 +127,10 @@ def on_message(cmd, alarmer, info, size, _user):
             **describe(cmd, info, size),
         }
         line = json.dumps(ev, ensure_ascii=False)
-        print(line, flush=True)
+        if cmd != 0x4000:
+            print(line, flush=True)
+        if LOG.exists() and LOG.stat().st_size > LOG_MAX_BYTES:
+            LOG.replace(LOG.with_suffix(".1.jsonl"))
         with LOG.open("a", encoding="utf-8") as f:
             f.write(line + "\n")
     except Exception as e:  # never let an exception cross into the SDK thread

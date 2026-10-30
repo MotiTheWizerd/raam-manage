@@ -242,7 +242,8 @@ async function tailIntercomLog() {
   for (;;) {
     try {
       const { size } = await fs.stat(INTERCOM_LOG);
-      if (pos < 0 || size < pos) pos = size; // first look, or the log was reset
+      if (pos < 0) pos = size; // first look
+      else if (size < pos) pos = 0; // the listener rotated the log — read the new one
       if (size > pos) {
         const fh = await fs.open(INTERCOM_LOG, "r");
         try {

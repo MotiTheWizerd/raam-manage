@@ -106,5 +106,24 @@ module.exports = {
       merge_logs: true,
       time: true,
     },
+    {
+      // Hik SDK listener (vision/intercom/sdk_listen.py) — arms the 6 intercom
+      // panels and the elevator recorder and appends their events to
+      // logs/intercom-events.jsonl. It's the only motion source for those 12
+      // follow-wall cameras (motion.ts tails the log). Listen-only.
+      name: "raam-intercom-listener",
+      script: path.join("intercom", "sdk_listen.py"),
+      interpreter: path.join(__dirname, "vision", ".venv", "Scripts", "pythonw.exe"),
+      interpreter_args: "-u",
+      cwd: path.join(__dirname, "vision"),
+      exec_mode: "fork",
+      instances: 1,
+      autorestart: true,
+      max_memory_restart: "300M",
+      out_file: path.join(__dirname, "logs", "pm2-intercom-out.log"),
+      error_file: path.join(__dirname, "logs", "pm2-intercom-error.log"),
+      merge_logs: true,
+      time: true,
+    },
   ],
 };

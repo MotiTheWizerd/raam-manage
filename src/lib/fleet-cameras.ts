@@ -29,10 +29,10 @@ export type FleetCameraDef = CameraCreds & {
 };
 
 export const FLEET_CAMERAS: readonly FleetCameraDef[] = [
-  { id: "net-70", name: "עמדת חוץ (70)", group: "network", host: "10.0.0.70", user: "admin", pass: "Sami0207" },
-  { id: "net-71", name: "עמדת חוץ (71)", group: "network", host: "10.0.0.71", user: "admin", pass: "Sami0207" },
-  { id: "net-72", name: "עמדת חוץ (72)", group: "network", host: "10.0.0.72", user: "admin", pass: "Sami0207" },
-  { id: "net-73", name: "עמדת חוץ (73)", group: "network", host: "10.0.0.73", user: "admin", pass: "Sami0207" },
+  { id: "net-70", name: "עמדת חוץ (70)", group: "network", host: "10.0.0.70", user: "admin", pass: "Sami0207", rtsp: "/Streaming/Channels/101" },
+  { id: "net-71", name: "עמדת חוץ (71)", group: "network", host: "10.0.0.71", user: "admin", pass: "Sami0207", rtsp: "/Streaming/Channels/101" },
+  { id: "net-72", name: "עמדת חוץ (72)", group: "network", host: "10.0.0.72", user: "admin", pass: "Sami0207", rtsp: "/Streaming/Channels/101" },
+  { id: "net-73", name: "עמדת חוץ (73)", group: "network", host: "10.0.0.73", user: "admin", pass: "Sami0207", rtsp: "/Streaming/Channels/101" },
   { id: "net-101", name: "מצלמת רשת (101)", group: "network", host: "10.0.0.101", user: "admin", pass: "Sami0207" },
   { id: "net-102", name: "מצלמת רשת (102)", group: "network", host: "10.0.0.102", user: "admin", pass: "Sami0207" },
   { id: "net-104", name: "חצר אחורית (104)", group: "network", host: "10.0.0.104", user: "admin", pass: "Sami0207" },
@@ -60,8 +60,8 @@ export const FLEET_CAMERAS: readonly FleetCameraDef[] = [
   { id: "net-159", name: "מינוס 1 (159)", group: "network", host: "10.0.0.159", user: "admin", pass: "Sami0207" },
   { id: "net-168", name: "מינוס 1 (168)", group: "network", host: "10.0.0.168", user: "admin", pass: "Sami0207" },
   { id: "net-169", name: "מינוס 1 (169)", group: "network", host: "10.0.0.169", user: "admin", pass: "Sami0207" },
-  { id: "net-173", name: "עמדת חוץ (173)", group: "network", host: "10.0.0.173", user: "admin", pass: "Sami0207" },
-  { id: "net-174", name: "עמדת חוץ (174)", group: "network", host: "10.0.0.174", user: "admin", pass: "Sami0207" },
+  { id: "net-173", name: "עמדת חוץ (173)", group: "network", host: "10.0.0.173", user: "admin", pass: "Sami0207", rtsp: "/Streaming/Channels/101" },
+  { id: "net-174", name: "עמדת חוץ (174)", group: "network", host: "10.0.0.174", user: "admin", pass: "Sami0207", rtsp: "/Streaming/Channels/101" },
   { id: "dvr-1", name: "ערוץ DVR 1", group: "dvr", host: "10.0.0.137", user: "admin", pass: "Sami0207", path: "/ISAPI/Streaming/channels/101/picture" },
   { id: "dvr-2", name: "ערוץ DVR 2", group: "dvr", host: "10.0.0.137", user: "admin", pass: "Sami0207", path: "/ISAPI/Streaming/channels/201/picture" },
   { id: "dvr-3", name: "ערוץ DVR 3", group: "dvr", host: "10.0.0.137", user: "admin", pass: "Sami0207", path: "/ISAPI/Streaming/channels/301/picture" },

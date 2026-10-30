@@ -2,6 +2,9 @@ import { listCameraGroups } from "@/app/cameras/actions";
 import { CameraExplorer, type CameraGroup } from "@/components/camera/CameraExplorer";
 import { FLEET_CAMERAS } from "@/lib/fleet-cameras";
 import { CAMERAS } from "@/lib/gates";
+import { INTERCOM_PANELS } from "@/lib/intercom";
+
+const intercomIds = new Set(INTERCOM_PANELS.map((p) => p.camId));
 
 export const dynamic = "force-dynamic";
 
@@ -19,12 +22,18 @@ export default async function CamerasPage() {
       cameras: CAMERAS.map((cam) => ({ id: cam.id, name: cam.name })),
     },
     {
+      // The door intercom panels, under their door names (they're also in the
+      // fleet as "עמדת חוץ (N)" network cams, so they're left out of that group).
+      key: "intercom",
+      label: "אינטרקום",
+      cameras: INTERCOM_PANELS.map((p) => ({ id: p.camId, name: p.name })),
+    },
+    {
       key: "network",
       label: "מצלמות רשת",
-      cameras: FLEET_CAMERAS.filter((c) => c.group === "network").map((c) => ({
-        id: c.id,
-        name: c.name,
-      })),
+      cameras: FLEET_CAMERAS.filter((c) => c.group === "network" && !intercomIds.has(c.id)).map(
+        (c) => ({ id: c.id, name: c.name })
+      ),
     },
     {
       key: "dvr",

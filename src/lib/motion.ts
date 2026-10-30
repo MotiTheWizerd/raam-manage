@@ -1,8 +1,12 @@
 import "server-only";
 
+import { promises as fs } from "node:fs";
+import path from "node:path";
+
 import { buildDigest, fetchCameraSnapshot } from "@/lib/camera";
 import { FLEET_CAMERAS } from "@/lib/fleet-cameras";
 import { CAMERAS, type CameraCreds } from "@/lib/gates";
+import { INTERCOM_PANELS } from "@/lib/intercom";
 
 // Live motion map of the building, fed by the cameras' OWN motion detection.
 //
@@ -53,6 +57,7 @@ type Burst = {
   deviceSeenAt: Partial<Record<MotionKind, number>>;
   description: string | null; // eventDescription, e.g. "Motion alarm"
   channelName: string | null; // the camera's own name, when it sends one
+  holdMs: number; // extra time it stays active after its last pulse
 };
 
 // The DVR's AcuSense motion reports what it saw (<targetType>human</targetType>).
@@ -60,6 +65,7 @@ const DEVICE_TARGETS: Record<string, MotionKind> = { human: "person", vehicle: "
 
 type MotionState = {
   started: boolean;
+  tailing?: boolean;
   bursts: Map<string, Burst>;
   creds: Map<string, CameraCreds>;
   inFlight: number;
@@ -120,7 +126,10 @@ function buildDevices(): Device[] {
     state.creds.set(id, cam);
   };
   for (const cam of CAMERAS) add(cam.id, cam);
-  for (const cam of FLEET_CAMERAS) if (cam.rtsp === undefined) add(cam.id, cam);
+  // Intercom panels show their RTSP video on cards but still answer ISAPI
+  // snapshots — good enough for the object check (their motion comes via the SDK log).
+  for (const cam of FLEET_CAMERAS)
+    if (cam.rtsp === undefined || panelIds.has(cam.host)) add(cam.id, cam);
   return [...byHost.values()];
 }
 
@@ -135,6 +144,22 @@ function onAlert(dev: Device, xml: string) {
   const id =
     dev.channels.get(ch) ?? (dev.channels.size === 1 ? [...dev.channels.values()][0] : null);
   if (!id) return;
+  const burst = recordMotion(id, 0);
+  burst.description = tag(xml, "eventDescription") ?? burst.description;
+  burst.channelName = tag(xml, "channelName") ?? burst.channelName;
+  // Trust the device's own classification right away: our snapshot check often
+  // misses people on the DVR's dark analog feeds at night.
+  const now = Date.now();
+  for (const t of (tag(xml, "targetType") ?? "").split(",")) {
+    const kind = DEVICE_TARGETS[t.trim()];
+    if (kind) burst.seenAt[kind] = burst.deviceSeenAt[kind] = now;
+  }
+  maybeCheck(id, burst);
+}
+
+// One motion pulse for a camera: extend its burst or start a new one. `holdMs`
+// keeps it active that much longer than the usual window (sparse reporters).
+function recordMotion(id: string, holdMs: number): Burst {
   const now = Date.now();
   let burst = state.bursts.get(id);
   // A gap longer than a few seconds starts a new burst.
@@ -151,20 +176,71 @@ function onAlert(dev: Device, xml: string) {
       deviceSeenAt: {},
       description: null,
       channelName: null,
+      holdMs: 0,
     };
     state.bursts.set(id, burst);
   }
-  burst.description = tag(xml, "eventDescription") ?? burst.description;
-  burst.channelName = tag(xml, "channelName") ?? burst.channelName;
-  // Trust the device's own classification right away: our snapshot check often
-  // misses people on the DVR's dark analog feeds at night.
-  for (const t of (tag(xml, "targetType") ?? "").split(",")) {
-    const kind = DEVICE_TARGETS[t.trim()];
-    if (kind) burst.seenAt[kind] = burst.deviceSeenAt[kind] = now;
-  }
+  burst.holdMs = holdMs;
+  return burst;
+}
+
+function maybeCheck(id: string, burst: Burst) {
+  const now = Date.now();
   if (now - burst.checkedAt >= CHECK_EVERY_MS && state.inFlight < MAX_IN_FLIGHT) {
     burst.checkedAt = now;
     void checkObjects(id, burst);
+  }
+}
+
+// The door intercom panels don't stream alertStream; their motion arrives over
+// Hik's SDK, which vision/intercom/sdk_listen.py arms and appends to a JSONL log.
+// We tail that log: COMM_ALARM_V30 (0x4000) with dwAlarmType 3 = motion. The
+// panels pulse every ~4s while something moves, so each pulse is held a bit
+// longer than the normal window to keep the tile from flickering.
+const INTERCOM_LOG = path.join(process.cwd(), "logs", "intercom-events.jsonl");
+const PANEL_HOLD_MS = 4000;
+const panelIds = new Map(INTERCOM_PANELS.map((p) => [p.host, p.camId]));
+
+function onPanelEvent(line: string) {
+  let ev: { panel?: string; cmd?: string; hex?: string };
+  try {
+    ev = JSON.parse(line);
+  } catch {
+    return;
+  }
+  if (ev.cmd !== "0x4000" || !ev.hex?.startsWith("03 00 00 00")) return;
+  const id = panelIds.get(ev.panel ?? "");
+  if (!id) return;
+  const burst = recordMotion(id, PANEL_HOLD_MS);
+  burst.description ??= "Motion alarm";
+  maybeCheck(id, burst);
+}
+
+// Follow the log from its current end (history isn't motion "now").
+async function tailIntercomLog() {
+  let pos = -1;
+  let rest = "";
+  for (;;) {
+    try {
+      const { size } = await fs.stat(INTERCOM_LOG);
+      if (pos < 0 || size < pos) pos = size; // first look, or the log was reset
+      if (size > pos) {
+        const fh = await fs.open(INTERCOM_LOG, "r");
+        try {
+          const buf = Buffer.alloc(size - pos);
+          await fh.read(buf, 0, buf.length, pos);
+          pos = size;
+          const lines = (rest + buf.toString("utf8")).split("\n");
+          rest = lines.pop() ?? "";
+          for (const line of lines) if (line.trim()) onPanelEvent(line);
+        } finally {
+          await fh.close();
+        }
+      }
+    } catch {
+      // No log yet (listener not running) — keep looking.
+    }
+    await new Promise((r) => setTimeout(r, 1000));
   }
 }
 
@@ -242,9 +318,15 @@ async function listen(dev: Device) {
 
 // Start the listeners once, on first use.
 export function ensureMotionListener() {
+  // Separate flag: a listener from before the tail existed (dev hot-reload) still gets it.
+  if (!state.tailing) {
+    state.tailing = true;
+    void tailIntercomLog();
+  }
   if (state.started) return;
   state.started = true;
-  for (const dev of buildDevices()) void listen(dev);
+  // Panels answer alertStream with an empty reply; they report via the SDK log.
+  for (const dev of buildDevices()) if (!panelIds.has(dev.host)) void listen(dev);
 }
 
 export type ActiveMotion = {
@@ -266,7 +348,7 @@ export function getActiveMotion(windowMs = 3000): ActiveMotion[] {
   const recent = (at?: Partial<Record<MotionKind, number>>) =>
     MOTION_KINDS.filter((k) => now - (at?.[k] ?? 0) <= KIND_HOLD_MS);
   return [...state.bursts.entries()]
-    .filter(([, b]) => now - b.lastAt <= windowMs)
+    .filter(([, b]) => now - b.lastAt <= windowMs + (b.holdMs ?? 0))
     .map(([id, b]) => ({
       id,
       startedAt: b.startedAt,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, type ReactNode } from "react";
 import { CameraFeed } from "@/components/camera/CameraFeed";
 import { cn } from "@/lib/cn";
 import { useFullscreen } from "@/lib/hooks/useFullscreen";
@@ -18,11 +18,13 @@ export function CameraTile({
   title,
   onSelect,
   onExclude,
+  footer,
 }: {
   camId: string;
   title: string;
   onSelect?: () => void;
   onExclude?: () => void;
+  footer?: ReactNode;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const { isFullscreen, toggle: toggleFullscreen } = useFullscreen(ref);
@@ -59,6 +61,7 @@ export function CameraTile({
         isFullscreen={isFullscreen}
         onToggleFullscreen={toggleFullscreen}
         onExclude={onExclude}
+        footer={footer}
         refreshMs={WALL_REFRESH_MS}
         fill
       />

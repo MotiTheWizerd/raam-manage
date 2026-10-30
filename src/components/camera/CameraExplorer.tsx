@@ -42,7 +42,17 @@ function gridCols(n: number): number {
 }
 
 type MotionKind = "person" | "vehicle" | "animal";
-type ActiveMotion = { id: string; startedAt: number; lastAt: number; kinds: MotionKind[] };
+// Mirrors lib/motion.ts (server-only, so not importable here).
+type ActiveMotion = {
+  id: string;
+  startedAt: number;
+  lastAt: number;
+  kinds: MotionKind[];
+  deviceKinds: MotionKind[];
+  events: number;
+  description: string | null;
+  channelName: string | null;
+};
 
 // The object filters, in button order. None selected = any motion at all.
 const MOTION_FILTERS: { kind: MotionKind; label: string; Icon: typeof PersonStanding }[] = [
@@ -64,6 +74,10 @@ const MOTION_MAX_TILES = 9;
 function useMotionFollow(enabled: boolean, filters: MotionKind[], excluded: string[]) {
   const [active, setActive] = useState<ActiveMotion[]>([]);
   const [wall, setWall] = useState<string[]>([]);
+  // Each camera's latest event, kept after it goes quiet (the lingering tiles).
+  const [info, setInfo] = useState(new Map<string, ActiveMotion>());
+  // The server's clock — the times in the events are on it.
+  const [now, setNow] = useState(0);
   const lastSeen = useRef(new Map<string, number>());
 
   useEffect(() => {
@@ -74,14 +88,19 @@ function useMotionFollow(enabled: boolean, filters: MotionKind[], excluded: stri
       try {
         const res = await fetch("/api/motion", { cache: "no-store" });
         if (res.ok && alive) {
-          const all: ActiveMotion[] = (await res.json()).active;
-          setActive(
-            all.filter(
-              (m) =>
-                !excluded.includes(m.id) &&
-                (filters.length === 0 || m.kinds.some((k) => filters.includes(k)))
-            )
+          const body: { now: number; active: ActiveMotion[] } = await res.json();
+          const shown = body.active.filter(
+            (m) =>
+              !excluded.includes(m.id) &&
+              (filters.length === 0 || m.kinds.some((k) => filters.includes(k)))
           );
+          setActive(shown);
+          setNow(body.now);
+          setInfo((prev) => {
+            const next = new Map(prev);
+            for (const m of shown) next.set(m.id, m);
+            return next;
+          });
         }
       } catch {
         // Transient — keep the last picture.
@@ -123,7 +142,64 @@ function useMotionFollow(enabled: boolean, filters: MotionKind[], excluded: stri
     active: new Map(enabled ? active.map((m) => [m.id, m.kinds]) : []),
     // A just-hidden camera leaves the wall at once, not after its linger.
     wall: enabled ? wall.filter((id) => !excluded.includes(id)) : [],
+    info,
+    now,
   };
+}
+
+const KIND_LABEL: Record<MotionKind, string> = {
+  person: "אדם",
+  vehicle: "רכב",
+  animal: "בעל חיים",
+};
+
+// Hebrew for the devices' eventDescription; anything unknown shows as sent.
+const EVENT_LABEL: Record<string, string> = { "Motion alarm": "התראת תנועה" };
+
+function clock(ms: number): string {
+  return new Date(ms).toLocaleTimeString("he-IL", { hour12: false });
+}
+
+function span(ms: number): string {
+  const s = Math.max(0, Math.round(ms / 1000));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
+
+// The strip under a motion-wall tile: what moved and who said so (the
+// camera/DVR's own detection, or our AI check on a snapshot), the event, when,
+// and for how long. Times are the server's — the devices' clocks are off.
+function MotionInfo({ info, live, now }: { info?: ActiveMotion; live: boolean; now: number }) {
+  if (!info) return null;
+  return (
+    <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-300">
+      {info.kinds.length === 0 ? (
+        <span className="text-zinc-500">תנועה — לא זוהה אובייקט</span>
+      ) : (
+        MOTION_FILTERS.filter((f) => info.kinds.includes(f.kind)).map(({ kind, Icon }) => (
+          <span key={kind} className="flex items-center gap-1 font-semibold text-white">
+            <Icon className="size-3.5" aria-hidden />
+            {KIND_LABEL[kind]}
+            <span className="rounded bg-white/10 px-1 text-[10px] font-normal text-zinc-300">
+              {info.deviceKinds.includes(kind) ? "זיהוי מצלמה" : "זיהוי AI"}
+            </span>
+          </span>
+        ))
+      )}
+      {info.description && <span>{EVENT_LABEL[info.description] ?? info.description}</span>}
+      <span className={live ? "text-red-300" : "text-zinc-500"}>
+        {live
+          ? `פעיל ${span(now - info.startedAt)}`
+          : `שקט · לפני ${span(now - info.lastAt)}`}
+      </span>
+      <span className="tabular-nums">{clock(info.lastAt)}</span>
+      {info.events > 1 && <span>{info.events} אירועים</span>}
+      {info.channelName && (
+        <span className="text-zinc-500" dir="ltr">
+          {info.channelName}
+        </span>
+      )}
+    </div>
+  );
 }
 
 // The cameras explorer: a scrollable side menu of every camera (grouped,
@@ -435,6 +511,13 @@ export function CameraExplorer({
                           camId={id}
                           title={nameOf(id)}
                           onExclude={() => setExcluded(id, true)}
+                          footer={
+                            <MotionInfo
+                              info={motion.info.get(id)}
+                              live={motion.active.has(id)}
+                              now={motion.now}
+                            />
+                          }
                         />
                       ))}
                     </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import { FunnelX, Maximize2, Minimize2, ScanEye, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
 
 const REFRESH_MS = 400;
@@ -23,6 +23,8 @@ type Props = {
   onClose?: () => void;
   /** When provided (the motion-follow wall), a "hide from follow" button is shown. */
   onExclude?: () => void;
+  /** A strip under the picture (the motion-follow wall's event info). */
+  footer?: ReactNode;
   /** Snapshot refresh interval. Slower for the multi-camera wall. */
   refreshMs?: number;
   /** Notified when detection mode toggles (lets the popup pause its auto-close). */
@@ -42,6 +44,7 @@ export function CameraFeed({
   onToggleFullscreen,
   onClose,
   onExclude,
+  footer,
   refreshMs = REFRESH_MS,
   onDetectChange,
   fill = false,
@@ -214,6 +217,7 @@ export function CameraFeed({
           </div>
         )}
       </div>
+      {footer}
     </>
   );
 }

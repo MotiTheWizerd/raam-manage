@@ -45,9 +45,18 @@ type Burst = {
   startedAt: number;
   lastAt: number;
   checkedAt: number;
-  // when each kind was last seen in this camera's snapshots
+  // motion events in this burst
+  events: number;
+  // when each kind was last seen — by our snapshot check or the device itself
   seenAt: Partial<Record<MotionKind, number>>;
+  // ...and when the DEVICE said so (the DVR's own human/vehicle detection)
+  deviceSeenAt: Partial<Record<MotionKind, number>>;
+  description: string | null; // eventDescription, e.g. "Motion alarm"
+  channelName: string | null; // the camera's own name, when it sends one
 };
+
+// The DVR's AcuSense motion reports what it saw (<targetType>human</targetType>).
+const DEVICE_TARGETS: Record<string, MotionKind> = { human: "person", vehicle: "vehicle" };
 
 type MotionState = {
   started: boolean;
@@ -129,10 +138,29 @@ function onAlert(dev: Device, xml: string) {
   const now = Date.now();
   let burst = state.bursts.get(id);
   // A gap longer than a few seconds starts a new burst.
-  if (burst && now - burst.lastAt < 5000) burst.lastAt = now;
-  else {
-    burst = { startedAt: now, lastAt: now, checkedAt: 0, seenAt: {} };
+  if (burst && now - burst.lastAt < 5000) {
+    burst.lastAt = now;
+    burst.events++;
+  } else {
+    burst = {
+      startedAt: now,
+      lastAt: now,
+      checkedAt: 0,
+      events: 1,
+      seenAt: {},
+      deviceSeenAt: {},
+      description: null,
+      channelName: null,
+    };
     state.bursts.set(id, burst);
+  }
+  burst.description = tag(xml, "eventDescription") ?? burst.description;
+  burst.channelName = tag(xml, "channelName") ?? burst.channelName;
+  // Trust the device's own classification right away: our snapshot check often
+  // misses people on the DVR's dark analog feeds at night.
+  for (const t of (tag(xml, "targetType") ?? "").split(",")) {
+    const kind = DEVICE_TARGETS[t.trim()];
+    if (kind) burst.seenAt[kind] = burst.deviceSeenAt[kind] = now;
   }
   if (now - burst.checkedAt >= CHECK_EVERY_MS && state.inFlight < MAX_IN_FLIGHT) {
     burst.checkedAt = now;
@@ -224,19 +252,31 @@ export type ActiveMotion = {
   startedAt: number;
   lastAt: number;
   kinds: MotionKind[];
+  // of `kinds`, the ones the camera/DVR detected itself (the rest: our AI check)
+  deviceKinds: MotionKind[];
+  events: number;
+  description: string | null;
+  channelName: string | null;
 };
 
 // Cameras that moved within the last `windowMs`, most recent first. `kinds` =
-// what was seen in its snapshots within the last few seconds.
+// what was seen within the last few seconds (snapshot check or the device).
 export function getActiveMotion(windowMs = 3000): ActiveMotion[] {
   const now = Date.now();
+  const recent = (at?: Partial<Record<MotionKind, number>>) =>
+    MOTION_KINDS.filter((k) => now - (at?.[k] ?? 0) <= KIND_HOLD_MS);
   return [...state.bursts.entries()]
     .filter(([, b]) => now - b.lastAt <= windowMs)
     .map(([id, b]) => ({
       id,
       startedAt: b.startedAt,
       lastAt: b.lastAt,
-      kinds: MOTION_KINDS.filter((k) => now - (b.seenAt[k] ?? 0) <= KIND_HOLD_MS),
+      kinds: recent(b.seenAt),
+      // a burst from before a dev hot-reload lacks the newer fields
+      deviceKinds: recent(b.deviceSeenAt),
+      events: b.events ?? 1,
+      description: b.description ?? null,
+      channelName: b.channelName ?? null,
     }))
     .sort((a, b) => b.lastAt - a.lastAt);
 }

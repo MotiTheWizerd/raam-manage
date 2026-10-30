@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, Reorder, useDragControls } from "framer-motion";
-import { BookOpen, Building2, Cctv, ClipboardList, Crown, Gamepad2, GripVertical, Home, Megaphone, MessageCircle, Rows3, Settings, UserCog, Users } from "lucide-react";
+import { BookOpen, Building2, Cctv, ClipboardList, DoorOpen, Crown, Gamepad2, GripVertical, Home, Megaphone, MessageCircle, Rows3, Settings, UserCog, Users } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -34,6 +34,7 @@ const items: Item[] = [
   { label: "אירועים", href: "/events", icon: ClipboardList },
   { label: "הודעות לובי", href: "/lobby-messages", icon: Megaphone },
   { label: "מצלמות", href: "/cameras", icon: Cctv },
+  { label: "אינטרקום", href: "/intercom", icon: DoorOpen },
   { label: "דירות", href: "/apartments", icon: Building2, managerOnly: true },
   { label: "דיירים", href: "/renters", icon: Users, managerOnly: true },
   { label: "בעלי דירות", href: "/owners", icon: Crown },

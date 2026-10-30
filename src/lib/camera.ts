@@ -24,12 +24,18 @@ function parseAuthHeader(header: string): Record<string, string> {
   return out;
 }
 
-export function buildDigest(challenge: string, path: string, user: string, pass: string): string {
+export function buildDigest(
+  challenge: string,
+  path: string,
+  user: string,
+  pass: string,
+  method = "GET"
+): string {
   const d = parseAuthHeader(challenge);
   const nc = "00000001";
   const cnonce = crypto.randomBytes(8).toString("hex");
   const ha1 = md5(`${user}:${d.realm}:${pass}`);
-  const ha2 = md5(`GET:${path}`);
+  const ha2 = md5(`${method}:${path}`);
   const response = md5(`${ha1}:${d.nonce}:${nc}:${cnonce}:${d.qop}:${ha2}`);
   return (
     `Digest username="${user}", realm="${d.realm}", nonce="${d.nonce}", ` +

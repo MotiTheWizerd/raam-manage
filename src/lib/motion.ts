@@ -5,7 +5,7 @@ import path from "node:path";
 
 import { buildDigest, fetchCameraSnapshot } from "@/lib/camera";
 import { cameraRtspUrl, hikChannel } from "@/lib/camera-rtsp";
-import { FLEET_CAMERAS, getFleetCamera } from "@/lib/fleet-cameras";
+import { FLEET_CAMERAS, fleetRtspUrl, getFleetCamera } from "@/lib/fleet-cameras";
 import { CAMERAS, type CameraCreds } from "@/lib/gates";
 import { INTERCOM_PANELS } from "@/lib/intercom";
 
@@ -126,8 +126,14 @@ function buildDevices(): Device[] {
   for (const cam of CAMERAS) add(cam.id, cam);
   // Everything on a Hikvision device: the ISAPI cams, the intercom panels
   // (their motion comes via the SDK log) and the NVR channels (the NVR's own
-  // stream). Only the Easy-Rtsp units have no device to listen to.
-  for (const cam of FLEET_CAMERAS) if (cam.group !== "rtsp") add(cam.id, cam);
+  // stream). The Easy-Rtsp units have no device to listen to; the elevator
+  // recorder has no web port (its motion would come via the SDK log too), so
+  // it only needs creds for the object check.
+  for (const cam of FLEET_CAMERAS) {
+    if (cam.group === "rtsp") continue;
+    if (cam.sdk !== undefined) state.creds.set(cam.id, cam);
+    else add(cam.id, cam);
+  }
   return [...byHost.values()];
 }
 
@@ -199,19 +205,34 @@ const INTERCOM_LOG = path.join(process.cwd(), "logs", "intercom-events.jsonl");
 const PANEL_HOLD_MS = 4000;
 const panelIds = new Map(INTERCOM_PANELS.map((p) => [p.host, p.camId]));
 
+// The elevator recorder reports through the same listener: its events carry the
+// SDK channel numbers that moved. ip -> SDK channel -> camera id.
+const sdkChannelIds = new Map<string, Map<number, string>>();
+for (const cam of FLEET_CAMERAS) {
+  if (cam.sdk === undefined) continue;
+  const ip = cam.host.split(":")[0];
+  if (!sdkChannelIds.has(ip)) sdkChannelIds.set(ip, new Map());
+  sdkChannelIds.get(ip)!.set(cam.sdk, cam.id);
+}
+
 function onPanelEvent(line: string) {
-  let ev: { panel?: string; cmd?: string; hex?: string };
+  let ev: { panel?: string; cmd?: string; hex?: string; channels?: number[] };
   try {
     ev = JSON.parse(line);
   } catch {
     return;
   }
   if (ev.cmd !== "0x4000" || !ev.hex?.startsWith("03 00 00 00")) return;
-  const id = panelIds.get(ev.panel ?? "");
-  if (!id) return;
-  const burst = recordMotion(id, PANEL_HOLD_MS);
-  burst.description ??= "Motion alarm";
-  maybeCheck(id, burst);
+  const panel = panelIds.get(ev.panel ?? "");
+  const byChannel = sdkChannelIds.get(ev.panel ?? "");
+  const ids = panel
+    ? [panel]
+    : (ev.channels ?? []).map((ch) => byChannel?.get(ch)).filter((id): id is string => !!id);
+  for (const id of ids) {
+    const burst = recordMotion(id, PANEL_HOLD_MS);
+    burst.description ??= "Motion alarm";
+    maybeCheck(id, burst);
+  }
 }
 
 // Follow the log from its current end (history isn't motion "now").
@@ -242,11 +263,13 @@ async function tailIntercomLog() {
   }
 }
 
-// A camera whose device snapshot fails (most NVR channels): one frame of its
-// lighter sub stream over RTSP via the vision service. Only for cameras that
-// have an RTSP path — an unreachable ISAPI camera shouldn't tie up a check.
+// A camera whose device snapshot fails (most NVR channels) or that has none (the
+// SDK-only elevators): one frame via the vision service — RTSP sub stream or
+// SDK capture. Only for cameras with such a source — an unreachable ISAPI
+// camera shouldn't tie up a check.
 async function rtspFrame(id: string): Promise<ArrayBuffer | null> {
-  if (getFleetCamera(id)?.rtsp === undefined) return null;
+  const fleet = getFleetCamera(id);
+  if (!fleet || fleetRtspUrl(fleet) === null) return null;
   const url = cameraRtspUrl(id, "sub");
   if (!url) return null;
   const res = await fetch(`${VISION_INTERNAL_URL}/rtsp?url=${encodeURIComponent(url)}`, {
@@ -262,7 +285,9 @@ async function checkObjects(id: string, burst: Burst) {
   if (!cam) return;
   state.inFlight++;
   try {
-    const jpeg = (await fetchCameraSnapshot(cam)) ?? (await rtspFrame(id));
+    // SDK-only cameras have no web port to ask (it would just time out).
+    const viaDevice = getFleetCamera(id)?.sdk === undefined;
+    const jpeg = (viaDevice ? await fetchCameraSnapshot(cam) : null) ?? (await rtspFrame(id));
     if (!jpeg) return;
     const res = await fetch(`${VISION_INTERNAL_URL}/objects`, {
       method: "POST",

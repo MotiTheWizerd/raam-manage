@@ -26,6 +26,9 @@ LOG = ROOT / "logs" / "intercom-events.jsonl"
 
 PANELS = ["10.0.0.70", "10.0.0.71", "10.0.0.72", "10.0.0.73", "10.0.0.173", "10.0.0.174"]
 PORT = 8000
+# The elevator recorder (remote site, SDK port only) — its motion goes to the
+# same log, with the SDK channel numbers that moved (IP channels start at 33).
+ELEVATOR = ("212.199.11.111", 8002)
 
 # lCommand values we expect from intercom devices (HCNetSDK.h).
 COMMANDS = {
@@ -88,6 +91,11 @@ def describe(cmd: int, buf: int, size: int) -> dict:
         out["devNumber"] = raw[12:44].split(b"\0")[0].decode("ascii", "replace")
         out["type"] = raw[44]
         out["detail_hex"] = raw[48:112].hex(" ")
+    if cmd == 0x4000 and len(raw) >= 232:
+        # NET_DVR_ALARMINFO_V30: dwAlarmType (3 = motion), ... byChannel[64] at
+        # offset 168: flag i set = channel i+1 moved (33+ = IP channels).
+        out["type"] = int.from_bytes(raw[0:4], "little")
+        out["channels"] = [i + 1 for i in range(64) if raw[168 + i]]
     if cmd == 0x6009 and len(raw) >= 12:
         # NET_DVR_ALARM_ISAPI_INFO: char* pAlarmData; DWORD dwAlarmDataLen; ...
         ptr = int.from_bytes(raw[0:8], "little")
@@ -122,9 +130,9 @@ def main() -> None:
     init()
     sdk.NET_DVR_SetDVRMessageCallBack_V31(on_message, None)
     user, password = env("HIK_DEFAULT_USER").encode(), env("HIK_DEFAULT_PASS").encode()
-    for ip in PANELS:
+    for ip, port in [(p, PORT) for p in PANELS] + [ELEVATOR]:
         info = C.create_string_buffer(1024)  # NET_DVR_DEVICEINFO_V30, oversized
-        uid = sdk.NET_DVR_Login_V30(ip.encode(), PORT, user, password, info)
+        uid = sdk.NET_DVR_Login_V30(ip.encode(), port, user, password, info)
         if uid < 0:
             print(f"{ip} login failed: error {sdk.NET_DVR_GetLastError()}", flush=True)
             continue
@@ -132,7 +140,7 @@ def main() -> None:
         handle = sdk.NET_DVR_SetupAlarmChan_V30(uid)
         state = "armed" if handle >= 0 else f"arm failed: error {sdk.NET_DVR_GetLastError()}"
         print(f"{ip} logged in (user {uid}), {state}", flush=True)
-    print(f"listening on {len(users)} panels — events also go to {LOG}", flush=True)
+    print(f"listening on {len(users)} devices — events also go to {LOG}", flush=True)
     try:
         while True:
             time.sleep(1)

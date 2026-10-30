@@ -17,10 +17,13 @@ import type { CameraCreds } from "@/lib/gates";
 //             speak ISAPI themselves (.141-.147: lobby + lift hall). Pictures
 //             come over the NVR's RTSP (its snapshot fails on most of them);
 //             motion over the NVR's own event stream.
+//   elevator — the elevator recorder, a remote site (212.199.11.111) that only
+//             opens Hikvision's SDK port: pictures are SDK captures through the
+//             vision service — see the `sdk` field.
 //   rtsp    — RTSP-only cameras (non-Hikvision "Easy-Rtsp" units). No ISAPI
 //             snapshot, so these are fetched as frames through the vision
 //             service (OpenCV) — see the `rtsp` field.
-export type FleetGroup = "network" | "dvr" | "nvr" | "rtsp";
+export type FleetGroup = "network" | "dvr" | "nvr" | "elevator" | "rtsp";
 export type FleetCameraDef = CameraCreds & {
   id: string;
   name: string;
@@ -30,6 +33,9 @@ export type FleetCameraDef = CameraCreds & {
   // builds the full URL (with host + creds) and pulls a frame via the vision
   // service, instead of the ISAPI HTTP snapshot.
   rtsp?: string;
+  // SDK-only recorder: the channel number in SDK terms (IP channels start at
+  // 33). host is "<ip>:<sdk port>"; pictures come as hiksdk:// captures.
+  sdk?: number;
 };
 
 export const FLEET_CAMERAS: readonly FleetCameraDef[] = [
@@ -117,6 +123,15 @@ export const FLEET_CAMERAS: readonly FleetCameraDef[] = [
   { id: "nvr-29", name: "לובי — ספה מלמעלה (145)", group: "nvr", host: "10.0.0.100:81", user: "admin", pass: "Sami0207", path: "/ISAPI/Streaming/channels/2901/picture", rtsp: "/Streaming/Channels/2901" },
   { id: "nvr-30", name: "לובי — דלפק (146)", group: "nvr", host: "10.0.0.100:81", user: "admin", pass: "Sami0207", path: "/ISAPI/Streaming/channels/3001/picture", rtsp: "/Streaming/Channels/3001" },
   { id: "nvr-31", name: "לובי — עמדת לוביסט (147)", group: "nvr", host: "10.0.0.100:81", user: "admin", pass: "Sami0207", path: "/ISAPI/Streaming/channels/3101/picture", rtsp: "/Streaming/Channels/3101" },
+  // Elevator recorder "W Boutique Elevators" (DS-7608NI-K2), SDK port 8002 only.
+  // Recorder channel N = SDK channel 32+N. Elevator 1 (ch3) and Elevator 3 (ch1)
+  // are offline since Aug / Mar 2026, so they're left out. Its clock runs ~28 min fast.
+  { id: "elev-2", name: "מעלית 2", group: "elevator", host: "212.199.11.111:8002", user: "admin", pass: "Sami0207", sdk: 34 },
+  { id: "elev-4", name: "מעלית 4", group: "elevator", host: "212.199.11.111:8002", user: "admin", pass: "Sami0207", sdk: 36 },
+  { id: "elev-5", name: "מעלית 5", group: "elevator", host: "212.199.11.111:8002", user: "admin", pass: "Sami0207", sdk: 37 },
+  { id: "elev-6", name: "מעלית 6", group: "elevator", host: "212.199.11.111:8002", user: "admin", pass: "Sami0207", sdk: 38 },
+  { id: "elev-room-n", name: "חדר מכונות מעליות — צפון", group: "elevator", host: "212.199.11.111:8002", user: "admin", pass: "Sami0207", sdk: 39 },
+  { id: "elev-room-s", name: "חדר מכונות מעליות — דרום", group: "elevator", host: "212.199.11.111:8002", user: "admin", pass: "Sami0207", sdk: 40 },
   // RTSP-only cameras (Easy-Rtsp brand, no auth) — fetched via the vision service.
   { id: "rtsp-180", name: "שער חשמלי (180)", group: "rtsp", host: "10.0.0.180", user: "", pass: "", rtsp: "/" },
   { id: "rtsp-140", name: "מבט חוץ (140)", group: "rtsp", host: "10.0.0.140", user: "", pass: "", rtsp: "/" },
@@ -131,6 +146,9 @@ export function getFleetCamera(id: string): FleetCameraDef | undefined {
 // are embedded here and this runs server-side only, so they never reach a
 // browser — the frame comes back as a plain JPEG via the vision service.
 export function fleetRtspUrl(cam: FleetCameraDef): string | null {
+  // SDK-only recorder: the vision service captures over Hikvision's SDK
+  // (login from its own .env.local read; nothing secret in this URL).
+  if (cam.sdk !== undefined) return `hiksdk://${cam.host}/${cam.sdk}`;
   if (cam.rtsp === undefined) return null;
   const auth = cam.user
     ? `${encodeURIComponent(cam.user)}:${encodeURIComponent(cam.pass)}@`

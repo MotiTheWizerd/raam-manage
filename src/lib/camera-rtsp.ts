@@ -22,6 +22,8 @@ export function cameraRtspUrl(id: string, stream: StreamKind): string | null {
   const fleet = getFleetCamera(id);
   const cam = getCamera(id) ?? fleet;
   if (!cam) return null;
+  // SDK-only recorder (the elevators): one source, captured over the SDK.
+  if (fleet?.sdk !== undefined) return `hiksdk://${fleet.host}/${fleet.sdk}`;
   const path =
     fleet?.rtsp !== undefined
       ? stream === "sub"

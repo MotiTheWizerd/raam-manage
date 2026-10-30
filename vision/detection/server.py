@@ -13,6 +13,7 @@ from urllib.parse import parse_qs, urlparse
 
 from detect import CAMERAS
 
+from . import hiksdk
 from .objects import check_objects
 from .raw_grabber import get_raw_grabber
 from .service import get_named_worker, get_worker, running_workers
@@ -98,13 +99,17 @@ class Handler(BaseHTTPRequestHandler):
         """
         qs = parse_qs(urlparse(self.path).query)
         url = (qs.get("url") or [""])[0]
-        if not url.startswith("rtsp://"):
-            self._send_json(400, {"error": "url must be rtsp://"})
+        if url.startswith("hiksdk://"):
+            # SDK-only recorder (the elevators): one capture per request, no stream.
+            jpeg = hiksdk.capture(url)
+        elif url.startswith("rtsp://"):
+            grabber = get_raw_grabber(url)
+            grabber.touch()
+            grabber.ensure_running()
+            jpeg = grabber.wait_for_frame(timeout=15.0)
+        else:
+            self._send_json(400, {"error": "url must be rtsp:// or hiksdk://"})
             return
-        grabber = get_raw_grabber(url)
-        grabber.touch()
-        grabber.ensure_running()
-        jpeg = grabber.wait_for_frame(timeout=15.0)
         if jpeg is None:
             self._send_json(503, {"error": "no frame yet"})
             return
@@ -129,8 +134,8 @@ class Handler(BaseHTTPRequestHandler):
         """
         qs = parse_qs(urlparse(self.path).query)
         url = (qs.get("url") or [""])[0]
-        if not url.startswith("rtsp://"):
-            self._send_json(400, {"error": "url must be rtsp://"})
+        if not url.startswith(("rtsp://", "hiksdk://")):
+            self._send_json(400, {"error": "url must be rtsp:// or hiksdk://"})
             return
         try:
             fps = min(max(float((qs.get("fps") or [settings.max_infer_fps])[0]), 0.5), 25.0)

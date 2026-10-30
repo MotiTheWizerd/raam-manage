@@ -25,8 +25,10 @@ import threading
 import time
 
 import cv2
+import numpy as np
 from ultralytics import YOLO
 
+from . import hiksdk
 from .capture import open_capture
 from .detections import extract
 from .settings import settings
@@ -84,6 +86,9 @@ class CameraWorker:
 
     def _grab_loop(self) -> None:
         """Drain the camera continuously; hand over a frame only when asked."""
+        if self.source.startswith("hiksdk://"):
+            self._capture_loop()
+            return
         print(f"[{self.label}] opening stream")
         cap = open_capture(self.source)
         misses = 0
@@ -114,6 +119,27 @@ class CameraWorker:
         finally:
             cap.release()
             print(f"[{self.label}] grabber stopped (idle)")
+
+    def _capture_loop(self) -> None:
+        """SDK-only recorders (no stream to drain): capture a JPEG whenever
+        inference asks for a frame."""
+        try:
+            while not self._idle():
+                if not self._want:
+                    time.sleep(0.02)
+                    continue
+                jpeg = hiksdk.capture(self.source)
+                frame = cv2.imdecode(np.frombuffer(jpeg, np.uint8), cv2.IMREAD_COLOR) if jpeg else None
+                if frame is None:
+                    time.sleep(1.0)
+                    continue
+                with self._raw_cond:
+                    self._raw_frame = frame
+                    self._raw_seq += 1
+                    self._want = False
+                    self._raw_cond.notify_all()
+        finally:
+            print(f"[{self.label}] capture stopped (idle)")
 
     def _infer_loop(self) -> None:
         """Run YOLO on the newest frame, at most `fps` times a second."""

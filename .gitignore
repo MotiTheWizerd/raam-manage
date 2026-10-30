@@ -74,3 +74,5 @@ vision/faces_db.json
 vision/faces_db.json.*
 # throwaway debug snapshots
 vision/_*.jpg
+# agent tooling marker (local)
+.muninn-agent

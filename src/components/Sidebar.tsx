@@ -1,12 +1,13 @@
 "use client";
 
 import { motion, Reorder, useDragControls } from "framer-motion";
-import { BookOpen, Building2, Cctv, ClipboardList, DoorOpen, Crown, Film, Gamepad2, GripVertical, Home, Megaphone, MessageCircle, Rows3, Settings, UserCog, Users } from "lucide-react";
+import { BookOpen, Building2, Cctv, ClipboardList, DoorOpen, Crown, Film, Gamepad2, GripVertical, Home, Megaphone, MessageCircle, MessageCircleQuestion, Rows3, Settings, UserCog, Users } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/cn";
 import { applyOrder } from "@/lib/ordering";
+import { ASSISTANT_TOGGLE_EVENT } from "@/components/AssistantPanel";
 import { useIsManager } from "@/components/AuthProvider";
 import { useEditMode } from "@/components/EditModeProvider";
 import {
@@ -27,6 +28,9 @@ type Item = {
   // handler for a native app) instead of navigating in-app. href stays the
   // stable identity used for order/rename keys and any parked route.
   externalUrl?: string;
+  // When set, the entry opens/closes the lobby assistant chat (same as
+  // Ctrl+K) instead of navigating; href is only its order/rename key.
+  opensAssistant?: boolean;
 };
 
 const items: Item[] = [
@@ -40,6 +44,8 @@ const items: Item[] = [
   { label: "דיירים", href: "/renters", icon: Users, managerOnly: true },
   { label: "בעלי דירות", href: "/owners", icon: Crown },
   { label: "מדריך הבניין", href: "/directory", icon: Rows3 },
+  // The lobby assistant chat (Ctrl+K), here so people know it exists.
+  { label: "עזרה", href: "/help", icon: MessageCircleQuestion, opensAssistant: true },
   // The building manual — same content feeds the assistant's system prompt.
   { label: "נהלים", href: "/docs", icon: BookOpen },
   { label: "פקידי לובי", href: "/users", icon: UserCog, managerOnly: true },
@@ -123,7 +129,7 @@ export function Sidebar() {
             setDraft(next);
             setOrder(next.map((it) => it.href));
           }}
-          className="flex flex-col gap-1 text-sm list-none m-0 p-0"
+          className="flex flex-col gap-0.5 text-sm list-none m-0 p-0"
         >
           {!collapsed && (
             <li className="px-3 pb-1 text-[11px] opacity-50 select-none leading-snug">
@@ -141,17 +147,18 @@ export function Sidebar() {
           ))}
         </Reorder.Group>
       ) : (
-        <nav className="flex flex-col gap-1 text-sm">
+        <nav className="flex flex-col gap-0.5 text-sm">
           {visibleItems.map((item) => {
             const active =
               !item.externalUrl &&
+              !item.opensAssistant &&
               (item.href === "/"
                 ? pathname === "/"
                 : pathname.startsWith(item.href));
             const Icon = item.icon;
             const label = labels[item.href] ?? item.label;
             const className = cn(
-              "h-9 rounded-md flex items-center gap-3 transition-colors relative",
+              "h-8 rounded-md flex items-center gap-3 transition-colors relative",
               collapsed ? "justify-center px-0" : "px-3",
               active
                 ? "bg-linear-to-b from-red-500 to-red-600 text-white shadow-sm"
@@ -176,6 +183,19 @@ export function Sidebar() {
                 </motion.span>
               </>
             );
+            if (item.opensAssistant) {
+              return (
+                <button
+                  key={item.href}
+                  type="button"
+                  onClick={() => window.dispatchEvent(new Event(ASSISTANT_TOGGLE_EVENT))}
+                  title={`${label} — צ׳אט עם העוזר (Ctrl+K)`}
+                  className={className}
+                >
+                  {inner}
+                </button>
+              );
+            }
             // External entries open the native app in a new tab via a plain
             // anchor — no client-side routing, no active state.
             return item.externalUrl ? (
@@ -230,7 +250,7 @@ function ReorderRow({
       dragListener={collapsed}
       dragControls={controls}
       className={cn(
-        "h-9 rounded-md flex items-center gap-2 select-none",
+        "h-8 rounded-md flex items-center gap-2 select-none",
         "bg-black/[0.03] dark:bg-white/[0.06] border border-dashed border-red-400/40 dark:border-red-400/30",
         collapsed ? "justify-center px-0 cursor-grab active:cursor-grabbing" : "px-2"
       )}

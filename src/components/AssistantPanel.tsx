@@ -28,6 +28,10 @@ const ERROR_REPLY = "משהו השתבש אצלי 😵 נסו שוב עוד רג
 // Cap the auto-growing composer at ~5 lines; beyond that it scrolls.
 const MAX_COMPOSER_HEIGHT = 120;
 
+// Fired on window by anything that opens/closes the panel besides Ctrl+K
+// (the sidebar's "עזרה" entry).
+export const ASSISTANT_TOGGLE_EVENT = "raam:assistant-toggle";
+
 export function AssistantPanel() {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Msg[]>([WELCOME]);
@@ -41,7 +45,8 @@ export function AssistantPanel() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Global shortcut: Ctrl+K toggles the panel anywhere in the app.
+  // Global shortcut: Ctrl+K toggles the panel anywhere in the app — and so
+  // does the sidebar's "עזרה" entry.
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if (!e.ctrlKey || e.altKey || e.shiftKey) return;
@@ -50,8 +55,15 @@ export function AssistantPanel() {
       e.preventDefault(); // stop the browser's address-bar search chord
       setOpen((o) => !o);
     }
+    function onToggle() {
+      setOpen((o) => !o);
+    }
     window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    window.addEventListener(ASSISTANT_TOGGLE_EVENT, onToggle);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener(ASSISTANT_TOGGLE_EVENT, onToggle);
+    };
   }, []);
 
   // Esc closes while open.

@@ -18,6 +18,7 @@ export type PreferencesActions = {
   clearSelectedResident: () => void;
   setLobbyMessagesDismissed: (signature: string) => void;
   setMotionExcluded: (id: string, excluded: boolean) => void;
+  setFollowScreen: (screen: string | null) => void;
 };
 
 export type PreferencesState = Preferences &
@@ -70,6 +71,7 @@ export function createPreferencesStore(
         const rest = s.motionFollow.excluded.filter((x) => x !== id);
         return { motionFollow: { excluded: excluded ? [...rest, id] : rest } };
       }),
+    setFollowScreen: (screen) => set({ followScreen: screen }),
   }));
 }
 
@@ -81,5 +83,6 @@ export function extractPreferences(state: PreferencesState): Preferences {
     selectedResident: state.selectedResident,
     lobbyMessages: state.lobbyMessages,
     motionFollow: state.motionFollow,
+    followScreen: state.followScreen,
   };
 }

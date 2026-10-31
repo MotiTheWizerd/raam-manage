@@ -1,28 +1,21 @@
 "use client";
 
-import {
-  Activity,
-  Car,
-  Cctv,
-  ChevronDown,
-  FunnelX,
-  PawPrint,
-  Pencil,
-  PersonStanding,
-  Plus,
-  ScanEye,
-  X,
-} from "lucide-react";
+import { Activity, Cctv, ChevronDown, Pencil, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import type { CameraGroup as SavedGroup } from "@/app/cameras/actions";
 import { CameraGroupEditor } from "@/components/camera/CameraGroupEditor";
 import { CameraTile } from "@/components/camera/CameraTile";
-import { PageHeading } from "@/components/PageHeading";
 import {
-  useMotionExcluded,
-  useSetMotionExcluded,
-} from "@/components/PreferencesProvider";
+  gridCols,
+  HiddenFromFollowMenu,
+  MotionChips,
+  MotionWall,
+  MotionWallToggles,
+  useMotionWall,
+  useMotionWallOptions,
+} from "@/components/camera/MotionWall";
+import { PageHeading } from "@/components/PageHeading";
 import { cn } from "@/lib/cn";
 
 export type CameraInfo = { id: string; name: string };
@@ -31,177 +24,6 @@ export type CameraGroup = { key: string; label: string; cameras: CameraInfo[] };
 
 // What's currently in the spotlight / wall: one camera, or a saved group.
 type Selection = { kind: "camera"; id: string } | { kind: "group"; id: number };
-
-// How many columns to lay a wall of n cameras out in — kept squarish so each
-// feed stays as large as possible while all fit on one screen.
-function gridCols(n: number): number {
-  if (n <= 1) return 1;
-  if (n <= 4) return 2;
-  if (n <= 9) return 3;
-  if (n <= 16) return 4;
-  return 5;
-}
-
-type MotionKind = "person" | "vehicle" | "animal";
-// Mirrors lib/motion.ts (server-only, so not importable here).
-type ActiveMotion = {
-  id: string;
-  startedAt: number;
-  lastAt: number;
-  kinds: MotionKind[];
-  deviceKinds: MotionKind[];
-  events: number;
-  description: string | null;
-  channelName: string | null;
-};
-
-// The object filters, in button order. None selected = any motion at all.
-const MOTION_FILTERS: { kind: MotionKind; label: string; Icon: typeof PersonStanding }[] = [
-  { kind: "person", label: "אנשים", Icon: PersonStanding },
-  { kind: "vehicle", label: "רכבים", Icon: Car },
-  { kind: "animal", label: "בעלי חיים", Icon: PawPrint },
-];
-
-const MOTION_POLL_MS = 1000;
-// A camera stays on the wall this long after its last motion, so tiles don't
-// pop in and out every time someone pauses.
-const MOTION_LINGER_MS = 8000;
-// Most tiles the wall shows at once (the most recently moving win).
-const MOTION_MAX_TILES = 9;
-
-// Motion-follow mode: polls /api/motion (the cameras' own motion detection)
-// and keeps the wall of cameras that moved recently. Tiles keep their place in
-// order of arrival so the layout doesn't reshuffle under the viewer.
-function useMotionFollow(enabled: boolean, filters: MotionKind[], excluded: string[]) {
-  const [active, setActive] = useState<ActiveMotion[]>([]);
-  const [wall, setWall] = useState<string[]>([]);
-  // Each camera's latest event, kept after it goes quiet (the lingering tiles).
-  const [info, setInfo] = useState(new Map<string, ActiveMotion>());
-  // The server's clock — the times in the events are on it.
-  const [now, setNow] = useState(0);
-  const lastSeen = useRef(new Map<string, number>());
-
-  useEffect(() => {
-    if (!enabled) return;
-    let alive = true;
-    let timer: ReturnType<typeof setTimeout>;
-    const poll = async () => {
-      try {
-        const res = await fetch("/api/motion", { cache: "no-store" });
-        if (res.ok && alive) {
-          const body: { now: number; active: ActiveMotion[] } = await res.json();
-          const shown = body.active.filter(
-            (m) =>
-              !excluded.includes(m.id) &&
-              (filters.length === 0 || m.kinds.some((k) => filters.includes(k)))
-          );
-          setActive(shown);
-          setNow(body.now);
-          setInfo((prev) => {
-            const next = new Map(prev);
-            for (const m of shown) next.set(m.id, m);
-            return next;
-          });
-        }
-      } catch {
-        // Transient — keep the last picture.
-      }
-      if (alive) timer = setTimeout(poll, MOTION_POLL_MS);
-    };
-    poll();
-    return () => {
-      alive = false;
-      clearTimeout(timer);
-    };
-  }, [enabled, filters, excluded]);
-
-  useEffect(() => {
-    if (!enabled) return;
-    const now = Date.now();
-    const seen = lastSeen.current;
-    for (const m of active) seen.set(m.id, now);
-    setWall((prev) => {
-      const kept = prev.filter((id) => now - (seen.get(id) ?? 0) <= MOTION_LINGER_MS);
-      const added = active.map((m) => m.id).filter((id) => !kept.includes(id));
-      const next = [...kept, ...added];
-      // Over the cap: drop whichever has been quiet the longest.
-      while (next.length > MOTION_MAX_TILES) {
-        let oldest = 0;
-        for (let i = 1; i < next.length; i++) {
-          if ((seen.get(next[i]) ?? 0) < (seen.get(next[oldest]) ?? 0)) oldest = i;
-        }
-        next.splice(oldest, 1);
-      }
-      return next.length === prev.length && next.every((id, i) => id === prev[i])
-        ? prev
-        : next;
-    });
-  }, [active, enabled]);
-
-  return {
-    // camera id -> what it's showing right now (absent = lingering, quiet)
-    active: new Map(enabled ? active.map((m) => [m.id, m.kinds]) : []),
-    // A just-hidden camera leaves the wall at once, not after its linger.
-    wall: enabled ? wall.filter((id) => !excluded.includes(id)) : [],
-    info,
-    now,
-  };
-}
-
-const KIND_LABEL: Record<MotionKind, string> = {
-  person: "אדם",
-  vehicle: "רכב",
-  animal: "בעל חיים",
-};
-
-// Hebrew for the devices' eventDescription; anything unknown shows as sent.
-const EVENT_LABEL: Record<string, string> = { "Motion alarm": "התראת תנועה" };
-
-function clock(ms: number): string {
-  return new Date(ms).toLocaleTimeString("he-IL", { hour12: false });
-}
-
-function span(ms: number): string {
-  const s = Math.max(0, Math.round(ms / 1000));
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
-}
-
-// The strip under a motion-wall tile: what moved and who said so (the
-// camera/DVR's own detection, or our AI check on a snapshot), the event, when,
-// and for how long. Times are the server's — the devices' clocks are off.
-function MotionInfo({ info, live, now }: { info?: ActiveMotion; live: boolean; now: number }) {
-  if (!info) return null;
-  return (
-    <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-300">
-      {info.kinds.length === 0 ? (
-        <span className="text-zinc-500">תנועה — לא זוהה אובייקט</span>
-      ) : (
-        MOTION_FILTERS.filter((f) => info.kinds.includes(f.kind)).map(({ kind, Icon }) => (
-          <span key={kind} className="flex items-center gap-1 font-semibold text-white">
-            <Icon className="size-3.5" aria-hidden />
-            {KIND_LABEL[kind]}
-            <span className="rounded bg-white/10 px-1 text-[10px] font-normal text-zinc-300">
-              {info.deviceKinds.includes(kind) ? "זיהוי מצלמה" : "זיהוי AI"}
-            </span>
-          </span>
-        ))
-      )}
-      {info.description && <span>{EVENT_LABEL[info.description] ?? info.description}</span>}
-      <span className={live ? "text-red-300" : "text-zinc-500"}>
-        {live
-          ? `פעיל ${span(now - info.startedAt)}`
-          : `שקט · לפני ${span(now - info.lastAt)}`}
-      </span>
-      <span className="tabular-nums">{clock(info.lastAt)}</span>
-      {info.events > 1 && <span>{info.events} אירועים</span>}
-      {info.channelName && (
-        <span className="text-zinc-500" dir="ltr">
-          {info.channelName}
-        </span>
-      )}
-    </div>
-  );
-}
 
 // The cameras explorer: a scrollable side menu of every camera (grouped,
 // collapsible) plus the user's own saved camera groups. Picking a single camera
@@ -229,13 +51,8 @@ export function CameraExplorer({
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<SavedGroup | null>(null);
   const [follow, setFollow] = useState(true);
-  const [filters, setFilters] = useState<MotionKind[]>(["person", "vehicle", "animal"]);
-  const [wallDetect, setWallDetect] = useState(true);
-  const excluded = useMotionExcluded();
-  const setExcluded = useSetMotionExcluded();
-  const motion = useMotionFollow(follow, filters, excluded);
-  const toggleFilter = (kind: MotionKind) =>
-    setFilters((f) => (f.includes(kind) ? f.filter((k) => k !== kind) : [...f, kind]));
+  const wallOptions = useMotionWallOptions();
+  const motion = useMotionWall(follow, wallOptions);
   const nameOf = (id: string) => all.find((c) => c.id === id)?.name ?? id;
 
   const activeGroup =
@@ -268,8 +85,10 @@ export function CameraExplorer({
         <PageHeading href="/cameras" fallback="מצלמות" className="text-xl" />
         <span className="text-sm text-foreground/50">({all.length})</span>
         {/* The wall's controls as plain icons, right after the title: follow
-            first, then detection, then the object filters. Colour = on. */}
-        <div className="ms-3 flex items-center gap-0.5">
+            first, then detection, then the object filters. Colour = on. Then,
+            while following, who's moving and the hidden-cameras dropdown — on
+            this line, so the wall gets the height. */}
+        <div className="ms-3 me-2 flex shrink-0 items-center gap-0.5">
           <button
             type="button"
             onClick={() => setFollow((f) => !f)}
@@ -283,50 +102,14 @@ export function CameraExplorer({
           >
             <Activity className={cn("size-5", follow && "animate-pulse")} />
           </button>
-          {follow && (
-            <>
-              {/* Object detection on every tile in the wall — boxes make far-off
-                  people and cars easy to spot. A tile's own eye button overrides. */}
-              <button
-                type="button"
-                onClick={() => setWallDetect((d) => !d)}
-                aria-pressed={wallDetect}
-                aria-label="זיהוי אובייקטים"
-                title="זיהוי אובייקטים בכל המצלמות במעקב"
-                className={cn(
-                  "rounded-md p-1.5 transition-colors",
-                  wallDetect
-                    ? "text-emerald-600 dark:text-emerald-400"
-                    : "text-foreground/40 hover:text-foreground/70"
-                )}
-              >
-                <ScanEye className="size-5" />
-              </button>
-              <span className="mx-1 h-5 w-px bg-black/10 dark:bg-white/10" aria-hidden />
-              {MOTION_FILTERS.toReversed().map(({ kind, label, Icon }) => {
-                const on = filters.includes(kind);
-                return (
-                  <button
-                    key={kind}
-                    type="button"
-                    onClick={() => toggleFilter(kind)}
-                    aria-pressed={on}
-                    aria-label={label}
-                    title={`${label} — בלי סינון מוצגת כל תנועה`}
-                    className={cn(
-                      "rounded-md p-1.5 transition-colors",
-                      on
-                        ? "text-emerald-600 dark:text-emerald-400"
-                        : "text-foreground/40 hover:text-foreground/70"
-                    )}
-                  >
-                    <Icon className="size-5" />
-                  </button>
-                );
-              })}
-            </>
-          )}
+          {follow && <MotionWallToggles options={wallOptions} />}
         </div>
+        {follow && (
+          <>
+            <MotionChips motion={motion} nameOf={nameOf} />
+            <HiddenFromFollowMenu nameOf={nameOf} />
+          </>
+        )}
       </div>
 
       {all.length === 0 ? (
@@ -452,104 +235,7 @@ export function CameraExplorer({
           {/* View — a group's wall, or one camera's spotlight. */}
           <div className="min-h-0 flex-1">
             {follow ? (
-              <div className="flex h-full flex-col gap-2">
-                <div className="flex min-h-9 shrink-0 flex-wrap items-center gap-1.5">
-                  {motion.wall.length === 0 ? (
-                    <span className="text-sm text-foreground/50">אין תנועה כרגע…</span>
-                  ) : (
-                    motion.wall.map((id) => {
-                      const kinds = motion.active.get(id);
-                      return (
-                        <span
-                          key={id}
-                          className={cn(
-                            "flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs",
-                            kinds
-                              ? "border-red-500/50 bg-red-500/15 font-semibold text-red-600 dark:text-red-300"
-                              : "border-black/10 text-foreground/50 dark:border-white/10"
-                          )}
-                        >
-                          <span
-                            className={cn(
-                              "size-1.5 rounded-full",
-                              kinds ? "animate-pulse bg-red-500" : "bg-zinc-500"
-                            )}
-                          />
-                          {nameOf(id)}
-                          {MOTION_FILTERS.filter((f) => kinds?.includes(f.kind)).map(
-                            ({ kind, Icon }) => (
-                              <Icon key={kind} className="size-3.5" />
-                            )
-                          )}
-                        </span>
-                      );
-                    })
-                  )}
-                  {/* Cameras hidden from follow — X brings one back. */}
-                  {excluded.length > 0 && (
-                    <div className="ms-auto flex flex-wrap items-center gap-1.5">
-                      <span className="flex items-center gap-1 text-xs text-foreground/50">
-                        <FunnelX className="size-3.5" aria-hidden />
-                        מוסתרות ממעקב:
-                      </span>
-                      {excluded.map((id) => (
-                        <span
-                          key={id}
-                          className="flex items-center gap-1 rounded-full border border-black/10 py-0.5 pe-1 ps-2.5 text-xs text-foreground/70 dark:border-white/10"
-                        >
-                          {nameOf(id)}
-                          <button
-                            type="button"
-                            onClick={() => setExcluded(id, false)}
-                            aria-label={`החזר את ${nameOf(id)} למעקב`}
-                            title="החזר למעקב"
-                            className="rounded-full p-0.5 text-foreground/50 transition-colors hover:bg-black/10 hover:text-foreground dark:hover:bg-white/10"
-                          >
-                            <X className="size-3" />
-                          </button>
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <div className="min-h-0 flex-1">
-                  {motion.wall.length > 0 ? (
-                    <div
-                      className="grid h-full gap-2"
-                      style={{
-                        gridTemplateColumns: `repeat(${gridCols(
-                          motion.wall.length
-                        )}, minmax(0, 1fr))`,
-                        gridTemplateRows: `repeat(${Math.ceil(
-                          motion.wall.length / gridCols(motion.wall.length)
-                        )}, minmax(0, 1fr))`,
-                      }}
-                    >
-                      {motion.wall.map((id) => (
-                        <CameraTile
-                          key={id}
-                          camId={id}
-                          title={nameOf(id)}
-                          onExclude={() => setExcluded(id, true)}
-                          autoDetect={wallDetect}
-                          detectLite
-                          footer={
-                            <MotionInfo
-                              info={motion.info.get(id)}
-                              live={motion.active.has(id)}
-                              now={motion.now}
-                            />
-                          }
-                        />
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="grid h-full place-items-center rounded-xl border border-black/10 text-sm text-foreground/50 dark:border-white/10">
-                      ממתין לתנועה במצלמות…
-                    </div>
-                  )}
-                </div>
-              </div>
+              <MotionWall motion={motion} nameOf={nameOf} options={wallOptions} />
             ) : activeGroup ? (
               activeGroup.cameras.length === 0 ? (
                 <div className="grid h-full place-items-center rounded-xl border border-black/10 text-sm text-foreground/50 dark:border-white/10">

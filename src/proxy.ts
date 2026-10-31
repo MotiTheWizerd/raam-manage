@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { BARE_HEADER, BARE_PAGES } from "@/lib/bare-pages";
 import {
   SESSION_COOKIE_NAME,
   SESSION_MAX_AGE_SECONDS,
@@ -24,7 +25,13 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  const res = NextResponse.next();
+  // A bare page (no header/sidebar/dock) — tell the root layout.
+  let res = NextResponse.next();
+  if (BARE_PAGES.includes(request.nextUrl.pathname)) {
+    const headers = new Headers(request.headers);
+    headers.set(BARE_HEADER, "1");
+    res = NextResponse.next({ request: { headers } });
+  }
   // Sliding refresh: re-stamp the session cookie's lifetime on every authed
   // request so an already-open session also becomes persistent and survives
   // browser/Windows restarts (otherwise a stale tab's red door/gate buttons

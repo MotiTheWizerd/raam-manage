@@ -1,7 +1,18 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { ChevronUp, DoorOpen, EllipsisVertical, Lock, LockOpen, ShieldAlert, ShieldCheck } from "lucide-react";
+import {
+  Cctv,
+  Check,
+  ChevronUp,
+  DoorOpen,
+  EllipsisVertical,
+  Lock,
+  LockOpen,
+  ShieldAlert,
+  ShieldCheck,
+  X,
+} from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -12,12 +23,20 @@ import {
   openDoor,
   releaseDoorHold,
 } from "@/app/doors/actions";
+import {
+  getFollowScreen,
+  getFollowScreens,
+  hideFollowScreen,
+  showFollowScreen,
+} from "@/app/follow/actions";
 import { openGate } from "@/app/gates/actions";
 import { useEmergency } from "@/components/EmergencyProvider";
 import { GateLiveView } from "@/components/GateLiveView";
 import { GateSequenceView } from "@/components/gate-escort";
+import { useFollowScreen, useSetFollowScreen } from "@/components/PreferencesProvider";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { cn } from "@/lib/cn";
+import type { FollowScreenState, Screen } from "@/lib/follow-screen";
 
 type Gate = { id: "upper" | "lower"; name: string; short: string };
 
@@ -92,6 +111,14 @@ export function GateControl() {
   const [emergencyBusy, setEmergencyBusy] = useState(false);
   // Confirm dialog before opening the whole building at once.
   const [confirmEmergency, setConfirmEmergency] = useState(false);
+  // The follow wall on the camera computer's screen: whether it's up (and
+  // where), the screen picked for it (saved), and its ⋮ screen menu.
+  const [followWin, setFollowWin] = useState<FollowScreenState | null>(null);
+  const [followBusy, setFollowBusy] = useState(false);
+  const [followMenuOpen, setFollowMenuOpen] = useState(false);
+  const [screens, setScreens] = useState<Screen[] | null>(null);
+  const followScreen = useFollowScreen();
+  const setFollowScreen = useSetFollowScreen();
 
   async function fire(gate: Gate) {
     if (busy) return;
@@ -155,6 +182,65 @@ export function GateControl() {
       clearInterval(timer);
     };
   }, []);
+
+  // Keep the camera button honest — the wall may be opened from the other
+  // lobby PC, or closed on the camera computer itself (Alt+F4).
+  useEffect(() => {
+    let alive = true;
+    async function check() {
+      const state = await getFollowScreen();
+      if (alive && state) setFollowWin(state);
+    }
+    void check();
+    const timer = setInterval(check, 15000);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
+  }, []);
+
+  async function showFollow(screenId: string) {
+    if (followBusy) return;
+    setFollowBusy(true);
+    setFollowMenuOpen(false);
+    const r = await showFollowScreen(screenId);
+    setFollowBusy(false);
+    if (r.ok) {
+      setFollowWin({ open: true, screen: screenId });
+      toast.success("מעקב התנועה נפתח במסך המצלמות");
+    } else {
+      toast.error(r.error ?? "פתיחת המעקב נכשלה");
+    }
+  }
+
+  async function hideFollow() {
+    if (followBusy) return;
+    setFollowBusy(true);
+    setFollowMenuOpen(false);
+    const r = await hideFollowScreen();
+    setFollowBusy(false);
+    if (r.ok) {
+      setFollowWin({ open: false, screen: null });
+      toast.success("מעקב התנועה נסגר");
+    } else {
+      toast.error(r.error ?? "סגירת המעקב נכשלה");
+    }
+  }
+
+  function toggleFollowMenu() {
+    setGlobalMenuOpen(false);
+    setLobbyMenuOpen(false);
+    setFollowMenuOpen((v) => !v);
+    if (!screens) getFollowScreens().then(setScreens, () => setScreens([]));
+  }
+
+  // The camera button: close the wall if it's up, else open it on the saved
+  // screen — or, before any screen was picked, offer the pick.
+  function toggleFollow() {
+    if (followWin?.open) void hideFollow();
+    else if (followScreen) void showFollow(followScreen);
+    else toggleFollowMenu();
+  }
 
   // Emergency: open (force-unlock) every building door at once.
   async function doEmergencyOpen() {
@@ -310,6 +396,7 @@ export function GateControl() {
               type="button"
               onClick={() => {
                 setLobbyMenuOpen(false);
+                setFollowMenuOpen(false);
                 setGlobalMenuOpen((v) => !v);
               }}
               aria-haspopup="menu"
@@ -434,6 +521,7 @@ export function GateControl() {
                 type="button"
                 onClick={() => {
                   setGlobalMenuOpen(false);
+                  setFollowMenuOpen(false);
                   setLobbyMenuOpen((v) => !v);
                 }}
                 aria-haspopup="menu"
@@ -502,6 +590,141 @@ export function GateControl() {
                       )}
                       {lobbyHeld ? "שחרר דלת (חזרה לרגיל)" : "החזק דלת פתוחה"}
                     </button>
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
+          </div>
+
+          {/* Follow wall on the camera computer's screen — a dark split pill
+              (not a door): the camera opens/closes the wall full screen on the
+              saved screen, the ⋮ cap (right under RTL) picks the screen. A
+              pulsing red dot = the wall is up. */}
+          <div className="relative">
+            <div
+              className={cn(
+                "relative inline-flex h-full items-stretch overflow-hidden rounded-full",
+                "bg-linear-to-b from-zinc-600 to-zinc-800 text-white",
+                "shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_2px_8px_rgba(0,0,0,0.3)]",
+                "transition-all duration-200 ease-out",
+                "hover:-translate-y-0.5 hover:from-zinc-500 hover:to-zinc-700"
+              )}
+            >
+              <button
+                type="button"
+                onClick={toggleFollowMenu}
+                aria-haspopup="menu"
+                aria-expanded={followMenuOpen}
+                aria-label="בחירת מסך למעקב התנועה"
+                className="flex items-center justify-center px-2.5 transition-colors duration-200 ease-out hover:bg-white/10"
+              >
+                <EllipsisVertical className="size-5" />
+              </button>
+
+              <span aria-hidden className="my-2 w-px self-stretch bg-white/30" />
+
+              <button
+                type="button"
+                onClick={toggleFollow}
+                disabled={followBusy}
+                aria-pressed={!!followWin?.open}
+                aria-label="מעקב תנועה במסך המצלמות"
+                title={
+                  followWin?.open
+                    ? "סגור את מעקב התנועה במסך המצלמות"
+                    : "פתח מעקב תנועה במסך המצלמות"
+                }
+                className="relative flex items-center justify-center px-4 py-3 transition-colors duration-200 ease-out hover:bg-white/10 disabled:opacity-60"
+              >
+                <Cctv className={cn("size-5", followBusy && "animate-pulse")} />
+                {followWin?.open && (
+                  <span
+                    aria-hidden
+                    className="absolute top-2 left-2.5 size-2 animate-pulse rounded-full bg-red-500 ring-2 ring-zinc-700"
+                  />
+                )}
+              </button>
+            </div>
+
+            {/* screen menu — opens upward over the drawer */}
+            <AnimatePresence>
+              {followMenuOpen && (
+                <>
+                  <button
+                    type="button"
+                    aria-hidden
+                    tabIndex={-1}
+                    onClick={() => setFollowMenuOpen(false)}
+                    className="fixed inset-0 z-40 cursor-default"
+                  />
+                  <motion.div
+                    role="menu"
+                    initial={{ opacity: 0, y: 6, scale: 0.96 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 6, scale: 0.96 }}
+                    transition={{ duration: 0.15, ease: "easeOut" }}
+                    className={cn(
+                      "absolute left-0 bottom-full z-50 mb-2 min-w-60 overflow-hidden rounded-2xl p-1.5",
+                      "border border-zinc-200/80 bg-white/95 shadow-2xl backdrop-blur-md",
+                      "dark:border-zinc-700/80 dark:bg-zinc-900/95"
+                    )}
+                  >
+                    <p className="px-3 pt-1.5 pb-1 text-xs font-medium text-zinc-400 dark:text-zinc-500">
+                      מעקב תנועה — באיזה מסך מצלמות
+                    </p>
+                    {screens === null ? (
+                      <p className="px-3 py-2.5 text-sm text-zinc-500">טוען מסכים…</p>
+                    ) : screens.length === 0 ? (
+                      <p className="px-3 py-2.5 text-sm text-zinc-500">לא נמצאו מסכים</p>
+                    ) : (
+                      screens.map((s) => (
+                        <button
+                          key={s.id}
+                          type="button"
+                          role="menuitemradio"
+                          aria-checked={followScreen === s.id}
+                          onClick={() => {
+                            setFollowScreen(s.id);
+                            void showFollow(s.id);
+                          }}
+                          disabled={followBusy}
+                          className={cn(
+                            "flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium",
+                            "text-zinc-700 transition-colors duration-150 hover:bg-zinc-100 disabled:opacity-60",
+                            "dark:text-zinc-200 dark:hover:bg-zinc-800"
+                          )}
+                        >
+                          <Check
+                            className={cn(
+                              "size-4 shrink-0 text-emerald-600 dark:text-emerald-400",
+                              followScreen !== s.id && "invisible"
+                            )}
+                          />
+                          {s.label}
+                          {followWin?.open && followWin.screen === s.id && (
+                            <span className="ms-auto text-xs font-semibold text-red-600 dark:text-red-400">
+                              פתוח
+                            </span>
+                          )}
+                        </button>
+                      ))
+                    )}
+                    {followWin?.open && (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={hideFollow}
+                        disabled={followBusy}
+                        className={cn(
+                          "flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium",
+                          "text-red-700 transition-colors duration-150 hover:bg-red-50 disabled:opacity-60",
+                          "dark:text-red-300 dark:hover:bg-red-950/40"
+                        )}
+                      >
+                        <X className="size-4 shrink-0" />
+                        סגור את המעקב
+                      </button>
+                    )}
                   </motion.div>
                 </>
               )}

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Heebo } from "next/font/google";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { Suspense } from "react";
 import { Toaster } from "sonner";
 import { AssistantPanel } from "@/components/AssistantPanel";
@@ -17,6 +17,7 @@ import { Sidebar } from "@/components/Sidebar";
 import { StickyMessages } from "@/components/StickyMessages";
 import { BackToTop } from "@/components/ui/BackToTop";
 import { getCurrentUser } from "@/lib/auth";
+import { BARE_HEADER } from "@/lib/bare-pages";
 import { getPreferences } from "@/lib/preferences";
 import { SESSION_SINCE_COOKIE_NAME } from "@/lib/session-config";
 import "./globals.css";
@@ -36,12 +37,16 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const [preferences, currentUser, cookieStore] = await Promise.all([
+  const [preferences, currentUser, cookieStore, headerStore] = await Promise.all([
     getPreferences(),
     getCurrentUser(),
     cookies(),
+    headers(),
   ]);
-  const isDark = cookieStore.get("theme")?.value === "dark";
+  // A screen of its own (the follow wall on the camera computer): just the
+  // page, always dark — no header, sidebar, dock or shift auto-logout.
+  const bare = headerStore.get(BARE_HEADER) === "1";
+  const isDark = bare || cookieStore.get("theme")?.value === "dark";
   const sinceRaw = cookieStore.get(SESSION_SINCE_COOKIE_NAME)?.value;
   const loginAt =
     sinceRaw && !Number.isNaN(Number(sinceRaw)) ? Number(sinceRaw) : null;
@@ -56,7 +61,7 @@ export default async function RootLayout({
       <body className="min-h-full flex flex-col">
         <AuthProvider user={currentUser}>
           <PreferencesProvider initial={preferences} currentUser={currentUser}>
-            {currentUser ? (
+            {currentUser && !bare ? (
               <EmergencyProvider>
                 <EditModeProvider>
                 <Header lobbyistName={currentUser.lobbyist_name} isDark={isDark} />

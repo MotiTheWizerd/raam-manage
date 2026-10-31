@@ -27,13 +27,27 @@ export function PreferencesProvider({ initial, currentUser, children }: Props) {
     createPreferencesStore(initial, currentUser)
   );
 
-  // Debounced auto-save: subscribe to store, push every change to the server.
+  // Debounced auto-save: subscribe to store, push every change to the server —
+  // only the fields that changed, so another window's changes to the shared
+  // row aren't overwritten with this window's stale copy.
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | null = null;
-    const unsub = store.subscribe((state) => {
+    const dirty = new Set<keyof Preferences>();
+    const unsub = store.subscribe((state, prev) => {
+      const next = extractPreferences(state);
+      const before = extractPreferences(prev);
+      for (const key of Object.keys(next) as (keyof Preferences)[]) {
+        if (next[key] !== before[key]) dirty.add(key);
+      }
+      if (dirty.size === 0) return;
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => {
-        savePreferences(extractPreferences(state)).catch((e) =>
+        const latest = extractPreferences(store.getState());
+        const changed = Object.fromEntries(
+          [...dirty].map((key) => [key, latest[key]])
+        ) as Partial<Preferences>;
+        dirty.clear();
+        savePreferences(changed).catch((e) =>
           console.error("savePreferences failed", e)
         );
       }, 300);
@@ -89,5 +103,9 @@ export const useMotionExcluded = () =>
   usePreferencesStore((s) => s.motionFollow.excluded);
 export const useSetMotionExcluded = () =>
   usePreferencesStore((s) => s.setMotionExcluded);
+export const useFollowScreen = () =>
+  usePreferencesStore((s) => s.followScreen);
+export const useSetFollowScreen = () =>
+  usePreferencesStore((s) => s.setFollowScreen);
 export const useActiveLobbyist = () =>
   usePreferencesStore((s) => s.activeLobbyist);

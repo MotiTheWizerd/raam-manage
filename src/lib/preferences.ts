@@ -44,6 +44,9 @@ export type Preferences = {
   // Camera ids hidden from the /cameras motion-follow wall (a duplicate angle
   // of the same room, or a camera that keeps picking the wrong view).
   motionFollow: { excluded: string[] };
+  // The camera computer's screen the dock opens the follow wall on — the
+  // physical monitor's id (see lib/follow-screen.ts). null = not picked yet.
+  followScreen: string | null;
 };
 
 const DEFAULTS: Preferences = {
@@ -53,6 +56,7 @@ const DEFAULTS: Preferences = {
   selectedResident: null,
   lobbyMessages: { dismissedSignature: "" },
   motionFollow: { excluded: [] },
+  followScreen: null,
 };
 
 function sanitizeLabels(value: unknown): Record<string, string> {
@@ -113,6 +117,8 @@ function merge(stored: Partial<Preferences>): Preferences {
         ? stored.motionFollow.excluded.filter((id): id is string => typeof id === "string")
         : DEFAULTS.motionFollow.excluded,
     },
+    followScreen:
+      typeof stored.followScreen === "string" ? stored.followScreen : DEFAULTS.followScreen,
   };
 }
 
@@ -128,8 +134,11 @@ export async function getPreferences(): Promise<Preferences> {
   }
 }
 
-export async function savePreferences(prefs: Preferences): Promise<void> {
-  const safe = merge(prefs);
+// Saves only the fields a browser changed, on top of what's stored — the row is
+// shared by every open window (lobby PCs, the follow wall on the camera
+// screen), so writing a whole stale copy would undo another window's changes.
+export async function savePreferences(changed: Partial<Preferences>): Promise<void> {
+  const safe = merge({ ...(await getPreferences()), ...changed });
   db.prepare(
     `UPDATE user_preferences
        SET data = ?, updated_at = CURRENT_TIMESTAMP

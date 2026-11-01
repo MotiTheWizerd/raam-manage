@@ -98,7 +98,9 @@ export function IntercomCallPopup() {
             ? `הדלת נפתחה ${by}`
             : ended
               ? "השיחה הסתיימה — הדלת לא נפתחה"
-              : "מצלצל בטאבלט בלובי…";
+              : c.tabletStatus === "onCall"
+                ? "נענתה בטאבלט — בשיחה"
+                : "מצלצל בטאבלט בלובי…";
           return (
             <motion.div
               key={c.id}

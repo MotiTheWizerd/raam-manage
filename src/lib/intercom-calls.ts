@@ -5,7 +5,12 @@ import path from "node:path";
 
 import { db } from "@/lib/db";
 import { INTERCOM_PANELS } from "@/lib/intercom";
-import { endTabletCall, logControl, openDuringCall } from "@/lib/intercom-control";
+import {
+  endTabletCall,
+  logControl,
+  openDuringCall,
+  readTabletStatus,
+} from "@/lib/intercom-control";
 import { followIntercomLog } from "@/lib/intercom-log";
 
 // A visitor pressing a door panel's call button, as the panels report it over
@@ -36,7 +41,13 @@ export type IntercomCall = {
   openedBy: string | null;
   endedAt: number | null;
   replay: boolean;
+  // the lobby tablet's call state while the call is live: "ring", "onCall"
+  // (answered there) — read once a second, null until the first read
+  tabletStatus: string | null;
 };
+
+// How often a live call's tablet state is read.
+const TABLET_STATUS_EVERY_MS = 1000;
 
 type PanelEvent = {
   panel?: string;
@@ -60,6 +71,8 @@ type CallsState = {
   tailing: boolean;
   calls: Map<string, IntercomCall>;
   autoOpen?: AutoOpen | null;
+  // when the tablet's call state was last asked for (or is being asked now)
+  tabletAskedAt?: number;
 };
 
 // One tail per server process (survives dev hot-reloads via globalThis).
@@ -98,6 +111,7 @@ function onEvent(line: string) {
       openedBy: null,
       endedAt: null,
       replay: !!ev.replay,
+      tabletStatus: null,
     };
     state.calls.set(panel.host, started);
     // A played call has no visitor behind it — never open a real door for it.
@@ -136,8 +150,9 @@ export function setAutoOpen(on: boolean, by: string): AutoOpen | null {
   return getAutoOpen();
 }
 
-// The auto-open for one call: the lobby's usual 🔑 + hang up, through the
-// tablet (lib/intercom-control.ts), logged under whoever switched it on.
+// The auto-open for one call: the lobby's usual 🔑 + hang up (the panel's lock,
+// then reject on the tablet — lib/intercom-control.ts), logged under whoever
+// switched it on.
 async function autoAnswer(call: IntercomCall, by: string) {
   if (call.endedAt !== null || call.openedAt !== null) return; // already handled
   const ok = await openDuringCall(call.camId).catch(() => false);
@@ -153,6 +168,23 @@ async function autoAnswer(call: IntercomCall, by: string) {
   }
 }
 
+// Read the tablet's call state for the live real calls, at most once a second,
+// in the background (the popup's poll never waits on the tablet). One tablet,
+// one state: it's given to every live call. Each change is logged.
+function refreshTabletStatus(live: IntercomCall[]) {
+  const now = Date.now();
+  if (live.length === 0 || now - (state.tabletAskedAt ?? 0) < TABLET_STATUS_EVERY_MS) return;
+  state.tabletAskedAt = now;
+  void readTabletStatus().then((status) => {
+    for (const call of live) {
+      if (status !== call.tabletStatus) {
+        void logControl({ camId: call.camId, step: "tablet-watch", call: call.id, status });
+      }
+      call.tabletStatus = status;
+    }
+  });
+}
+
 // Calls ringing or in progress now, plus ones that just ended.
 export function getIntercomCalls(): IntercomCall[] {
   const now = Date.now();
@@ -160,6 +192,7 @@ export function getIntercomCalls(): IntercomCall[] {
     const over = c.endedAt !== null ? now - c.endedAt > ENDED_SHOW_MS : now - c.startedAt > MAX_CALL_MS;
     if (over) state.calls.delete(host);
   }
+  refreshTabletStatus([...state.calls.values()].filter((c) => c.endedAt === null && !c.replay));
   return [...state.calls.values()].sort((a, b) => b.startedAt - a.startedAt);
 }
 
@@ -174,8 +207,8 @@ function markOpened(call: IntercomCall) {
   call.openedBy = "remote";
 }
 
-// The popup's 🔑 on a door that's calling: open and hang up through the tablet,
-// as its own key does. null when there's no live real call there — the caller
+// The popup's 🔑 on a door that's calling: open, then hang the tablet up — the
+// lobbyist's 🔑 + hang up. null when there's no live real call there — the caller
 // opens the panel's lock as usual.
 export async function openLiveCall(camId: string): Promise<boolean | null> {
   const call = liveCall(camId);

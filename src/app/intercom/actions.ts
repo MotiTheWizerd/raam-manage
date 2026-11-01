@@ -19,9 +19,9 @@ export type IntercomOpenResult = { ok: boolean; error?: string };
 
 // Any logged-in staff may open — same policy as the door and gate buttons.
 // Every attempt lands in door_events (source "intercom"). From the call popup
-// (`endCall`), while that door is calling, it opens through the lobby tablet and
-// hangs up — the lobby's usual call: it rings, nobody answers, 🔑, hang up so
-// the tablet doesn't keep ringing. Otherwise the panel's own lock opens.
+// (`endCall`), while that door is calling, it opens and then hangs the lobby
+// tablet up — the lobby's usual call: it rings, nobody answers, 🔑, hang up so
+// the tablet doesn't keep ringing. Otherwise the panel's own lock just opens.
 export async function openIntercomDoor(
   camId: string,
   opts?: { endCall?: boolean }

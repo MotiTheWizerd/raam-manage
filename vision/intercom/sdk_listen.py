@@ -8,8 +8,10 @@ Read-only: nothing on the panels is changed.
 
 Run from vision/:  .venv/Scripts/python.exe intercom/sdk_listen.py
 SDK DLLs (64-bit, copied from the iVMS install) live in data/hik-sdk/ (gitignored).
-Events go to logs/intercom-events.jsonl (src/lib/motion.ts tails it); the rarer
-non-motion ones are also printed. Runs under pm2 as raam-intercom-listener.
+Events go to logs/intercom-events.jsonl (src/lib/motion.ts and intercom-calls.ts
+tail it); the rarer non-motion ones are also printed. Each door unlock's photo
+is kept in data/intercom-photos/ (see events.py). Runs under pm2 as
+raam-intercom-listener.
 """
 
 import ctypes as C
@@ -19,14 +21,10 @@ import re
 import sys
 import time
 from datetime import datetime
-from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]
+from events import LOG, ROOT, append_event, env, save_opening
+
 SDK = ROOT / "data" / "hik-sdk"
-LOG = ROOT / "logs" / "intercom-events.jsonl"
-# The elevator recorder alone sends ~1 motion alarm a second, so the log is
-# capped: past this size it moves to intercom-events.1.jsonl and starts over.
-LOG_MAX_BYTES = 20 * 1024 * 1024
 
 PANELS = ["10.0.0.70", "10.0.0.71", "10.0.0.72", "10.0.0.73", "10.0.0.173", "10.0.0.174"]
 PORT = 8000
@@ -45,12 +43,9 @@ COMMANDS = {
     0x6009: "COMM_ISAPI_ALARM",
 }
 
-
-def env(name: str) -> str:
-    for line in (ROOT / ".env.local").read_text(encoding="utf-8").splitlines():
-        if line.startswith(name + "="):
-            return line.split("=", 1)[1].strip().strip('"')
-    raise SystemExit(f"{name} missing in .env.local")
+# Who opened (byUnlockType). Both seen live: 4 = the lobby tablet (its device
+# number is the source), 5 = a remote open — our app's 🔑 or iVMS.
+UNLOCK_BY = {4: "indoor", 5: "center"}
 
 
 os.add_dll_directory(str(SDK))
@@ -82,6 +77,24 @@ users: dict[int, str] = {}  # lUserID -> panel ip
 
 def strings(raw: bytes) -> list[str]:
     return [s.decode("ascii") for s in re.findall(rb"[\x20-\x7e]{4,}", raw)][:12]
+
+
+def cstr(raw: bytes) -> str:
+    return raw.split(b"\0")[0].decode("ascii", "replace")
+
+
+def unlock_record(buf: int, size: int) -> tuple[dict, bytes | None]:
+    """A door unlock (COMM_UPLOAD_VIDEO_INTERCOM_EVENT, byEventType 1): who opened
+    and the panel's photo. NET_DVR_UNLOCK_RECORD_INFO sits at offset 48:
+    byUnlockType, 3 pad, byControlSrc[32], dwPicDataLen, then the BYTE* pImage
+    (8-aligned, 88) ... byLockName[32] at 108. The JPEG follows the struct."""
+    raw = C.string_at(buf, min(size, 4096))
+    by = raw[48]
+    unlock = {"by": UNLOCK_BY.get(by, f"type{by}"), "src": cstr(raw[52:84]), "lock": cstr(raw[108:140])}
+    pic_len = int.from_bytes(raw[84:88], "little")
+    pic_ptr = int.from_bytes(raw[88:96], "little")
+    jpeg = C.string_at(pic_ptr, pic_len) if pic_ptr and 0 < pic_len < 4_000_000 else None
+    return unlock, jpeg
 
 
 def describe(cmd: int, buf: int, size: int) -> dict:
@@ -126,13 +139,12 @@ def on_message(cmd, alarmer, info, size, _user):
             "name": COMMANDS.get(cmd, "?"),
             **describe(cmd, info, size),
         }
-        line = json.dumps(ev, ensure_ascii=False)
+        if cmd == 0x1132 and ev.get("type") == 1 and size >= 140:
+            ev["unlock"], jpeg = unlock_record(info, size)
+            save_opening(ev, jpeg)
         if cmd != 0x4000:
-            print(line, flush=True)
-        if LOG.exists() and LOG.stat().st_size > LOG_MAX_BYTES:
-            LOG.replace(LOG.with_suffix(".1.jsonl"))
-        with LOG.open("a", encoding="utf-8") as f:
-            f.write(line + "\n")
+            print(json.dumps(ev, ensure_ascii=False), flush=True)
+        append_event(ev)
     except Exception as e:  # never let an exception cross into the SDK thread
         print(f"callback error: {e}", file=sys.stderr, flush=True)
     return 1

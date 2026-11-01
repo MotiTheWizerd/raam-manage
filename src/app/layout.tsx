@@ -10,6 +10,7 @@ import { EmergencyProvider } from "@/components/EmergencyProvider";
 import { FaceNotifier } from "@/components/FaceNotifier";
 import { GateControl } from "@/components/GateControl";
 import { Header } from "@/components/Header";
+import { IntercomCallPopup } from "@/components/intercom/IntercomCallPopup";
 import { NewCarNotifier } from "@/components/NewCarNotifier";
 import { PreferencesProvider } from "@/components/PreferencesProvider";
 import { ShiftGuard } from "@/components/ShiftGuard";
@@ -83,6 +84,8 @@ export default async function RootLayout({
                 {/* Lobby messages — self-positioned left-edge drawer that tucks
                     itself into a grip handle and peeks open on hover. */}
                 <StickyMessages />
+                {/* A door panel calling the lobby — top-center, over the page. */}
+                <IntercomCallPopup />
                 {/* Floating assistant chat — bottom-right glass panel, Ctrl+K.
                     Sits over BackToTop (z-40) only while open. */}
                 <AssistantPanel />

@@ -27,13 +27,17 @@ export function IntercomWall({ panels }: { panels: { camId: string; name: string
 type KeyState = { status: "idle" | "busy" | "ok" | "error"; error?: string };
 
 // The tablet's key button: one press = one momentary unlock of that panel's door.
-function DoorKey({ camId }: { camId: string }) {
+// In the call popup (`endCall`) the opening also ends the call, on the tablet too.
+export function DoorKey({ camId, endCall }: { camId: string; endCall?: boolean }) {
   const [state, setState] = useState<KeyState>({ status: "idle" });
 
   const open = async () => {
     if (state.status === "busy") return;
     setState({ status: "busy" });
-    const res = await openIntercomDoor(camId).catch(() => ({ ok: false, error: "תקלת תקשורת" }));
+    const res = await openIntercomDoor(camId, { endCall }).catch(() => ({
+      ok: false,
+      error: "תקלת תקשורת",
+    }));
     setState(res.ok ? { status: "ok" } : { status: "error", error: res.error });
     setTimeout(() => setState({ status: "idle" }), 3000);
   };

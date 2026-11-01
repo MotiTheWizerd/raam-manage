@@ -1,13 +1,11 @@
 import "server-only";
 
-import { promises as fs } from "node:fs";
-import path from "node:path";
-
 import { buildDigest, fetchCameraSnapshot } from "@/lib/camera";
 import { cameraRtspUrl, hikChannel } from "@/lib/camera-rtsp";
 import { FLEET_CAMERAS, fleetRtspUrl, getFleetCamera } from "@/lib/fleet-cameras";
 import { CAMERAS, type CameraCreds } from "@/lib/gates";
 import { INTERCOM_PANELS } from "@/lib/intercom";
+import { followIntercomLog } from "@/lib/intercom-log";
 
 // Live motion map of the building, fed by the cameras' OWN motion detection.
 //
@@ -201,7 +199,6 @@ function maybeCheck(id: string, burst: Burst) {
 // We tail that log: COMM_ALARM_V30 (0x4000) with dwAlarmType 3 = motion. The
 // panels pulse every ~4s while something moves, so each pulse is held a bit
 // longer than the normal window to keep the tile from flickering.
-const INTERCOM_LOG = path.join(process.cwd(), "logs", "intercom-events.jsonl");
 const PANEL_HOLD_MS = 4000;
 const panelIds = new Map(INTERCOM_PANELS.map((p) => [p.host, p.camId]));
 
@@ -232,35 +229,6 @@ function onPanelEvent(line: string) {
     const burst = recordMotion(id, PANEL_HOLD_MS);
     burst.description ??= "Motion alarm";
     maybeCheck(id, burst);
-  }
-}
-
-// Follow the log from its current end (history isn't motion "now").
-async function tailIntercomLog() {
-  let pos = -1;
-  let rest = "";
-  for (;;) {
-    try {
-      const { size } = await fs.stat(INTERCOM_LOG);
-      if (pos < 0) pos = size; // first look
-      else if (size < pos) pos = 0; // the listener rotated the log — read the new one
-      if (size > pos) {
-        const fh = await fs.open(INTERCOM_LOG, "r");
-        try {
-          const buf = Buffer.alloc(size - pos);
-          await fh.read(buf, 0, buf.length, pos);
-          pos = size;
-          const lines = (rest + buf.toString("utf8")).split("\n");
-          rest = lines.pop() ?? "";
-          for (const line of lines) if (line.trim()) onPanelEvent(line);
-        } finally {
-          await fh.close();
-        }
-      }
-    } catch {
-      // No log yet (listener not running) — keep looking.
-    }
-    await new Promise((r) => setTimeout(r, 1000));
   }
 }
 
@@ -363,7 +331,7 @@ export function ensureMotionListener() {
   // Separate flag: a listener from before the tail existed (dev hot-reload) still gets it.
   if (!state.tailing) {
     state.tailing = true;
-    void tailIntercomLog();
+    void followIntercomLog(onPanelEvent);
   }
   if (listenersChecked) return;
   listenersChecked = true;

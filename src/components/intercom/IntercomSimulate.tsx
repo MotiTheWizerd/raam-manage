@@ -11,6 +11,8 @@ const FIELD =
 
 // Testing aid (for while we test): plays a call from the chosen door, so the
 // call popup and the openings list can be checked at night, when nobody rings.
+// "No answer" leaves time to press the popup's 🔑 — open + hang up, as the
+// lobby does — which ends the played call (the door itself really opens).
 export function IntercomSimulate({ panels }: { panels: { camId: string; name: string }[] }) {
   const router = useRouter();
   const [camId, setCamId] = useState(panels[0]?.camId ?? "");
@@ -52,8 +54,8 @@ export function IntercomSimulate({ panels }: { panels: { camId: string; name: st
         aria-label="איך השיחה נגמרת"
         className={FIELD}
       >
-        <option value="open">נענתה — הטאבלט פותח</option>
-        <option value="missed">לא נענתה</option>
+        <option value="open">הטאבלט פותח ומנתק</option>
+        <option value="missed">בלי מענה (30 שנ׳)</option>
       </select>
       <button
         type="button"

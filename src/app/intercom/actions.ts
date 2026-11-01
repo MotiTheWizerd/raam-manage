@@ -44,13 +44,11 @@ async function putOpen(host: string, user: string, pass: string): Promise<boolea
   return /<statusString>OK</i.test(await res.text());
 }
 
-// After our 🔑 opens during a call, the call is ended this much later, so the
-// visitor isn't cut off mid-word as the door releases.
-const END_AFTER_OPEN_MS = 2000;
-
 // Any logged-in staff may open — same policy as the door and gate buttons.
 // Every attempt lands in door_events (source "intercom"). From the call popup
-// (`endCall`), an opening also ends the panel's call, on the tablet too.
+// (`endCall`), an opening also ends the panel's call right away, on the tablet
+// too — the lobby's usual call: it rings, nobody answers, 🔑, hang up so the
+// tablet doesn't keep ringing.
 export async function openIntercomDoor(
   camId: string,
   opts?: { endCall?: boolean }
@@ -79,9 +77,8 @@ export async function openIntercomDoor(
     /* logging failure is non-fatal */
   }
 
-  if (ok && opts?.endCall) {
-    setTimeout(() => void endIntercomCall(camId, "opened").catch(() => false), END_AFTER_OPEN_MS);
-  }
+  // Not awaited: the 🔑 answers as soon as the door opens.
+  if (ok && opts?.endCall) void endIntercomCall(camId, "opened").catch(() => false);
   return ok ? { ok: true } : { ok: false, error: error ?? "פתיחת הדלת נכשלה" };
 }
 
@@ -109,7 +106,7 @@ export async function simulateIntercomCall(
 
   const vision = path.join(process.cwd(), "vision");
   const args = ["intercom/replay_call.py", panel.host.split(".").pop()!];
-  if (!answered) args.push("--no-open", "--ring", "15");
+  if (!answered) args.push("--no-open", "--ring", "30");
   const started = await new Promise<boolean>((resolve) => {
     // pythonw: no console window (a detached python.exe pops a terminal open).
     const child = spawn(path.join(vision, ".venv", "Scripts", "pythonw.exe"), args, {

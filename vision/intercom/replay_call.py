@@ -7,8 +7,9 @@ can't tell the difference. Every line is marked "replay": true. The door is
 never touched — the photo is a plain snapshot from the panel's camera.
 
 Run from vision/:
-  .venv/Scripts/python.exe intercom/replay_call.py 71              # rings 8s, tablet opens, ends
+  .venv/Scripts/python.exe intercom/replay_call.py 71              # rings 8s, tablet 🔑, hangs up 1s later
   .venv/Scripts/python.exe intercom/replay_call.py 72 --no-open    # rings 60s, nobody answers
+The lobby's usual call: it rings, nobody answers, 🔑, hang up — no talking.
 """
 
 import argparse
@@ -51,7 +52,7 @@ def main() -> None:
     ap.add_argument("panel", help="last part of the panel's address: 70 71 72 73 173 174")
     ap.add_argument("--no-open", action="store_true", help="nobody answers: rings, then ends")
     ap.add_argument("--ring", type=float, help="seconds until the tablet opens (default 8, 60 with --no-open)")
-    ap.add_argument("--talk", type=float, default=5, help="seconds from opening to the end (default 5)")
+    ap.add_argument("--talk", type=float, default=1, help="seconds from opening to the hang-up (default 1)")
     args = ap.parse_args()
     ip = f"10.0.0.{args.panel}"
     ring = args.ring if args.ring is not None else (60 if args.no_open else 8)

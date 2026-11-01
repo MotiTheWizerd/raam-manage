@@ -155,6 +155,12 @@ export function getIntercomCalls(): IntercomCall[] {
 export async function endIntercomCall(camId: string, reason: "opened" | "hangup"): Promise<boolean> {
   const call = [...state.calls.values()].find((c) => c.camId === camId && c.endedAt === null);
   if (!call) return false;
+  // Our 🔑 just opened: say so now — the panel's own unlock event can land
+  // after the call has already ended here.
+  if (reason === "opened" && call.openedAt === null) {
+    call.openedAt = Date.now();
+    call.openedBy = "remote";
+  }
   const ok = call.replay ? true : await endPanelCall(camId, reason);
   if (ok) call.endedAt ??= Date.now();
   return ok;

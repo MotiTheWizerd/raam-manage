@@ -111,16 +111,19 @@ async function signal(p: Panel, cmd: string): Promise<boolean> {
   return false;
 }
 
-// End the panel's call: cancel while it rings (the panel is the caller), hang up
-// once answered. Stops at the first command the panel accepts and that leaves
-// it no longer ringing / on a call. True if the panel accepted one.
+// End the panel's call. hangUp first: a Hikvision doorbell of the same family
+// (DS-KV6113, ryanfitton/rpi-pico-hikvision-isapi-doorbell-chime) ends a call
+// that's still ringing with exactly {"CallSignal":{"cmdType":"hangUp"}}. With
+// no call, .71 answers that with badXmlContent (checked idle, 2026-11-01).
+// cancel / reject are fallbacks while it rings. Stops at the first command the
+// panel accepts that leaves it no longer ringing / on a call. True if one was.
 export async function endPanelCall(camId: string, reason: string): Promise<boolean> {
   const p = panelFor(camId);
   if (!p) return false;
   const before = await statusOf(p);
   await logControl({ camId, step: "end", reason, status: before });
   const cmds =
-    before === "ring" ? ["cancel", "hangUp", "reject"] : before === "onCall" ? ["hangUp"] : ["hangUp", "cancel"];
+    before === "ring" ? ["hangUp", "cancel", "reject"] : before === "onCall" ? ["hangUp"] : ["hangUp", "cancel"];
   for (const cmd of cmds) {
     const ok = await signal(p, cmd);
     const after = await statusOf(p);

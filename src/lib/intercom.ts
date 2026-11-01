@@ -19,5 +19,7 @@ export const INTERCOM_PANELS: IntercomPanel[] = [
   { camId: "net-72", host: "10.0.0.72", name: "חניון — עמוד כחול" },
   { camId: "net-73", host: "10.0.0.73", name: "דלת מתכת — מכונות" },
   { camId: "net-173", host: "10.0.0.173", name: "דלת אש" },
-  { camId: "net-174", host: "10.0.0.174", name: "דלת בום — אשפה וספקים" },
+  // Its lock opens the door from the supplier parking into the building — not
+  // the boom (Moti, 2026-11-01; the boom only looked opened once, it was open).
+  { camId: "net-174", host: "10.0.0.174", name: "חניית ספקים - מצלמה 1" },
 ];

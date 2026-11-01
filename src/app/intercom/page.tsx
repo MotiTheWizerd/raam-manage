@@ -4,6 +4,7 @@ import { IntercomSimulate } from "@/components/intercom/IntercomSimulate";
 import { IntercomTabs } from "@/components/intercom/IntercomTabs";
 import { IntercomWall } from "@/components/intercom/IntercomWall";
 import { INTERCOM_PANELS } from "@/lib/intercom";
+import { getAutoOpen } from "@/lib/intercom-calls";
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +32,7 @@ export default async function IntercomPage({
       ) : (
         <div className="space-y-6">
           {/* For while we test the call popup — remove after. */}
-          <IntercomSimulate panels={panels} />
+          <IntercomSimulate panels={panels} autoOpen={getAutoOpen()} />
           <IntercomOpenings />
         </div>
       )}

@@ -10,6 +10,8 @@ import { cn } from "@/lib/cn";
 import type { IntercomCall } from "@/lib/intercom-calls";
 
 const POLL_MS = 1000;
+// How long the green "door opened" stays before the popup closes.
+const OPENED_SHOW_MS = 2000;
 
 const BY_LABEL: Record<string, string> = { tablet: "מהטאבלט בלובי", remote: "מהמערכת" };
 
@@ -79,7 +81,11 @@ export function IntercomCallPopup() {
     };
   }, []);
 
-  const visible = calls.filter((c) => !dismissed.has(c.id));
+  // Once the door opened, the lobbyist only needs to know that: a short green
+  // "opened", then gone — even if the tablet is still finishing the call.
+  const visible = calls.filter(
+    (c) => !dismissed.has(c.id) && !(c.openedAt !== null && now - c.openedAt > OPENED_SHOW_MS)
+  );
 
   return (
     <div className="pointer-events-none fixed inset-x-0 top-20 z-50 flex flex-col items-center gap-3 px-4">
@@ -89,12 +95,10 @@ export function IntercomCallPopup() {
           const ended = c.endedAt !== null;
           const by = c.openedBy ? (BY_LABEL[c.openedBy] ?? c.openedBy) : "";
           const status = opened
-            ? `הדלת נפתחה ${by}${ended ? " · השיחה הסתיימה" : ""}`
+            ? `הדלת נפתחה ${by}`
             : ended
               ? "השיחה הסתיימה — הדלת לא נפתחה"
-              : c.panelStatus === "onCall"
-                ? "נענתה בטאבלט — בשיחה"
-                : "מצלצל בטאבלט בלובי…";
+              : "מצלצל בטאבלט בלובי…";
           return (
             <motion.div
               key={c.id}

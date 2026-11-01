@@ -7,28 +7,53 @@ import { buildDigest } from "@/lib/camera";
 import { FLEET_CAMERAS } from "@/lib/fleet-cameras";
 import { INTERCOM_PANELS } from "@/lib/intercom";
 
-// A door panel's call state, and ending its call from our side — the call runs
-// panel ↔ lobby tablet, so when the panel ends it the tablet stops too. The
-// panel lists these in /ISAPI/VideoIntercom/callSignal/capabilities (cmdType
-// answer / reject / cancel / hangUp, …) and reports idle / ring / onCall at
-// /ISAPI/VideoIntercom/callStatus. Written blind on 2026-11-01 (nobody calls at
-// night to test with), so every request and the panel's answer goes to
-// logs/intercom-control.jsonl, to read after the first real call.
+// Opening a door and ending a call from our side. Every request and answer goes
+// to logs/intercom-control.jsonl — the call parts can only be proven on a real
+// call.
+//
+// Where a call lives (learned 2026-11-01): a visitor's call rings the lobby
+// tablet (DS-KH8520, 10.0.0.248). The door panel's own ISAPI reports "idle"
+// even mid-call and refuses hangUp / cancel (400 Wrong XMLcontent), so a call
+// is ended — and opened, the way the tablet's 🔑 does — on the tablet, through
+// the vision service's SDK session to it (vision/detection/tablet.py).
 
 const LOG = path.join(process.cwd(), "logs", "intercom-control.jsonl");
-const STATUS_PATH = "/ISAPI/VideoIntercom/callStatus?format=json";
-const SIGNAL_JSON_PATH = "/ISAPI/VideoIntercom/callSignal?format=json";
-const SIGNAL_XML_PATH = "/ISAPI/VideoIntercom/callSignal";
+const VISION_INTERNAL_URL = process.env.VISION_INTERNAL_URL ?? "http://127.0.0.1:8089";
+// The lobbyist's 🔑 then hang-up — a beat between them so the unlock reaches
+// the door before the call drops.
+const HANGUP_AFTER_OPEN_MS = 1000;
 
-export type PanelCallStatus = "idle" | "ring" | "onCall";
-const STATUSES = new Set<string>(["idle", "ring", "onCall"]);
+// The panel's own lock output (door 1) — the same momentary unlock as the key
+// button on the lobby tablet. Verified live on .71 (2026-10-30): the panel
+// answers OK, the door relocks by itself, and it reports a "remote unlock"
+// event on its SDK alarm channel.
+const DOOR_PATH = "/ISAPI/AccessControl/RemoteControl/door/1";
+const OPEN_BODY =
+  '<RemoteControlDoor version="2.0" xmlns="http://www.isapi.org/ver20/XMLSchema"><cmd>open</cmd></RemoteControlDoor>';
 
-type Panel = { camId: string; host: string; user: string; pass: string };
+export async function openPanelDoor(host: string, user: string, pass: string): Promise<boolean> {
+  const url = `http://${host}${DOOR_PATH}`;
+  const init = {
+    method: "PUT",
+    cache: "no-store" as const,
+    body: OPEN_BODY,
+    signal: AbortSignal.timeout(5000),
+  };
+  const challenge = await fetch(url, { ...init, headers: { "Content-Type": "application/xml" } });
+  if (challenge.ok) return true;
+  const wwwAuth = challenge.headers.get("www-authenticate");
+  if (challenge.status !== 401 || !wwwAuth) return false;
 
-function panelFor(camId: string): Panel | null {
-  const panel = INTERCOM_PANELS.find((p) => p.camId === camId);
-  const cam = FLEET_CAMERAS.find((c) => c.id === camId);
-  return panel && cam ? { camId, host: panel.host, user: cam.user, pass: cam.pass } : null;
+  const res = await fetch(url, {
+    ...init,
+    signal: AbortSignal.timeout(5000),
+    headers: {
+      "Content-Type": "application/xml",
+      Authorization: buildDigest(wwwAuth, DOOR_PATH, user, pass, "PUT"),
+    },
+  });
+  if (!res.ok) return false;
+  return /<statusString>OK</i.test(await res.text());
 }
 
 export async function logControl(entry: Record<string, unknown>) {
@@ -39,96 +64,55 @@ export async function logControl(entry: Record<string, unknown>) {
   }
 }
 
-// One ISAPI request with the digest handshake (the panel answers 401 first).
-async function isapi(
-  p: Panel,
-  method: "GET" | "PUT",
-  reqPath: string,
-  body?: string,
-  contentType?: string
-): Promise<{ status: number; text: string }> {
-  const url = `http://${p.host}${reqPath}`;
-  const headers: Record<string, string> = contentType ? { "Content-Type": contentType } : {};
-  const init = { method, cache: "no-store" as const, body };
-  const challenge = await fetch(url, { ...init, headers, signal: AbortSignal.timeout(4000) });
-  const wwwAuth = challenge.headers.get("www-authenticate");
-  if (challenge.status !== 401 || !wwwAuth) {
-    return { status: challenge.status, text: await challenge.text() };
-  }
-  await challenge.body?.cancel();
-  const res = await fetch(url, {
-    ...init,
-    headers: { ...headers, Authorization: buildDigest(wwwAuth, reqPath, p.user, p.pass, method) },
-    signal: AbortSignal.timeout(4000),
-  });
-  return { status: res.status, text: await res.text() };
-}
+type TabletAction = "status" | "open" | "hangUp" | "reject";
+type TabletReply = { ok: boolean; status?: string; reply?: string };
 
-async function statusOf(p: Panel): Promise<PanelCallStatus | null> {
+// One fixed action on the lobby tablet, logged.
+async function tablet(action: TabletAction, camId: string): Promise<TabletReply> {
+  let r: TabletReply;
   try {
-    const { status, text } = await isapi(p, "GET", STATUS_PATH);
-    if (status !== 200) return null;
-    const s = (JSON.parse(text) as { CallStatus?: { status?: string } }).CallStatus?.status;
-    return s && STATUSES.has(s) ? (s as PanelCallStatus) : null;
-  } catch {
-    return null;
+    const res = await fetch(`${VISION_INTERNAL_URL}/intercom/tablet`, {
+      method: "POST",
+      cache: "no-store",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action }),
+      signal: AbortSignal.timeout(8000),
+    });
+    r = (await res.json()) as TabletReply;
+  } catch (e) {
+    r = { ok: false, reply: `vision service: ${e}` };
   }
+  await logControl({ camId, step: `tablet-${action}`, ...r });
+  return r;
 }
 
-export async function readPanelCallStatus(camId: string): Promise<PanelCallStatus | null> {
-  const p = panelFor(camId);
-  return p ? statusOf(p) : null;
+// End the call on the tablet — its hang-up button. reject while it still
+// rings, if hangUp isn't taken. True if the tablet accepted one.
+export async function endTabletCall(camId: string): Promise<boolean> {
+  for (const cmd of ["hangUp", "reject"] as const) {
+    if ((await tablet(cmd, camId)).ok) return true;
+  }
+  return false;
 }
 
-const accepted = (text: string) => /"statusCode"\s*:\s*1\b|<statusCode>1</i.test(text);
-
-// One call command: the panel's JSON form first, the XML form if that's refused.
-async function signal(p: Panel, cmd: string): Promise<boolean> {
-  const tries = [
-    {
-      format: "json",
-      path: SIGNAL_JSON_PATH,
-      type: "application/json",
-      body: JSON.stringify({ CallSignal: { cmdType: cmd } }),
-    },
-    {
-      format: "xml",
-      path: SIGNAL_XML_PATH,
-      type: "application/xml",
-      body: `<CallSignal version="2.0" xmlns="http://www.isapi.org/ver20/XMLSchema"><cmdType>${cmd}</cmdType></CallSignal>`,
-    },
-  ];
-  for (const t of tries) {
-    try {
-      const { status, text } = await isapi(p, "PUT", t.path, t.body, t.type);
-      const ok = status === 200 && accepted(text);
-      await logControl({ camId: p.camId, step: "signal", cmd, format: t.format, http: status, ok, reply: text.slice(0, 400) });
-      if (ok) return true;
-    } catch (e) {
-      await logControl({ camId: p.camId, step: "signal", cmd, format: t.format, error: String(e) });
+// Open the calling door during a call, as the lobbyist does: the tablet's own
+// 🔑 (it opens whichever door is calling it), then hang up. If the tablet won't
+// open, the panel's lock opens it instead (always worked) and the tablet is
+// still hung up. True as soon as the door opened; the hang-up follows in the
+// background.
+export async function openDuringCall(camId: string): Promise<boolean> {
+  await tablet("status", camId);
+  let opened = (await tablet("open", camId)).ok;
+  if (!opened) {
+    const panel = INTERCOM_PANELS.find((p) => p.camId === camId);
+    const cam = FLEET_CAMERAS.find((c) => c.id === camId);
+    if (panel && cam) {
+      opened = await openPanelDoor(panel.host, cam.user, cam.pass).catch(() => false);
+      await logControl({ camId, step: "panel-open", ok: opened });
     }
   }
-  return false;
-}
-
-// End the panel's call. hangUp first: a Hikvision doorbell of the same family
-// (DS-KV6113, ryanfitton/rpi-pico-hikvision-isapi-doorbell-chime) ends a call
-// that's still ringing with exactly {"CallSignal":{"cmdType":"hangUp"}}. With
-// no call, .71 answers that with badXmlContent (checked idle, 2026-11-01).
-// cancel / reject are fallbacks while it rings. Stops at the first command the
-// panel accepts that leaves it no longer ringing / on a call. True if one was.
-export async function endPanelCall(camId: string, reason: string): Promise<boolean> {
-  const p = panelFor(camId);
-  if (!p) return false;
-  const before = await statusOf(p);
-  await logControl({ camId, step: "end", reason, status: before });
-  const cmds =
-    before === "ring" ? ["hangUp", "cancel", "reject"] : before === "onCall" ? ["hangUp"] : ["hangUp", "cancel"];
-  for (const cmd of cmds) {
-    const ok = await signal(p, cmd);
-    const after = await statusOf(p);
-    await logControl({ camId, step: "after", cmd, ok, status: after });
-    if (ok && after !== "ring" && after !== "onCall") return true;
+  if (opened) {
+    setTimeout(() => void endTabletCall(camId).catch(() => false), HANGUP_AFTER_OPEN_MS);
   }
-  return false;
+  return opened;
 }

@@ -3,52 +3,25 @@
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { getCurrentUser } from "@/lib/auth";
-import { buildDigest } from "@/lib/camera";
 import { db } from "@/lib/db";
 import { FLEET_CAMERAS } from "@/lib/fleet-cameras";
 import { INTERCOM_PANELS } from "@/lib/intercom";
-import { endIntercomCall } from "@/lib/intercom-calls";
+import {
+  endIntercomCall,
+  getAutoOpen,
+  openLiveCall,
+  setAutoOpen,
+  type AutoOpen,
+} from "@/lib/intercom-calls";
+import { openPanelDoor } from "@/lib/intercom-control";
 
 export type IntercomOpenResult = { ok: boolean; error?: string };
 
-// The panel's own lock output (door 1) — the same momentary unlock as the key
-// button on the lobby tablet. Verified live on .71 (2026-10-30): the panel
-// answers OK, the door relocks by itself, and it reports a "remote unlock"
-// event on its SDK alarm channel.
-const DOOR_PATH = "/ISAPI/AccessControl/RemoteControl/door/1";
-const OPEN_BODY =
-  '<RemoteControlDoor version="2.0" xmlns="http://www.isapi.org/ver20/XMLSchema"><cmd>open</cmd></RemoteControlDoor>';
-
-async function putOpen(host: string, user: string, pass: string): Promise<boolean> {
-  const url = `http://${host}${DOOR_PATH}`;
-  const init = {
-    method: "PUT",
-    cache: "no-store" as const,
-    body: OPEN_BODY,
-    signal: AbortSignal.timeout(5000),
-  };
-  const challenge = await fetch(url, { ...init, headers: { "Content-Type": "application/xml" } });
-  if (challenge.ok) return true;
-  const wwwAuth = challenge.headers.get("www-authenticate");
-  if (challenge.status !== 401 || !wwwAuth) return false;
-
-  const res = await fetch(url, {
-    ...init,
-    signal: AbortSignal.timeout(5000),
-    headers: {
-      "Content-Type": "application/xml",
-      Authorization: buildDigest(wwwAuth, DOOR_PATH, user, pass, "PUT"),
-    },
-  });
-  if (!res.ok) return false;
-  return /<statusString>OK</i.test(await res.text());
-}
-
 // Any logged-in staff may open — same policy as the door and gate buttons.
 // Every attempt lands in door_events (source "intercom"). From the call popup
-// (`endCall`), an opening also ends the panel's call right away, on the tablet
-// too — the lobby's usual call: it rings, nobody answers, 🔑, hang up so the
-// tablet doesn't keep ringing.
+// (`endCall`), while that door is calling, it opens through the lobby tablet and
+// hangs up — the lobby's usual call: it rings, nobody answers, 🔑, hang up so
+// the tablet doesn't keep ringing. Otherwise the panel's own lock opens.
 export async function openIntercomDoor(
   camId: string,
   opts?: { endCall?: boolean }
@@ -61,9 +34,11 @@ export async function openIntercomDoor(
   if (!panel || !cam) return { ok: false, error: "עמדה לא מוכרת" };
 
   let ok = false;
+  let viaCall: boolean | null = null;
   let error: string | undefined;
   try {
-    ok = await putOpen(panel.host, cam.user, cam.pass);
+    viaCall = opts?.endCall ? await openLiveCall(camId) : null;
+    ok = viaCall ?? (await openPanelDoor(panel.host, cam.user, cam.pass));
   } catch (e) {
     error = e instanceof Error ? e.message : "תקלת תקשורת לעמדה";
   }
@@ -77,9 +52,20 @@ export async function openIntercomDoor(
     /* logging failure is non-fatal */
   }
 
-  // Not awaited: the 🔑 answers as soon as the door opens.
-  if (ok && opts?.endCall) void endIntercomCall(camId, "opened").catch(() => false);
+  // A played call (no real call behind it) just ends in the app.
+  if (ok && opts?.endCall && viaCall === null) {
+    void endIntercomCall(camId, "opened").catch(() => false);
+  }
   return ok ? { ok: true } : { ok: false, error: error ?? "פתיחת הדלת נכשלה" };
+}
+
+// The calls tab's פתיחה אוטומטית test switch (see lib/intercom-calls.ts).
+export async function setIntercomAutoOpen(
+  on: boolean
+): Promise<{ ok: boolean; autoOpen: AutoOpen | null }> {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, autoOpen: getAutoOpen() };
+  return { ok: true, autoOpen: setAutoOpen(on, user.lobbyist_name) };
 }
 
 // The call popup's hang-up: ends the panel's call without opening (the tablet

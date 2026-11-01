@@ -13,7 +13,7 @@ from urllib.parse import parse_qs, urlparse
 
 from detect import CAMERAS
 
-from . import hiksdk
+from . import hiksdk, tablet
 from .objects import check_objects
 from .raw_grabber import get_raw_grabber
 from .service import get_named_worker, get_worker, running_workers
@@ -79,7 +79,16 @@ class Handler(BaseHTTPRequestHandler):
         self._send_json(404, {"error": "not found"})
 
     def do_POST(self):
-        """POST /objects — body is one JPEG; counts people / vehicles / animals in it."""
+        """POST /objects — body is one JPEG; counts people / vehicles / animals in it.
+        POST /intercom/tablet — {"action": ...} for the lobby tablet (see tablet.py)."""
+        if urlparse(self.path).path == "/intercom/tablet":
+            length = int(self.headers.get("Content-Length") or 0)
+            try:
+                action = json.loads(self.rfile.read(length) or b"{}").get("action", "")
+            except ValueError:
+                action = ""
+            self._send_json(200, tablet.act(action))
+            return
         if urlparse(self.path).path != "/objects":
             self._send_json(404, {"error": "not found"})
             return

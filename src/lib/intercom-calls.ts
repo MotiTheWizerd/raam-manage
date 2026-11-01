@@ -5,12 +5,7 @@ import path from "node:path";
 
 import { db } from "@/lib/db";
 import { INTERCOM_PANELS } from "@/lib/intercom";
-import {
-  endPanelCall,
-  logControl,
-  readPanelCallStatus,
-  type PanelCallStatus,
-} from "@/lib/intercom-control";
+import { endTabletCall, logControl, openDuringCall } from "@/lib/intercom-control";
 import { followIntercomLog } from "@/lib/intercom-log";
 
 // A visitor pressing a door panel's call button, as the panels report it over
@@ -41,13 +36,7 @@ export type IntercomCall = {
   openedBy: string | null;
   endedAt: number | null;
   replay: boolean;
-  // the panel's own call state while the call is live: ring / onCall (answered
-  // on the tablet) / idle — read once a second, null until the first read
-  panelStatus: PanelCallStatus | null;
 };
-
-// How often a live call's panel is asked for its state.
-const STATUS_EVERY_MS = 1000;
 
 type PanelEvent = {
   panel?: string;
@@ -57,18 +46,25 @@ type PanelEvent = {
   unlock?: { by: string; src: string; lock: string };
 };
 
+// Test switch (פתיחה אוטומטית, calls tab): while on, every real call's door
+// opens by itself a few seconds into the ring and the call is hung up — so the
+// whole pipeline can be tested from the door, with nobody upstairs and no
+// browser needed. In memory only (a restart turns it off), and it turns itself
+// off after a while, so it can't be left on into a day shift.
+const AUTO_OPEN_FOR_MS = 20 * 60_000;
+const AUTO_OPEN_AFTER_MS = 3000;
+
+export type AutoOpen = { until: number; by: string };
+
 type CallsState = {
   tailing: boolean;
   calls: Map<string, IntercomCall>;
-  // panel host -> when its call state was last asked for (or is being asked now)
-  statusAskedAt?: Map<string, number>;
+  autoOpen?: AutoOpen | null;
 };
 
 // One tail per server process (survives dev hot-reloads via globalThis).
 const g = globalThis as typeof globalThis & { __raamIntercomCalls?: CallsState };
 const state: CallsState = (g.__raamIntercomCalls ??= { tailing: false, calls: new Map() });
-state.statusAskedAt ??= new Map();
-const statusAskedAt = state.statusAskedAt;
 
 const panelsByHost = new Map(INTERCOM_PANELS.map((p) => [p.host, p]));
 
@@ -93,7 +89,7 @@ function onEvent(line: string) {
   const live = call && call.endedAt === null;
 
   if (ev.cmd === "0x1133" && ev.type === CALL_START) {
-    state.calls.set(panel.host, {
+    const started: IntercomCall = {
       id: `${panel.host}-${now}`,
       camId: panel.camId,
       name: panel.name,
@@ -102,8 +98,13 @@ function onEvent(line: string) {
       openedBy: null,
       endedAt: null,
       replay: !!ev.replay,
-      panelStatus: null,
-    });
+    };
+    state.calls.set(panel.host, started);
+    // A played call has no visitor behind it — never open a real door for it.
+    const auto = getAutoOpen();
+    if (auto && !started.replay) {
+      setTimeout(() => void autoAnswer(started, auto.by).catch(() => {}), AUTO_OPEN_AFTER_MS);
+    }
   } else if (ev.cmd === "0x1133" && ev.type === CALL_END) {
     if (live) call.endedAt = now;
   } else if (ev.cmd === "0x1132" && ev.type === 1) {
@@ -120,19 +121,36 @@ export function ensureIntercomCalls() {
   void followIntercomLog(onEvent);
 }
 
-// Ask a live call's panel for its state, at most once a second, in the
-// background (the popup's poll never waits on the panel). Each change is
-// logged: it tells us whether the panel's status really follows a visitor call.
-function refreshPanelStatus(host: string, call: IntercomCall) {
-  const now = Date.now();
-  if (now - (statusAskedAt.get(host) ?? 0) < STATUS_EVERY_MS) return;
-  statusAskedAt.set(host, now);
-  void readPanelCallStatus(call.camId).then((status) => {
-    if (status !== call.panelStatus) {
-      void logControl({ camId: call.camId, step: "watch", call: call.id, status });
-    }
-    call.panelStatus = status;
-  });
+export function getAutoOpen(): AutoOpen | null {
+  const a = state.autoOpen;
+  if (a && a.until > Date.now()) return a;
+  state.autoOpen = null;
+  return null;
+}
+
+export function setAutoOpen(on: boolean, by: string): AutoOpen | null {
+  state.autoOpen = on ? { until: Date.now() + AUTO_OPEN_FOR_MS, by } : null;
+  void logControl({ step: "auto-open", on, by });
+  // The door must open with no page open anywhere: start reading the log now.
+  if (on) ensureIntercomCalls();
+  return getAutoOpen();
+}
+
+// The auto-open for one call: the lobby's usual 🔑 + hang up, through the
+// tablet (lib/intercom-control.ts), logged under whoever switched it on.
+async function autoAnswer(call: IntercomCall, by: string) {
+  if (call.endedAt !== null || call.openedAt !== null) return; // already handled
+  const ok = await openDuringCall(call.camId).catch(() => false);
+  if (ok) markOpened(call);
+  await logControl({ camId: call.camId, step: "auto-open-door", call: call.id, ok });
+  try {
+    db.prepare(
+      `INSERT INTO door_events (door_id, door_name, lobbyist_name, ok, source)
+       VALUES (?, ?, ?, ?, ?)`
+    ).run(`intercom-${call.camId}`, call.name, `${by} · אוטומטי`, ok ? 1 : 0, "intercom");
+  } catch {
+    /* logging failure is non-fatal */
+  }
 }
 
 // Calls ringing or in progress now, plus ones that just ended.
@@ -141,27 +159,40 @@ export function getIntercomCalls(): IntercomCall[] {
   for (const [host, c] of state.calls) {
     const over = c.endedAt !== null ? now - c.endedAt > ENDED_SHOW_MS : now - c.startedAt > MAX_CALL_MS;
     if (over) state.calls.delete(host);
-    else if (c.endedAt === null && !c.replay) refreshPanelStatus(host, c);
   }
   return [...state.calls.values()].sort((a, b) => b.startedAt - a.startedAt);
 }
 
-// End a panel's live call from our side, so the tablet stops ringing / talking
-// too: after our 🔑 opened the door ("opened"), or the popup's hang-up button.
-// Only while we know of a live call there — a 🔑 press outside a call never
-// sends call commands. A replayed call has no real call behind it, so it just
-// ends here. Once the panel accepts, the popup closes without waiting for its
-// end event.
+function liveCall(camId: string): IntercomCall | undefined {
+  return [...state.calls.values()].find((c) => c.camId === camId && c.endedAt === null);
+}
+
+// Our 🔑 opened: say so now — the panel's own unlock event lands ~8s later.
+function markOpened(call: IntercomCall) {
+  if (call.openedAt !== null) return;
+  call.openedAt = Date.now();
+  call.openedBy = "remote";
+}
+
+// The popup's 🔑 on a door that's calling: open and hang up through the tablet,
+// as its own key does. null when there's no live real call there — the caller
+// opens the panel's lock as usual.
+export async function openLiveCall(camId: string): Promise<boolean | null> {
+  const call = liveCall(camId);
+  if (!call || call.replay) return null;
+  const ok = await openDuringCall(camId);
+  if (ok) markOpened(call);
+  return ok;
+}
+
+// End a door's live call from our side — the tablet's hang-up: the popup's red
+// button, or after our 🔑 opened a played call. Only while we know of a live
+// call there. A played call has no real call behind it, so it just ends here.
 export async function endIntercomCall(camId: string, reason: "opened" | "hangup"): Promise<boolean> {
-  const call = [...state.calls.values()].find((c) => c.camId === camId && c.endedAt === null);
+  const call = liveCall(camId);
   if (!call) return false;
-  // Our 🔑 just opened: say so now — the panel's own unlock event can land
-  // after the call has already ended here.
-  if (reason === "opened" && call.openedAt === null) {
-    call.openedAt = Date.now();
-    call.openedBy = "remote";
-  }
-  const ok = call.replay ? true : await endPanelCall(camId, reason);
+  if (reason === "opened") markOpened(call);
+  const ok = call.replay ? true : await endTabletCall(camId);
   if (ok) call.endedAt ??= Date.now();
   return ok;
 }

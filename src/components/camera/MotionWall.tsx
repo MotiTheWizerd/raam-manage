@@ -193,11 +193,12 @@ function MotionInfo({ info, live, now }: { info?: ActiveMotion; live: boolean; n
   );
 }
 
-// The wall's own options: object detection on every tile, and which kinds of
-// object bring a camera onto the wall.
+// The wall's own options: object detection on every tile (off by default —
+// Moti, 2026-11-01; the 👁 turns it on), and which kinds of object bring a
+// camera onto the wall.
 export function useMotionWallOptions() {
   const [filters, setFilters] = useState<MotionKind[]>(["person", "vehicle", "animal"]);
-  const [wallDetect, setWallDetect] = useState(true);
+  const [wallDetect, setWallDetect] = useState(false);
   const toggleFilter = (kind: MotionKind) =>
     setFilters((f) => (f.includes(kind) ? f.filter((k) => k !== kind) : [...f, kind]));
   return { filters, toggleFilter, wallDetect, setWallDetect };

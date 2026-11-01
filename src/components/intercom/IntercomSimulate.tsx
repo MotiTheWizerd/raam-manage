@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { setIntercomAutoOpen, simulateIntercomCall } from "@/app/intercom/actions";
 import { cn } from "@/lib/cn";
 import type { AutoOpen } from "@/lib/intercom-calls";
+import { useIntercomLive } from "@/lib/store/intercom-live-store";
 
 const FIELD =
   "h-9 rounded-lg border border-zinc-300 bg-white px-2 text-sm dark:border-zinc-700 dark:bg-zinc-900";
@@ -21,7 +22,7 @@ const hhmm = new Intl.DateTimeFormat("he-IL", {
 // "No answer" leaves time to press the popup's 🔑 — open + hang up, as the
 // lobby does — which ends the played call (the door itself really opens).
 // Below it, פתיחה אוטומטית: the server opens and hangs up every real call by
-// itself, to test the whole pipeline from the door (it turns itself off).
+// itself until it's switched off.
 export function IntercomSimulate({
   panels,
   autoOpen,
@@ -37,12 +38,8 @@ export function IntercomSimulate({
   });
   const [auto, setAuto] = useState(autoOpen);
 
-  // The server switches it off at `until`; follow along.
-  useEffect(() => {
-    if (!auto) return;
-    const t = setTimeout(() => setAuto(null), Math.max(0, auto.until - Date.now()));
-    return () => clearTimeout(t);
-  }, [auto]);
+  // Follow the live state (the popup's poll), e.g. switched off on another screen.
+  useEffect(() => useIntercomLive.subscribe((s) => setAuto(s.autoOpen)), []);
 
   const run = async () => {
     if (state.status === "busy") return;
@@ -59,7 +56,7 @@ export function IntercomSimulate({
 
   const toggleAuto = async (on: boolean) => {
     const res = await setIntercomAutoOpen(on).catch(() => null);
-    if (res) setAuto(res.autoOpen);
+    if (res) useIntercomLive.setState({ autoOpen: res.autoOpen });
   };
 
   return (
@@ -118,8 +115,8 @@ export function IntercomSimulate({
         <span className={cn("font-medium", auto && "text-red-500")}>פתיחה אוטומטית</span>
         <span className="opacity-60">
           {auto
-            ? `פעיל — כל שיחה אמיתית: הדלת נפתחת אחרי 3 שנ׳ והשיחה מנותקת · נכבה לבד ב-${hhmm.format(auto.until)}`
-            : "לבדיקה מהדלת: המערכת פותחת ומנתקת כל שיחה אמיתית לבד (נכבה לבד אחרי 20 דק׳)"}
+            ? `פעיל מ-${hhmm.format(auto.since)} (${auto.by}) — כל שיחה אמיתית: הדלת נפתחת אחרי 3 שנ׳ והשיחה מנותקת, עד שמכבים`
+            : "כל שיחה אמיתית תיפתח ותנותק לבד, עד שמכבים"}
         </span>
       </label>
     </div>

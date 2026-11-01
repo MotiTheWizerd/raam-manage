@@ -7,7 +7,8 @@ import { hangUpIntercomCall } from "@/app/intercom/actions";
 import { CameraTile } from "@/components/camera/CameraTile";
 import { DoorKey } from "@/components/intercom/IntercomWall";
 import { cn } from "@/lib/cn";
-import type { IntercomCall } from "@/lib/intercom-calls";
+import type { AutoOpen, IntercomCall } from "@/lib/intercom-calls";
+import { useIntercomLive } from "@/lib/store/intercom-live-store";
 
 const POLL_MS = 1000;
 // How long the green "door opened" stays before the popup closes.
@@ -65,10 +66,15 @@ export function IntercomCallPopup() {
       try {
         const res = await fetch("/api/intercom/calls", { cache: "no-store" });
         if (!res.ok) return;
-        const data = (await res.json()) as { now: number; calls: IntercomCall[] };
+        const data = (await res.json()) as {
+          now: number;
+          calls: IntercomCall[];
+          autoOpen: AutoOpen | null;
+        };
         if (!active) return;
         setNow(data.now);
         setCalls(data.calls);
+        useIntercomLive.setState({ autoOpen: data.autoOpen });
       } catch {
         /* transient hiccup — retry next tick */
       }

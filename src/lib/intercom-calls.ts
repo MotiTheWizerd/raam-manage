@@ -57,15 +57,15 @@ type PanelEvent = {
   unlock?: { by: string; src: string; lock: string };
 };
 
-// Test switch (פתיחה אוטומטית, calls tab): while on, every real call's door
-// opens by itself a few seconds into the ring and the call is hung up — so the
-// whole pipeline can be tested from the door, with nobody upstairs and no
-// browser needed. In memory only (a restart turns it off), and it turns itself
-// off after a while, so it can't be left on into a day shift.
-const AUTO_OPEN_FOR_MS = 20 * 60_000;
+// פתיחה אוטומטית (calls tab): while on, every real call's door opens by itself
+// a few seconds into the ring and the call is hung up — no one has to be at the
+// desk, no browser needed. It stays on until someone switches it off (Moti,
+// 2026-11-01: "all lobbyists today responsible, remove the time limit"); in
+// memory only, so a server restart turns it off. No header warning for now —
+// a blinking alert all day would get in the way; parked for Moti to decide.
 const AUTO_OPEN_AFTER_MS = 3000;
 
-export type AutoOpen = { until: number; by: string };
+export type AutoOpen = { since: number; by: string };
 
 type CallsState = {
   tailing: boolean;
@@ -136,14 +136,12 @@ export function ensureIntercomCalls() {
 }
 
 export function getAutoOpen(): AutoOpen | null {
-  const a = state.autoOpen;
-  if (a && a.until > Date.now()) return a;
-  state.autoOpen = null;
-  return null;
+  // A switch from before this field existed (dev hot-reload) has no `since`.
+  return state.autoOpen && "since" in state.autoOpen ? state.autoOpen : null;
 }
 
 export function setAutoOpen(on: boolean, by: string): AutoOpen | null {
-  state.autoOpen = on ? { until: Date.now() + AUTO_OPEN_FOR_MS, by } : null;
+  state.autoOpen = on ? { since: Date.now(), by } : null;
   void logControl({ step: "auto-open", on, by });
   // The door must open with no page open anywhere: start reading the log now.
   if (on) ensureIntercomCalls();

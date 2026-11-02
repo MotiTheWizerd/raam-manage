@@ -1,12 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { cn } from "@/lib/cn";
 
 // A thin row under the header for live building info. Shows nothing until
 // there is something to say. Today: the supplier-yard boom gate left open
 // (see lib/supplier-gate.ts — camera 114 watches it).
 
 const POLL_MS = 3000;
+const LATE_MS = 10 * 60_000; // open this long → the row turns red
 
 type Gate = { open: boolean; since: number | null };
 
@@ -56,17 +58,36 @@ export function HeaderInfoRow() {
 
   if (!open || gate?.since == null) return null;
 
+  const elapsed = now + offset - gate.since;
+  // Amber while it's plausibly a delivery; red once it looks forgotten.
+  const late = elapsed >= LATE_MS;
+
   return (
-    <div className="flex h-8 shrink-0 items-center gap-2.5 border-b border-amber-500/20 bg-amber-500/[0.06] px-4 text-sm">
+    <div
+      className={cn(
+        "flex h-8 shrink-0 items-center gap-2.5 border-b px-4 text-sm transition-colors duration-700",
+        late ? "border-red-500/30 bg-red-500/[0.09]" : "border-amber-500/20 bg-amber-500/[0.06]"
+      )}
+    >
       <span className="relative flex size-2.5 shrink-0" aria-hidden="true">
-        <span className="absolute inset-0 rounded-full bg-amber-500 animate-[ping_2.6s_cubic-bezier(0,0,0.2,1)_infinite] opacity-60" />
-        <span className="relative size-2.5 rounded-full bg-amber-500 animate-[pulse_2.6s_ease-in-out_infinite]" />
+        <span
+          className={cn(
+            "absolute inset-0 rounded-full animate-[ping_2.6s_cubic-bezier(0,0,0.2,1)_infinite] opacity-60",
+            late ? "bg-red-500" : "bg-amber-500"
+          )}
+        />
+        <span
+          className={cn(
+            "relative size-2.5 rounded-full animate-[pulse_2.6s_ease-in-out_infinite]",
+            late ? "bg-red-500" : "bg-amber-500"
+          )}
+        />
       </span>
-      <span className="text-amber-800 dark:text-amber-200">
+      <span className={late ? "text-red-700 dark:text-red-300" : "text-amber-800 dark:text-amber-200"}>
         רחבת ספקים פתוחה מהשעה{" "}
         <span className="font-semibold tabular-nums">{clock.format(gate.since)}</span>
         <span className="mx-2 opacity-40">·</span>
-        במשך <span className="font-semibold tabular-nums">{openFor(now + offset - gate.since)}</span>
+        במשך <span className="font-semibold tabular-nums">{openFor(elapsed)}</span>
       </span>
     </div>
   );

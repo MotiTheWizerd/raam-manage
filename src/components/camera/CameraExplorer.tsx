@@ -1,6 +1,6 @@
 "use client";
 
-import { Activity, Cctv, ChevronDown, Pencil, Plus } from "lucide-react";
+import { Activity, Cctv, ChevronDown, Pencil, Plus, Search } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { CameraGroup as SavedGroup } from "@/app/cameras/actions";
@@ -48,6 +48,17 @@ export function CameraExplorer({
   const [open, setOpen] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(registryGroups.map((g, i) => [g.key, i === 0]))
   );
+  // Quick search over the side menu: while there's a query, only matching
+  // cameras (and saved groups) show, and every group with a match is open.
+  const [query, setQuery] = useState("");
+  const q = query.trim().toLowerCase();
+  const matches = (name: string) => !q || name.toLowerCase().includes(q);
+  const shownGroups = q
+    ? registryGroups
+        .map((g) => ({ ...g, cameras: g.cameras.filter((c) => matches(c.name)) }))
+        .filter((g) => g.cameras.length > 0)
+    : registryGroups;
+  const shownSaved = savedGroups.filter((g) => matches(g.name));
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<SavedGroup | null>(null);
   const [follow, setFollow] = useState(true);
@@ -119,7 +130,24 @@ export function CameraExplorer({
       ) : (
         <div className="flex min-h-0 flex-1 gap-3">
           <nav className="flex w-64 shrink-0 flex-col gap-2 overflow-y-auto rounded-xl border border-black/10 bg-black/[0.02] p-2 dark:border-white/10 dark:bg-white/[0.02]">
+            <div className="relative shrink-0">
+              <Search className="pointer-events-none absolute start-2.5 top-1/2 size-4 -translate-y-1/2 text-foreground/40" />
+              <input
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => e.key === "Escape" && setQuery("")}
+                placeholder="חיפוש מצלמה…"
+                aria-label="חיפוש מצלמה"
+                className="w-full rounded-lg border border-black/10 bg-transparent py-1.5 ps-8 pe-2 text-sm outline-none placeholder:text-foreground/40 focus:border-emerald-500/50 dark:border-white/10"
+              />
+            </div>
+            {q && shownGroups.length === 0 && shownSaved.length === 0 && (
+              <p className="px-2 text-xs text-foreground/40">לא נמצאו מצלמות</p>
+            )}
+
             {/* My groups — the user-built multi-camera walls. */}
+            {(!q || shownSaved.length > 0) && (
             <div className="flex flex-col">
               <div className="flex items-center justify-between px-2 py-1.5">
                 <span className="text-xs font-semibold uppercase tracking-wide text-foreground/50">
@@ -141,7 +169,7 @@ export function CameraExplorer({
                 </p>
               ) : (
                 <div className="flex flex-col gap-0.5">
-                  {savedGroups.map((group) => {
+                  {shownSaved.map((group) => {
                     const isActive = sel.kind === "group" && sel.id === group.id;
                     return (
                       <div
@@ -185,10 +213,11 @@ export function CameraExplorer({
                 </div>
               )}
             </div>
+            )}
 
             {/* Registry groups — every reachable camera, collapsible. */}
-            {registryGroups.map((group) => {
-              const isOpen = open[group.key];
+            {shownGroups.map((group) => {
+              const isOpen = q ? true : open[group.key];
               return (
                 <div key={group.key} className="flex flex-col">
                   <button

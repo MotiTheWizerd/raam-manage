@@ -9,6 +9,10 @@ export async function register() {
     const { startGateWatcher } = await import("./lib/gate-watcher");
     startGateWatcher();
 
+    // Watch the supplier-yard boom gate on camera 114 and log every opening.
+    const { startSupplierGateWatcher } = await import("./lib/supplier-gate");
+    startSupplierGateWatcher();
+
     // Restore the WhatsApp session on boot if it's already linked (creds on
     // disk), so a pm2 restart / nightly reboot brings it back without anyone
     // re-scanning a QR. Does nothing until WhatsApp has been linked once.

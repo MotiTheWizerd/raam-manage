@@ -51,7 +51,7 @@ export const FLEET_CAMERAS: readonly FleetCameraDef[] = [
   { id: "net-109", name: "מבט רחוב (109)", group: "network", host: "10.0.0.109", user: "admin", pass: "Sami0207" },
   { id: "net-111", name: "מצלמת רשת (111)", group: "network", host: "10.0.0.111", user: "admin", pass: "Sami0207" },
   { id: "net-113", name: "מצלמת רשת (113)", group: "network", host: "10.0.0.113", user: "admin", pass: "Sami0207" },
-  { id: "net-114", name: "מצלמת רשת (114)", group: "network", host: "10.0.0.114", user: "admin", pass: "Sami0207" },
+  { id: "net-114", name: "רחבת ספקים מינוס 1 — שער בום (114)", group: "network", host: "10.0.0.114", user: "admin", pass: "Sami0207" },
   { id: "net-115", name: "מצלמת רשת (115)", group: "network", host: "10.0.0.115", user: "admin", pass: "Sami0207" },
   { id: "net-116", name: "מצלמת רשת (116)", group: "network", host: "10.0.0.116", user: "admin", pass: "Sami0207" },
   { id: "net-117", name: "מצלמת רשת (117)", group: "network", host: "10.0.0.117", user: "admin", pass: "Sami0207" },

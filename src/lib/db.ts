@@ -304,6 +304,20 @@ CREATE TABLE IF NOT EXISTS face_events (
 
 CREATE INDEX IF NOT EXISTS idx_face_events_created ON face_events(created_at);
 
+-- The supplier-yard boom gate, as seen by camera 114: one row per opening.
+-- closed_at IS NULL = the gate is open right now. Times are UTC.
+CREATE TABLE IF NOT EXISTS supplier_parking_gate (
+  id            INTEGER PRIMARY KEY,
+  opened_at     TEXT NOT NULL,
+  closed_at     TEXT,
+  duration_sec  INTEGER,
+  lobbyist_name TEXT NOT NULL DEFAULT '',
+  open_photo    TEXT,
+  close_photo   TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_supplier_parking_gate_opened ON supplier_parking_gate(opened_at);
+
 CREATE TABLE IF NOT EXISTS camera_groups (
   id         INTEGER PRIMARY KEY,
   name       TEXT NOT NULL,
@@ -440,6 +454,17 @@ function applySchemaEvolution(db: Database.Database) {
       created_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
     CREATE INDEX IF NOT EXISTS idx_face_events_created ON face_events(created_at);
+
+    CREATE TABLE IF NOT EXISTS supplier_parking_gate (
+      id            INTEGER PRIMARY KEY,
+      opened_at     TEXT NOT NULL,
+      closed_at     TEXT,
+      duration_sec  INTEGER,
+      lobbyist_name TEXT NOT NULL DEFAULT '',
+      open_photo    TEXT,
+      close_photo   TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_supplier_parking_gate_opened ON supplier_parking_gate(opened_at);
 
     -- Progress thread on a suggestion/bug: each comment optionally carries the
     -- status the post was moved TO with that comment (NULL = comment only).

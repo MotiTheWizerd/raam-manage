@@ -10,6 +10,7 @@ import { EmergencyProvider } from "@/components/EmergencyProvider";
 import { FaceNotifier } from "@/components/FaceNotifier";
 import { GateControl } from "@/components/GateControl";
 import { Header } from "@/components/Header";
+import { HeaderInfoRow } from "@/components/HeaderInfoRow";
 import { IntercomCallPopup } from "@/components/intercom/IntercomCallPopup";
 import { NewCarNotifier } from "@/components/NewCarNotifier";
 import { PreferencesProvider } from "@/components/PreferencesProvider";
@@ -66,6 +67,7 @@ export default async function RootLayout({
               <EmergencyProvider>
                 <EditModeProvider>
                 <Header lobbyistName={currentUser.lobbyist_name} isDark={isDark} />
+                <HeaderInfoRow />
                 <div className="flex-1 flex min-h-0">
                   <Sidebar />
                   {/* pb is extra-deep so the fixed bottom overlays (gate

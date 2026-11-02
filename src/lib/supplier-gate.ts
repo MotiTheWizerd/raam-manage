@@ -191,6 +191,33 @@ export function noteGateViewer(name: string): void {
   if (name) state().viewer = { name, at: Date.now() };
 }
 
+export type SupplierGateRow = {
+  id: number;
+  opened_at: string; // UTC, SQLite format
+  closed_at: string | null;
+  duration_sec: number | null;
+  lobbyist_name: string;
+  open_photo: string | null;
+  close_photo: string | null;
+};
+
+export function listSupplierGateLog(limit = 200): SupplierGateRow[] {
+  return db
+    .prepare(`SELECT * FROM supplier_parking_gate ORDER BY id DESC LIMIT ?`)
+    .all(limit) as SupplierGateRow[];
+}
+
+const PHOTO_NAME = /^\d{4}-\d{2}-\d{2}\/\d{6}-(open|close)\.jpg$/;
+
+export function readGatePhoto(name: string): Buffer | null {
+  if (!PHOTO_NAME.test(name)) return null;
+  try {
+    return fs.readFileSync(path.join(DIR, name));
+  } catch {
+    return null;
+  }
+}
+
 export function getSupplierGate(): { open: boolean; since: number | null } {
   const s = state();
   return { open: s.openId !== null, since: s.openSince };

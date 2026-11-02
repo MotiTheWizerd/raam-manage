@@ -10,6 +10,7 @@ import { CameraManagementTab } from "./camera-mgmt/CameraManagementTab";
 import { FaceRecTab } from "./face-rec";
 import { RegisteredCarsTab } from "./RegisteredCarsTab";
 import { SuggestionsTab } from "./SuggestionsTab";
+import { SupplierGateTab } from "./SupplierGateTab";
 import { ZonesTab } from "./ZonesTab";
 
 export function SettingsView() {
@@ -43,6 +44,7 @@ export function SettingsView() {
     { value: "registered-cars", label: "רכבים רשומים" },
     { value: "face-rec", label: "זיהוי פנים" },
     { value: "cameras", label: "ניהול מצלמות" },
+    { value: "supplier-gate", label: "רחבת ספקים" },
     { value: "backup", label: "גיבוי" },
   ];
 
@@ -60,6 +62,7 @@ export function SettingsView() {
         {tab === "registered-cars" && <RegisteredCarsTab />}
         {tab === "face-rec" && <FaceRecTab />}
         {tab === "cameras" && <CameraManagementTab />}
+        {tab === "supplier-gate" && <SupplierGateTab />}
         {tab === "backup" && <BackupTab />}
       </section>
     </div>

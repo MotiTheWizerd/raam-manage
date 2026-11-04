@@ -24,9 +24,9 @@ import { getFleetCamera } from "./fleet-cameras";
 // 15.3-17 / bottom 16.5-17.7, open or moving top <= 14.3 / bottom <= 13. The
 // first lines (16 / 17) sat right on the closed scores, so noise logged false
 // openings; dim light now uses lines in the middle of that gap. Bright day
-// (mean grey ~115-180) keeps the first lines: there an open gate's sunlit
-// paving can score as high as the mesh, so no line separates them — except
-// that a bottom band this strong is always the mesh itself.
+// (mean grey ~105-210): an open gate's sunlit paving scores bottom up to ~25,
+// so the bottom can't tell them apart there — the top can: open <= 16.8, closed
+// >= 21.1 (unless the bottom is >= 30, which is always the mesh itself).
 
 const CAM_ID = "net-114";
 const POLL_MS = 3000;
@@ -36,7 +36,7 @@ const BOTTOM_BAND: [number, number] = [100, 150];
 const DIM_BELOW = 100; // mean grey of the gate patch
 const DIM_CLOSED_TOP = 13;
 const DIM_CLOSED_BOTTOM = 15;
-const DAY_CLOSED_TOP = 16;
+const DAY_CLOSED_TOP = 19;
 const DAY_CLOSED_BOTTOM = 17;
 const MESH_SURE_BOTTOM = 30;
 // "Not closed" must hold this long before it counts as an opening (a blip or

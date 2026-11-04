@@ -15,6 +15,7 @@ import {
   type ApartmentOption,
 } from "@/app/renters/ResidentForm";
 import { Button } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { cn } from "@/lib/cn";
 
 const TYPE_LABEL: Record<EditResident["type"], string> = {
@@ -45,16 +46,17 @@ export function ResidentsEditor({
 }: Props) {
   const [active, setActive] = useState<Active>({ kind: "none" });
   const [archiving, setArchiving] = useState<number | null>(null);
+  const [toArchive, setToArchive] = useState<EditResident | null>(null);
   const selectedResident = useSelectedResident();
   const clearSelectedResident = useClearSelectedResident();
 
   // Soft delete: the resident leaves every current list; history keeps the name.
   const archive = async (resident: EditResident) => {
     const name = `${resident.first_name} ${resident.last_name}`;
-    if (!window.confirm(`להעביר את ${name} לארכיון? הדייר לא יופיע יותר ברשימות.`)) return;
     setArchiving(resident.id);
     const { error } = await archiveResident(resident.id);
     setArchiving(null);
+    setToArchive(null);
     if (error) {
       toast.error(error);
       return;
@@ -152,7 +154,7 @@ export function ResidentsEditor({
                       variant="outline"
                       size="sm"
                       disabled={archiving === resident.id}
-                      onClick={() => archive(resident)}
+                      onClick={() => setToArchive(resident)}
                       className="text-red-600 dark:text-red-400"
                     >
                       <Archive size={14} />
@@ -195,6 +197,19 @@ export function ResidentsEditor({
           הוסף דייר
         </Button>
       )}
+
+      <ConfirmDialog
+        open={toArchive !== null}
+        onClose={() => {
+          if (archiving === null) setToArchive(null);
+        }}
+        onConfirm={() => toArchive && archive(toArchive)}
+        title="העברה לארכיון"
+        description={`להעביר את ${toArchive?.first_name ?? ""} ${toArchive?.last_name ?? ""} לארכיון? הדייר לא יופיע יותר ברשימות.`}
+        confirmLabel="העבר לארכיון"
+        pendingLabel="מעביר..."
+        pending={archiving !== null}
+      />
     </div>
   );
 }

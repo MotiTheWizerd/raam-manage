@@ -1,7 +1,7 @@
 "use client";
 
 import { Download, Phone, Search, Trash2, X } from "lucide-react";
-import { useActionState, useCallback, useEffect, useState } from "react";
+import { useActionState, useCallback, useEffect, useRef, useState } from "react";
 import {
   deleteOwnerMobile,
   getOwners,
@@ -12,6 +12,7 @@ import {
 import { useIsManager } from "@/components/AuthProvider";
 import { PageHeading } from "@/components/PageHeading";
 import { Button } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Input } from "@/components/ui/Input";
 import { useFormToasts } from "@/lib/hooks/useFormToasts";
 import { AddOwnerButton } from "./AddOwnerButton";
@@ -20,25 +21,54 @@ import { EditOwnerButton } from "./EditOwnerButton";
 
 const initial: OwnerFormState = {};
 
-function DeleteMobileButton({ id, onDeleted }: { id: number; onDeleted: () => void }) {
+function DeleteMobileButton({
+  id,
+  phone,
+  onDeleted,
+}: {
+  id: number;
+  phone: string;
+  onDeleted: () => void;
+}) {
   const [state, action, pending] = useActionState(deleteOwnerMobile, initial);
+  const [open, setOpen] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
   useFormToasts(state, "הטלפון נמחק");
   useEffect(() => {
-    if (state.submittedAt) Promise.resolve().then(onDeleted);
+    if (!state.submittedAt) return;
+    Promise.resolve().then(() => {
+      setOpen(false);
+      onDeleted();
+    });
   }, [state.submittedAt, onDeleted]);
 
   return (
-    <form action={action} className="inline-flex">
-      <input type="hidden" name="id" value={id} />
+    <>
       <button
-        type="submit"
+        type="button"
         disabled={pending}
+        onClick={() => setOpen(true)}
         aria-label="מחק טלפון"
         className="inline-flex items-center justify-center h-5 w-5 rounded opacity-30 hover:opacity-100 hover:text-red-600 transition-all"
       >
         <Trash2 size={11} />
       </button>
-    </form>
+      <ConfirmDialog
+        open={open}
+        onClose={() => {
+          if (!pending) setOpen(false);
+        }}
+        onConfirm={() => formRef.current?.requestSubmit()}
+        title="מחיקת טלפון"
+        description={`למחוק את הטלפון ${phone}?`}
+        confirmLabel="מחק"
+        pendingLabel="מוחק..."
+        pending={pending}
+      />
+      <form ref={formRef} action={action} className="hidden">
+        <input type="hidden" name="id" value={id} />
+      </form>
+    </>
   );
 }
 
@@ -185,7 +215,7 @@ export function OwnersView({ initial: initialOwners, apartments }: Props) {
                             <span className="opacity-50">· {m.comment}</span>
                           )}
                           {isManager && (
-                            <DeleteMobileButton id={m.id} onDeleted={refresh} />
+                            <DeleteMobileButton id={m.id} phone={m.phone} onDeleted={refresh} />
                           )}
                         </div>
                       ))}

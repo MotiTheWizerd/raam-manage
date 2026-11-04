@@ -2,7 +2,7 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import { ChevronDown, MessageSquareText, Trash2 } from "lucide-react";
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import {
   deleteSuggestion,
   getAllSuggestions,
@@ -14,6 +14,7 @@ import {
 } from "@/app/settings/suggestions-actions";
 import { useIsManager } from "@/components/AuthProvider";
 import { Button } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { cn } from "@/lib/cn";
 import { useFormToasts } from "@/lib/hooks/useFormToasts";
 import {
@@ -273,26 +274,45 @@ function DeleteSuggestionButton({ suggestionId }: { suggestionId: number }) {
     initialDeleteState
   );
 
+  const [open, setOpen] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
+
   useFormToasts(state, "ההצעה נמחקה");
 
   useEffect(() => {
     if (!state.submittedAt) return;
+    Promise.resolve().then(() => setOpen(false));
     notifySuggestionsChanged();
   }, [state.submittedAt]);
 
   return (
-    <form action={action}>
-      <input type="hidden" name="id" value={suggestionId} />
+    <>
       <Button
-        type="submit"
+        type="button"
         variant="ghost"
         size="sm"
         disabled={pending}
         aria-label="מחק"
+        onClick={() => setOpen(true)}
       >
         <Trash2 size={14} />
         מחק
       </Button>
-    </form>
+      <ConfirmDialog
+        open={open}
+        onClose={() => {
+          if (!pending) setOpen(false);
+        }}
+        onConfirm={() => formRef.current?.requestSubmit()}
+        title="מחיקת הצעה"
+        description="למחוק את ההצעה? פעולה זו אינה הפיכה."
+        confirmLabel="מחק"
+        pendingLabel="מוחק..."
+        pending={pending}
+      />
+      <form ref={formRef} action={action} className="hidden">
+        <input type="hidden" name="id" value={suggestionId} />
+      </form>
+    </>
   );
 }

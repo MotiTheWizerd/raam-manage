@@ -12,6 +12,7 @@ import {
 } from "@/app/cameras/actions";
 import { Modal } from "@/components/Modal";
 import { Button } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Input } from "@/components/ui/Input";
 import { cn } from "@/lib/cn";
 
@@ -37,6 +38,7 @@ export function CameraGroupEditor({
   const [name, setName] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -85,6 +87,7 @@ export function CameraGroupEditor({
 
   function remove() {
     if (!editing) return;
+    setConfirmDelete(false);
     startTransition(async () => {
       const res = await deleteCameraGroup(editing.id);
       if (!res.ok) {
@@ -98,6 +101,7 @@ export function CameraGroupEditor({
   }
 
   return (
+    <>
     <Modal
       open={open}
       onClose={onClose}
@@ -188,7 +192,7 @@ export function CameraGroupEditor({
           <div className="text-sm text-foreground/50">נבחרו {selected.size}</div>
           <div className="flex items-center gap-2">
             {editing && (
-              <Button variant="ghost" size="sm" onClick={remove} disabled={pending}>
+              <Button variant="ghost" size="sm" onClick={() => setConfirmDelete(true)} disabled={pending}>
                 <Trash2 size={16} />
                 מחק
               </Button>
@@ -205,5 +209,14 @@ export function CameraGroupEditor({
         {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
       </div>
     </Modal>
+    <ConfirmDialog
+      open={confirmDelete}
+      onClose={() => setConfirmDelete(false)}
+      onConfirm={remove}
+      title="מחיקת קבוצה"
+      description={`למחוק את הקבוצה "${editing?.name ?? ""}"? המצלמות עצמן לא נמחקות.`}
+      confirmLabel="מחק"
+    />
+    </>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { cn } from "@/lib/cn";
 
 // A thin row under the header for live building info. Shows nothing until
@@ -26,6 +27,7 @@ export function HeaderInfoRow() {
   const [gate, setGate] = useState<Gate | null>(null);
   const [offset, setOffset] = useState(0); // server clock − this screen's clock
   const [now, setNow] = useState(() => Date.now());
+  const [confirmDismiss, setConfirmDismiss] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -65,8 +67,8 @@ export function HeaderInfoRow() {
   // The camera got it wrong (the gate is shut): mark this opening a false
   // positive. The strip hides now; the next poll agrees.
   const dismiss = async () => {
+    setConfirmDismiss(false);
     if (gate.id === null) return;
-    if (!window.confirm("השער סגור? לסמן את ההתראה כטעות של המצלמה")) return;
     setGate({ open: false, since: null, id: null });
     await fetch("/api/supplier-gate", {
       method: "POST",
@@ -104,7 +106,7 @@ export function HeaderInfoRow() {
       </span>
       <button
         type="button"
-        onClick={dismiss}
+        onClick={() => setConfirmDismiss(true)}
         title="השער סגור — זו טעות של המצלמה"
         className={cn(
           "ms-auto rounded-md border px-2 py-0.5 text-xs transition-colors",
@@ -115,6 +117,15 @@ export function HeaderInfoRow() {
       >
         בטל
       </button>
+      <ConfirmDialog
+        open={confirmDismiss}
+        onClose={() => setConfirmDismiss(false)}
+        onConfirm={dismiss}
+        title="ביטול התראה"
+        description="השער סגור? ההתראה תסומן כטעות של המצלמה ותוסתר."
+        confirmLabel="כן, השער סגור"
+        cancelLabel="חזור"
+      />
     </div>
   );
 }

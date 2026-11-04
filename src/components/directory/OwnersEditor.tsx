@@ -213,6 +213,7 @@ function OwnerPhones({
   const [phone, setPhone] = useState("");
   const [comment, setComment] = useState("");
   const [busy, setBusy] = useState(false);
+  const [toDelete, setToDelete] = useState<{ id: number; phone: string } | null>(null);
 
   async function add() {
     const p = phone.trim();
@@ -236,7 +237,10 @@ function OwnerPhones({
   async function remove(id: number) {
     const fd = new FormData();
     fd.set("id", String(id));
+    setBusy(true);
     const res = await deleteOwnerMobile(initial, fd);
+    setBusy(false);
+    setToDelete(null);
     if (res.error) {
       toast.error(res.error);
       return;
@@ -259,7 +263,7 @@ function OwnerPhones({
           {m.comment && <span className="opacity-50">· {m.comment}</span>}
           <button
             type="button"
-            onClick={() => remove(m.id)}
+            onClick={() => setToDelete({ id: m.id, phone: m.phone })}
             aria-label="מחק טלפון"
             className="inline-flex h-5 w-5 items-center justify-center rounded opacity-30 transition-all hover:text-red-600 hover:opacity-100"
           >
@@ -298,6 +302,18 @@ function OwnerPhones({
           הוסף
         </Button>
       </div>
+      <ConfirmDialog
+        open={toDelete !== null}
+        onClose={() => {
+          if (!busy) setToDelete(null);
+        }}
+        onConfirm={() => toDelete && remove(toDelete.id)}
+        title="מחיקת טלפון"
+        description={`למחוק את הטלפון ${toDelete?.phone ?? ""}?`}
+        confirmLabel="מחק"
+        pendingLabel="מוחק..."
+        pending={busy}
+      />
     </div>
   );
 }

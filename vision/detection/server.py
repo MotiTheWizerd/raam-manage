@@ -16,6 +16,7 @@ from detect import CAMERAS
 from . import hiksdk, tablet
 from .objects import check_objects
 from .raw_grabber import get_raw_grabber
+from .sdk_live import get_sdk_live
 from .service import get_named_worker, get_worker, running_workers
 from .settings import BOUNDARY, settings
 
@@ -137,18 +138,19 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(jpeg)
 
     def _serve_live(self):
-        """Plain MJPEG (no detection) from any RTSP stream — the follow wall's
-        video. The app reads it server-side and forwards it to the browser.
+        """Plain MJPEG (no detection) from any RTSP stream, or an SDK-only
+        recorder's channel (sdk_live) — the follow wall's video. The app reads
+        it server-side and forwards it to the browser.
 
-        ?url=rtsp://...  the stream; ?fps=N caps the frame rate; ?q=N is the
+        ?url=rtsp://... or hiksdk://...  the stream; ?fps=N caps the frame rate; ?q=N is the
         JPEG quality; ?w=N shrinks wider frames to N px (a browser decodes a
         1080p frame in ~30-50 ms, too slow for 20 fps on two tiles). Ends if the
         camera gives nothing for ~15 s, so the app can fall back to snapshots.
         """
         qs = parse_qs(urlparse(self.path).query)
         url = (qs.get("url") or [""])[0]
-        if not url.startswith("rtsp://"):
-            self._send_json(400, {"error": "url must be rtsp://"})
+        if not url.startswith(("rtsp://", "hiksdk://")):
+            self._send_json(400, {"error": "url must be rtsp:// or hiksdk://"})
             return
         try:
             fps = min(max(float((qs.get("fps") or ["20"])[0]), 1.0), 30.0)
@@ -157,7 +159,8 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError:
             self._send_json(400, {"error": "bad fps / q / w"})
             return
-        grabber = get_raw_grabber(url)
+        # SDK-only recorders (the elevators) stream through the SDK's preview.
+        grabber = get_sdk_live(url) if url.startswith("hiksdk://") else get_raw_grabber(url)
         # First frame = RTSP open (~1-2 s); nothing in 15 s = camera down.
         jpeg, seq = grabber.wait_live(-1, fps, quality, width, timeout=15.0)
         if jpeg is None:

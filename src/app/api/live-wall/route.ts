@@ -17,6 +17,7 @@ const LIVE_FPS = 20;
 const SUB_QUALITY = 80;
 const HD_QUALITY = 75;
 const HD_WIDTH = 1280;
+const SUB_WIDTH = 640;
 // A full wall is 9; a few spare in case tiles change while the list is in flight.
 const MAX_CAMS = 12;
 // While a camera's video is down: one snapshot this often, and retry the video.
@@ -33,8 +34,8 @@ const QUEUE_BYTES = 2_000_000;
 // tiles or fullscreen), otherwise the sub stream.
 //
 // The body is a run of frames, each: "<cam> <bytes>\n" then that many bytes of
-// JPEG. Video comes from the vision service's /live MJPEG; a camera without
-// one (the SDK-only elevators, or the service down) sends a snapshot a second.
+// JPEG. Video comes from the vision service's /live MJPEG (RTSP cameras, and
+// the elevators over Hikvision's SDK); while that's down, a snapshot a second.
 export async function GET(request: Request) {
   const user = await getCurrentUser();
   if (!user) return new Response("Unauthorized", { status: 401 });
@@ -97,25 +98,29 @@ async function pumpCamera(
   signal: AbortSignal,
   send: (id: string, jpeg: Uint8Array) => void
 ) {
-  const rtsp = cameraRtspUrl(id, hd ? "main" : "sub");
+  // RTSP cameras, or the SDK-only elevators (their one stream is 720p, so a
+  // small tile gets it shrunk like a sub stream).
+  const source = cameraRtspUrl(id, hd ? "main" : "sub");
   const quality = hd ? HD_QUALITY : SUB_QUALITY;
+  const width = hd ? HD_WIDTH : SUB_WIDTH;
   let gotVideo = false;
   // A first picture straight from the camera while its video opens: the vision
-  // service opens streams one at a time (~1.2 s each), so tiles arriving
-  // together would otherwise wait in line. ISAPI cameras only — an RTSP-only
-  // camera's still would queue behind those same opens.
+  // service opens RTSP streams one at a time (~1.2 s each), so tiles arriving
+  // together would otherwise wait in line. Not for an RTSP-only camera — its
+  // still would queue behind those same opens.
   const fleetCam = getFleetCamera(id);
-  if (!(fleetCam && fleetRtspUrl(fleetCam))) {
+  const rtspOnly = fleetCam ? !!fleetRtspUrl(fleetCam)?.startsWith("rtsp://") : false;
+  if (!rtspOnly) {
     void snapshot(id).then((still) => {
       if (still && !gotVideo) send(id, new Uint8Array(still));
     });
   }
   while (!signal.aborted) {
-    if (rtsp?.startsWith("rtsp://")) {
+    if (source?.startsWith("rtsp://") || source?.startsWith("hiksdk://")) {
       try {
         const res = await fetch(
-          `${VISION_INTERNAL_URL}/live?url=${encodeURIComponent(rtsp)}` +
-            `&fps=${LIVE_FPS}&q=${quality}${hd ? `&w=${HD_WIDTH}` : ""}`,
+          `${VISION_INTERNAL_URL}/live?url=${encodeURIComponent(source)}` +
+            `&fps=${LIVE_FPS}&q=${quality}&w=${width}`,
           { cache: "no-store", signal }
         );
         if (res.ok && res.body) {

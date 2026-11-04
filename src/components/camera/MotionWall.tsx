@@ -49,6 +49,10 @@ const MOTION_POLL_MS = 1000;
 const MOTION_LINGER_MS = 8000;
 // Most tiles the wall shows at once (the most recently moving win).
 const MOTION_MAX_TILES = 9;
+// Pause between a tile's snapshots. A snapshot takes ~0.1–0.2 s, so this gives
+// ~3–4 frames a second per tile, smoother than the 1 s of the big camera grids.
+// Fine here: at most 9 tiles, and the wall runs on one screen.
+const FOLLOW_REFRESH_MS = 120;
 
 // Polls /api/motion (the cameras' own motion detection) and keeps the wall of
 // cameras that moved recently. Tiles keep their place in order of arrival so
@@ -400,6 +404,7 @@ export function MotionWall({
           onExclude={() => setExcluded(id, true)}
           autoDetect={options.wallDetect}
           detectLite
+          refreshMs={FOLLOW_REFRESH_MS}
           footer={
             <MotionInfo
               info={motion.info.get(id)}

@@ -1,6 +1,8 @@
 "use server";
 
+import { isManager } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { getPreferences, savePreferences } from "@/lib/preferences";
 import { revalidatePath } from "next/cache";
 
 export type ResidentFormState = {
@@ -264,4 +266,29 @@ export async function updateResident(
   revalidatePath(`/renters/${id}`);
   revalidatePath("/");
   return { submittedAt: Date.now() };
+}
+
+// Archive (soft delete): the resident moved out. move_out is what every list,
+// picker and search of current residents already filters on; the row and its
+// phones stay, so old packages, keys, loans and guests keep their name.
+export async function archiveResident(id: number): Promise<{ error?: string }> {
+  if (!(await isManager())) return { error: "אין הרשאה" };
+  const result = db
+    .prepare(
+      `UPDATE residents
+          SET move_out = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ? AND move_out IS NULL`
+    )
+    .run(id);
+  if (result.changes === 0) return { error: "הדייר לא נמצא או כבר בארכיון" };
+
+  // The events screen's selected resident (shared by every lobby window).
+  const prefs = await getPreferences();
+  if (prefs.selectedResident?.id === id) await savePreferences({ selectedResident: null });
+
+  revalidatePath("/renters");
+  revalidatePath(`/renters/${id}`);
+  revalidatePath("/directory");
+  revalidatePath("/");
+  return {};
 }

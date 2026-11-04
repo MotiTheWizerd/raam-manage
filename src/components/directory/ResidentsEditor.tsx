@@ -1,11 +1,14 @@
 "use client";
 
-import { ChevronDown, Plus } from "lucide-react";
+import { Archive, ChevronDown, Plus } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
 import {
+  archiveResident,
   createResident,
   updateResident,
 } from "@/app/renters/actions";
+import { useClearSelectedResident, useSelectedResident } from "@/components/PreferencesProvider";
 import type { EditResident, EditApartmentOption } from "@/app/directory/actions";
 import {
   ResidentForm,
@@ -41,6 +44,26 @@ export function ResidentsEditor({
   onChanged,
 }: Props) {
   const [active, setActive] = useState<Active>({ kind: "none" });
+  const [archiving, setArchiving] = useState<number | null>(null);
+  const selectedResident = useSelectedResident();
+  const clearSelectedResident = useClearSelectedResident();
+
+  // Soft delete: the resident leaves every current list; history keeps the name.
+  const archive = async (resident: EditResident) => {
+    const name = `${resident.first_name} ${resident.last_name}`;
+    if (!window.confirm(`להעביר את ${name} לארכיון? הדייר לא יופיע יותר ברשימות.`)) return;
+    setArchiving(resident.id);
+    const { error } = await archiveResident(resident.id);
+    setArchiving(null);
+    if (error) {
+      toast.error(error);
+      return;
+    }
+    if (selectedResident?.id === resident.id) clearSelectedResident();
+    toast.success(`${name} הועבר לארכיון`);
+    setActive({ kind: "none" });
+    onChanged();
+  };
 
   const apartments: ApartmentOption[] = apartmentOptions.map((a) => ({
     id: a.id,
@@ -123,6 +146,19 @@ export function ResidentsEditor({
                       onChanged();
                     }}
                   />
+                  <div className="mt-3 flex justify-end border-t border-black/10 pt-3 dark:border-white/10">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={archiving === resident.id}
+                      onClick={() => archive(resident)}
+                      className="text-red-600 dark:text-red-400"
+                    >
+                      <Archive size={14} />
+                      העבר לארכיון
+                    </Button>
+                  </div>
                 </div>
               )}
             </div>

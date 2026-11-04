@@ -18,6 +18,7 @@ type Resident = {
   apartment_number: string | null;
   apartment_comment: string | null;
   zone_name: string | null;
+  move_out: string | null; // set = archived (moved out)
 };
 
 type Phone = {
@@ -46,7 +47,7 @@ export default async function ResidentPage({
   const resident = db
     .prepare(
       `SELECT r.id, r.apartment_id, r.first_name, r.last_name, r.type,
-              r.id_number, r.po_box, r.notes,
+              r.id_number, r.po_box, r.notes, r.move_out,
               a.number AS apartment_number,
               a.notes  AS apartment_comment,
               z.name   AS zone_name
@@ -86,6 +87,14 @@ export default async function ResidentPage({
         <ArrowRight size={14} />
         חזרה לרשימת הדיירים
       </Link>
+
+      {resident.move_out && (
+        <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-200">
+          הדייר בארכיון מאז{" "}
+          {new Date(resident.move_out.replace(" ", "T") + "Z").toLocaleDateString("he-IL")} — לא
+          מופיע ברשימות הדיירים.
+        </p>
+      )}
 
       <ResidentDetail
         resident={resident}

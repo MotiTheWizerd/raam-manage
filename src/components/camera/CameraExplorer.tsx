@@ -2,10 +2,11 @@
 
 import { Activity, Cctv, ChevronDown, Pencil, Plus, Search } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import type { CameraGroup as SavedGroup } from "@/app/cameras/actions";
 import { CameraGroupEditor } from "@/components/camera/CameraGroupEditor";
 import { CameraTile } from "@/components/camera/CameraTile";
+import { LiveWallProvider } from "@/components/camera/LiveWall";
 import {
   gridCols,
   HiddenFromFollowMenu,
@@ -24,6 +25,15 @@ export type CameraGroup = { key: string; label: string; cameras: CameraInfo[] };
 
 // What's currently in the spotlight / wall: one camera, or a saved group.
 type Selection = { kind: "camera"; id: string } | { kind: "group"; id: number };
+
+// A group of up to this many plays live video (like the follow wall); a bigger
+// one keeps snapshots, so a 30-camera group doesn't open 30 streams at once.
+const LIVE_GROUP_MAX = 9;
+
+function LiveGroup({ count, children }: { count: number; children: ReactNode }) {
+  if (count > LIVE_GROUP_MAX) return children;
+  return <LiveWallProvider hd={count <= 2}>{children}</LiveWallProvider>;
+}
 
 // The cameras explorer: a scrollable side menu of every camera (grouped,
 // collapsible) plus the user's own saved camera groups. Picking a single camera
@@ -271,29 +281,33 @@ export function CameraExplorer({
                   אין מצלמות בקבוצה זו
                 </div>
               ) : (
-                <div
-                  className="grid h-full gap-2"
-                  style={{
-                    gridTemplateColumns: `repeat(${gridCols(
-                      activeGroup.cameras.length
-                    )}, minmax(0, 1fr))`,
-                    gridTemplateRows: `repeat(${Math.ceil(
-                      activeGroup.cameras.length / gridCols(activeGroup.cameras.length)
-                    )}, minmax(0, 1fr))`,
-                  }}
-                >
-                  {activeGroup.cameras.map((cam) => (
-                    <CameraTile
-                      key={cam.id}
-                      camId={cam.id}
-                      title={cam.name}
-                      detectLite={activeGroup.cameras.length > 1}
-                    />
-                  ))}
-                </div>
+                <LiveGroup count={activeGroup.cameras.length}>
+                  <div
+                    className="grid h-full gap-2"
+                    style={{
+                      gridTemplateColumns: `repeat(${gridCols(
+                        activeGroup.cameras.length
+                      )}, minmax(0, 1fr))`,
+                      gridTemplateRows: `repeat(${Math.ceil(
+                        activeGroup.cameras.length / gridCols(activeGroup.cameras.length)
+                      )}, minmax(0, 1fr))`,
+                    }}
+                  >
+                    {activeGroup.cameras.map((cam) => (
+                      <CameraTile
+                        key={cam.id}
+                        camId={cam.id}
+                        title={cam.name}
+                        detectLite={activeGroup.cameras.length > 1}
+                      />
+                    ))}
+                  </div>
+                </LiveGroup>
               )
             ) : activeCamera ? (
-              <CameraTile key="spotlight" camId={activeCamera.id} title={activeCamera.name} />
+              <LiveWallProvider hd>
+                <CameraTile key="spotlight" camId={activeCamera.id} title={activeCamera.name} />
+              </LiveWallProvider>
             ) : (
               <div className="grid h-full place-items-center rounded-xl border border-black/10 text-sm text-foreground/50 dark:border-white/10">
                 בחר מצלמה או קבוצה מהתפריט

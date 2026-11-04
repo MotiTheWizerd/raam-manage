@@ -18,14 +18,27 @@ import { getFleetCamera } from "./fleet-cameras";
 // says it's really shut. Measured on two full cycles (2026-11-02): closed reads
 // top ~17.5 / bottom ~19, fully open ~10.5 / ~10, the ~22 s of travel between.
 // The camera's clock overlay crosses rows 55-100, so those rows are skipped.
+//
+// The light changes the scores (checked on every logged photo, 2026-11-04).
+// Dim (evening, night, dawn — the patch's mean grey ~77-90): closed reads top
+// 15.3-17 / bottom 16.5-17.7, open or moving top <= 14.3 / bottom <= 13. The
+// first lines (16 / 17) sat right on the closed scores, so noise logged false
+// openings; dim light now uses lines in the middle of that gap. Bright day
+// (mean grey ~115-180) keeps the first lines: there an open gate's sunlit
+// paving can score as high as the mesh, so no line separates them — except
+// that a bottom band this strong is always the mesh itself.
 
 const CAM_ID = "net-114";
 const POLL_MS = 3000;
 const GATE_X: [number, number] = [410, 580];
 const TOP_BAND: [number, number] = [0, 55];
 const BOTTOM_BAND: [number, number] = [100, 150];
-const CLOSED_TOP = 16;
-const CLOSED_BOTTOM = 17;
+const DIM_BELOW = 100; // mean grey of the gate patch
+const DIM_CLOSED_TOP = 13;
+const DIM_CLOSED_BOTTOM = 15;
+const DAY_CLOSED_TOP = 16;
+const DAY_CLOSED_BOTTOM = 17;
+const MESH_SURE_BOTTOM = 30;
 // "Not closed" must hold this long before it counts as an opening (a blip or
 // someone walking past never logs a row; a real opening always passes).
 const OPEN_CONFIRM_MS = 6000;
@@ -108,7 +121,23 @@ async function readGate(): Promise<{ closed: boolean; jpeg: Buffer } | null> {
   if (info.width < GATE_X[1] || info.height < BOTTOM_BAND[1]) return null;
   const top = bandScore(data, info.width, TOP_BAND);
   const bottom = bandScore(data, info.width, BOTTOM_BAND);
-  return { closed: top >= CLOSED_TOP && bottom >= CLOSED_BOTTOM, jpeg };
+  const dim = patchBrightness(data, info.width) < DIM_BELOW;
+  const closed =
+    bottom >= MESH_SURE_BOTTOM ||
+    (dim
+      ? top >= DIM_CLOSED_TOP && bottom >= DIM_CLOSED_BOTTOM
+      : top >= DAY_CLOSED_TOP && bottom >= DAY_CLOSED_BOTTOM);
+  return { closed, jpeg };
+}
+
+// Mean grey of the whole gate patch (both bands and the clock strip between).
+function patchBrightness(pixels: Buffer, width: number): number {
+  const [x0, x1] = GATE_X;
+  let sum = 0;
+  for (let y = TOP_BAND[0]; y < BOTTOM_BAND[1]; y++) {
+    for (let x = x0; x < x1; x++) sum += pixels[y * width + x];
+  }
+  return sum / ((BOTTOM_BAND[1] - TOP_BAND[0]) * (x1 - x0));
 }
 
 function savePhoto(jpeg: Buffer, at: number, kind: "open" | "close"): string | null {

@@ -20,6 +20,11 @@ import { followIntercomLog } from "@/lib/intercom-log";
 
 const ALERT_PATH = "/ISAPI/Event/notification/alertStream";
 const RETRY_MS = 5000;
+// Every device sends something at least every ~10 s (the heartbeat; measured
+// on the DVR, NVR and cameras 2026-11-04). This long with nothing = the
+// connection died quietly (network blip, device reboot): reconnect, or that
+// device's cameras would drop out of follow until the app restarts.
+const STALE_MS = 30000;
 
 // Object filter: on motion, one snapshot goes to the vision service's
 // POST /objects (YOLO on a single image → people / vehicles / animals).
@@ -280,9 +285,12 @@ async function checkObjects(id: string, burst: Burst) {
   }
 }
 
-async function openStream(dev: Device): Promise<Response | null> {
+async function openStream(dev: Device, signal: AbortSignal): Promise<Response | null> {
   const url = `http://${dev.host}${ALERT_PATH}`;
-  const challenge = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(5000) });
+  const challenge = await fetch(url, {
+    cache: "no-store",
+    signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]),
+  });
   if (challenge.ok) return challenge;
   await challenge.body?.cancel();
   const wwwAuth = challenge.headers.get("www-authenticate");
@@ -290,15 +298,24 @@ async function openStream(dev: Device): Promise<Response | null> {
   const res = await fetch(url, {
     cache: "no-store",
     headers: { Authorization: buildDigest(wwwAuth, ALERT_PATH, dev.user, dev.pass) },
+    signal,
   });
   return res.ok ? res : null;
 }
 
-// Hold one device's event stream forever, reconnecting on any drop.
+// Hold one device's event stream forever, reconnecting on any drop — and on
+// silence (STALE_MS), which is how a dead connection looks from this side.
 async function listen(dev: Device) {
   for (;;) {
+    const ctrl = new AbortController();
+    let stale: ReturnType<typeof setTimeout> | undefined;
+    const rearm = () => {
+      clearTimeout(stale);
+      stale = setTimeout(() => ctrl.abort(), STALE_MS);
+    };
     try {
-      const res = await openStream(dev);
+      rearm();
+      const res = await openStream(dev, ctrl.signal);
       if (res?.body) {
         const decoder = new TextDecoder();
         let buf = "";
@@ -306,6 +323,7 @@ async function listen(dev: Device) {
         for (;;) {
           const { done, value } = await reader.read();
           if (done) break;
+          rearm();
           buf += decoder.decode(value, { stream: true });
           let end: number;
           while ((end = buf.indexOf("</EventNotificationAlert>")) !== -1) {
@@ -316,7 +334,10 @@ async function listen(dev: Device) {
         }
       }
     } catch {
-      // Unreachable / dropped — retry below.
+      // Unreachable / dropped / gone silent — retry below.
+    } finally {
+      clearTimeout(stale);
+      ctrl.abort(); // let go of the old connection
     }
     await new Promise((r) => setTimeout(r, RETRY_MS));
   }

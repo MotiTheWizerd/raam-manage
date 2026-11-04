@@ -54,6 +54,10 @@ const DIR = path.join(process.cwd(), "data", "supplier-gate-photos");
 type GateState = {
   openId: number | null; // the open row, while the gate is open
   openSince: number | null; // ms, first "not closed" read of that opening
+  // A lobbyist marked the open row a false positive ('בטל'): the strip hides
+  // it, but it's still tracked until the camera reads closed, so it can't
+  // reopen as a new row while the camera stays confused.
+  openFalse: boolean;
   notClosedSince: number | null; // pending opening (not yet confirmed)
   closedSince: number | null; // pending close (not yet confirmed)
   viewer: { name: string; at: number } | null;
@@ -70,13 +74,14 @@ function state(): GateState {
     // Resume an opening that was still open when the server stopped.
     const open = db
       .prepare(
-        `SELECT id, opened_at FROM supplier_parking_gate
+        `SELECT id, opened_at, false_positive FROM supplier_parking_gate
           WHERE closed_at IS NULL ORDER BY id DESC LIMIT 1`
       )
-      .get() as { id: number; opened_at: string } | undefined;
+      .get() as { id: number; opened_at: string; false_positive: number } | undefined;
     globalThis.__raamSupplierGate = {
       openId: open?.id ?? null,
       openSince: open ? Date.parse(open.opened_at.replace(" ", "T") + "Z") : null,
+      openFalse: open?.false_positive === 1,
       notClosedSince: null,
       closedSince: null,
       viewer: null,
@@ -192,6 +197,7 @@ async function tick() {
       .run(sqlTime(s.notClosedSince), viewer, savePhoto(read.jpeg, now, "open"));
     s.openId = Number(info.lastInsertRowid);
     s.openSince = s.notClosedSince;
+    s.openFalse = false;
     s.notClosedSince = null;
     console.log(`[supplier-gate] opened (row ${s.openId}, ${viewer || "no lobbyist"})`);
     return;
@@ -211,7 +217,19 @@ async function tick() {
   console.log(`[supplier-gate] closed (row ${s.openId}, ${durationSec}s)`);
   s.openId = null;
   s.openSince = null;
+  s.openFalse = false;
   s.closedSince = null;
+}
+
+// 'בטל' on the strip: this opening was the camera's mistake. Only the open row
+// can be marked, so a stale screen can't mark a later, real opening.
+export function markGateFalsePositive(id: number): boolean {
+  const s = state();
+  if (s.openId !== id) return false;
+  db.prepare(`UPDATE supplier_parking_gate SET false_positive = 1 WHERE id = ?`).run(id);
+  s.openFalse = true;
+  console.log(`[supplier-gate] row ${id} marked false positive`);
+  return true;
 }
 
 // Every screen polls the gate state; the most recent one names the lobbyist
@@ -232,7 +250,9 @@ export type SupplierGateRow = {
 
 export function listSupplierGateLog(limit = 200): SupplierGateRow[] {
   return db
-    .prepare(`SELECT * FROM supplier_parking_gate ORDER BY id DESC LIMIT ?`)
+    .prepare(
+      `SELECT * FROM supplier_parking_gate WHERE false_positive = 0 ORDER BY id DESC LIMIT ?`
+    )
     .all(limit) as SupplierGateRow[];
 }
 
@@ -247,9 +267,10 @@ export function readGatePhoto(name: string): Buffer | null {
   }
 }
 
-export function getSupplierGate(): { open: boolean; since: number | null } {
+export function getSupplierGate(): { open: boolean; since: number | null; id: number | null } {
   const s = state();
-  return { open: s.openId !== null, since: s.openSince };
+  const open = s.openId !== null && !s.openFalse;
+  return { open, since: open ? s.openSince : null, id: open ? s.openId : null };
 }
 
 // Idempotent — globalThis guard survives Turbopack HMR so we never stack timers.

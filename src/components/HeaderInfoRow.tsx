@@ -10,7 +10,7 @@ import { cn } from "@/lib/cn";
 const POLL_MS = 3000;
 const LATE_MS = 10 * 60_000; // open this long → the row turns red
 
-type Gate = { open: boolean; since: number | null };
+type Gate = { open: boolean; since: number | null; id: number | null };
 
 const clock = new Intl.DateTimeFormat("he-IL", { hour: "2-digit", minute: "2-digit" });
 
@@ -36,7 +36,7 @@ export function HeaderInfoRow() {
         const data = (await res.json()) as Gate & { now: number };
         if (!alive) return;
         setOffset(data.now - Date.now());
-        setGate({ open: data.open, since: data.since });
+        setGate({ open: data.open, since: data.since, id: data.id });
       } catch {
         /* keep the last state */
       }
@@ -61,6 +61,19 @@ export function HeaderInfoRow() {
   const elapsed = now + offset - gate.since;
   // Amber while it's plausibly a delivery; red once it looks forgotten.
   const late = elapsed >= LATE_MS;
+
+  // The camera got it wrong (the gate is shut): mark this opening a false
+  // positive. The strip hides now; the next poll agrees.
+  const dismiss = async () => {
+    if (gate.id === null) return;
+    if (!window.confirm("השער סגור? לסמן את ההתראה כטעות של המצלמה")) return;
+    setGate({ open: false, since: null, id: null });
+    await fetch("/api/supplier-gate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: gate.id }),
+    }).catch(() => {});
+  };
 
   return (
     <div
@@ -89,6 +102,19 @@ export function HeaderInfoRow() {
         <span className="mx-2 opacity-40">·</span>
         במשך <span className="font-semibold tabular-nums">{openFor(elapsed)}</span>
       </span>
+      <button
+        type="button"
+        onClick={dismiss}
+        title="השער סגור — זו טעות של המצלמה"
+        className={cn(
+          "ms-auto rounded-md border px-2 py-0.5 text-xs transition-colors",
+          late
+            ? "border-red-500/30 text-red-700 hover:bg-red-500/10 dark:text-red-300"
+            : "border-amber-500/30 text-amber-800 hover:bg-amber-500/10 dark:text-amber-200"
+        )}
+      >
+        בטל
+      </button>
     </div>
   );
 }

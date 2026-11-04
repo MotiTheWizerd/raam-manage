@@ -5,7 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 const DB_PATH = path.join(process.cwd(), "data", "raam.db");
-const SCHEMA_EVOLUTION_VERSION = 14;
+const SCHEMA_EVOLUTION_VERSION = 15;
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS zones (
@@ -306,14 +306,16 @@ CREATE INDEX IF NOT EXISTS idx_face_events_created ON face_events(created_at);
 
 -- The supplier-yard boom gate, as seen by camera 114: one row per opening.
 -- closed_at IS NULL = the gate is open right now. Times are UTC.
+-- false_positive = 1: a lobbyist marked it the camera's mistake (hidden).
 CREATE TABLE IF NOT EXISTS supplier_parking_gate (
-  id            INTEGER PRIMARY KEY,
-  opened_at     TEXT NOT NULL,
-  closed_at     TEXT,
-  duration_sec  INTEGER,
-  lobbyist_name TEXT NOT NULL DEFAULT '',
-  open_photo    TEXT,
-  close_photo   TEXT
+  id             INTEGER PRIMARY KEY,
+  opened_at      TEXT NOT NULL,
+  closed_at      TEXT,
+  duration_sec   INTEGER,
+  lobbyist_name  TEXT NOT NULL DEFAULT '',
+  open_photo     TEXT,
+  close_photo    TEXT,
+  false_positive INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE INDEX IF NOT EXISTS idx_supplier_parking_gate_opened ON supplier_parking_gate(opened_at);
@@ -498,6 +500,10 @@ function applySchemaEvolution(db: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_camera_group_members_group
       ON camera_group_members(group_id);
   `);
+
+  // v15: a lobbyist's 'בטל' on the gate strip marks an opening as the camera's
+  // mistake. The row and its photos stay (for tuning); the log hides it.
+  ensureColumn(db, "supplier_parking_gate", "false_positive", "INTEGER NOT NULL DEFAULT 0");
 
   // Migration v10: face_enrollments grew a 'kind' (resident|staff) + 'name' so
   // building workers (not in the residents table) can be enrolled too, and

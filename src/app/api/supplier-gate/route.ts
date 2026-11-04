@@ -1,5 +1,5 @@
 import { getCurrentUser } from "@/lib/auth";
-import { getSupplierGate, noteGateViewer } from "@/lib/supplier-gate";
+import { getSupplierGate, markGateFalsePositive, noteGateViewer } from "@/lib/supplier-gate";
 
 export const dynamic = "force-dynamic";
 
@@ -12,4 +12,14 @@ export async function GET() {
 
   noteGateViewer(user.lobbyist_name);
   return Response.json({ now: Date.now(), ...getSupplierGate() });
+}
+
+// 'בטל' on the strip: { id } of the open row, marked a false positive.
+export async function POST(request: Request) {
+  const user = await getCurrentUser();
+  if (!user) return new Response("Unauthorized", { status: 401 });
+
+  const { id } = (await request.json().catch(() => ({}))) as { id?: unknown };
+  if (typeof id !== "number") return new Response("Bad id", { status: 400 });
+  return Response.json({ ok: markGateFalsePositive(id) });
 }

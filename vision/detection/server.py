@@ -52,6 +52,10 @@ class Handler(BaseHTTPRequestHandler):
             self._serve_frame()
             return
 
+        if path == "/live":
+            self._serve_live()
+            return
+
         if path.startswith("/snapshot/"):
             cam = self._cam_from_path("/snapshot/")
             if not cam:
@@ -131,6 +135,58 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
         self.wfile.write(jpeg)
+
+    def _serve_live(self):
+        """Plain MJPEG (no detection) from any RTSP stream — the follow wall's
+        video. The app reads it server-side and forwards it to the browser.
+
+        ?url=rtsp://...  the stream; ?fps=N caps the frame rate; ?q=N is the
+        JPEG quality; ?w=N shrinks wider frames to N px (a browser decodes a
+        1080p frame in ~30-50 ms, too slow for 20 fps on two tiles). Ends if the
+        camera gives nothing for ~15 s, so the app can fall back to snapshots.
+        """
+        qs = parse_qs(urlparse(self.path).query)
+        url = (qs.get("url") or [""])[0]
+        if not url.startswith("rtsp://"):
+            self._send_json(400, {"error": "url must be rtsp://"})
+            return
+        try:
+            fps = min(max(float((qs.get("fps") or ["20"])[0]), 1.0), 30.0)
+            quality = min(max(int((qs.get("q") or ["80"])[0]), 30), 95)
+            width = max(int((qs.get("w") or ["0"])[0]), 0)
+        except ValueError:
+            self._send_json(400, {"error": "bad fps / q / w"})
+            return
+        grabber = get_raw_grabber(url)
+        # First frame = RTSP open (~1-2 s); nothing in 15 s = camera down.
+        jpeg, seq = grabber.wait_live(-1, fps, quality, width, timeout=15.0)
+        if jpeg is None:
+            self._send_json(503, {"error": "no frame yet"})
+            return
+
+        self.close_connection = True
+        self.send_response(200)
+        self.send_header(
+            "Content-Type", f"multipart/x-mixed-replace; boundary={BOUNDARY}"
+        )
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Connection", "close")
+        self.end_headers()
+        try:
+            stalls = 0
+            while jpeg is not None or stalls < 3:
+                if jpeg is not None:
+                    stalls = 0
+                    head = (
+                        f"--{BOUNDARY}\r\nContent-Type: image/jpeg\r\n"
+                        f"Content-Length: {len(jpeg)}\r\n\r\n"
+                    ).encode()
+                    self.wfile.write(head + jpeg + b"\r\n")
+                else:
+                    stalls += 1
+                jpeg, seq = grabber.wait_live(seq, fps, quality, width, timeout=5.0)
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+            pass  # the app closed it (the tile left the wall) — normal
 
     def _serve_frame(self):
         """Annotated JPEG from any RTSP stream — the app's /api/detect-frame

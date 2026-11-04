@@ -3,6 +3,7 @@
 import { Car, ChevronDown, FunnelX, PawPrint, PersonStanding, ScanEye, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { CameraTile } from "@/components/camera/CameraTile";
+import { LiveWallProvider } from "@/components/camera/LiveWall";
 import {
   useMotionExcluded,
   useSetMotionExcluded,
@@ -49,10 +50,10 @@ const MOTION_POLL_MS = 1000;
 const MOTION_LINGER_MS = 8000;
 // Most tiles the wall shows at once (the most recently moving win).
 const MOTION_MAX_TILES = 9;
-// Pause between a tile's snapshots. A snapshot takes ~0.1–0.2 s, so this gives
-// ~3–4 frames a second per tile, smoother than the 1 s of the big camera grids.
-// Fine here: at most 9 tiles, and the wall runs on one screen.
-const FOLLOW_REFRESH_MS = 120;
+// Tiles show live video (LiveWall). Up to this many tiles each is big on the
+// screen, so they get the HD main stream; more, and the light sub stream
+// (640×360, about a tile's size) keeps a full wall cheap.
+const LIVE_HD_MAX_TILES = 2;
 
 // Polls /api/motion (the cameras' own motion detection) and keeps the wall of
 // cameras that moved recently. Tiles keep their place in order of arrival so
@@ -387,33 +388,34 @@ export function MotionWall({
     );
   }
   return (
-    <div
-      className="grid h-full gap-2"
-      style={{
-        gridTemplateColumns: `repeat(${gridCols(motion.wall.length)}, minmax(0, 1fr))`,
-        gridTemplateRows: `repeat(${Math.ceil(
-          motion.wall.length / gridCols(motion.wall.length)
-        )}, minmax(0, 1fr))`,
-      }}
-    >
-      {motion.wall.map((id) => (
-        <CameraTile
-          key={id}
-          camId={id}
-          title={nameOf(id)}
-          onExclude={() => setExcluded(id, true)}
-          autoDetect={options.wallDetect}
-          detectLite
-          refreshMs={FOLLOW_REFRESH_MS}
-          footer={
-            <MotionInfo
-              info={motion.info.get(id)}
-              live={motion.active.has(id)}
-              now={motion.now}
-            />
-          }
-        />
-      ))}
-    </div>
+    <LiveWallProvider hd={motion.wall.length <= LIVE_HD_MAX_TILES}>
+      <div
+        className="grid h-full gap-2"
+        style={{
+          gridTemplateColumns: `repeat(${gridCols(motion.wall.length)}, minmax(0, 1fr))`,
+          gridTemplateRows: `repeat(${Math.ceil(
+            motion.wall.length / gridCols(motion.wall.length)
+          )}, minmax(0, 1fr))`,
+        }}
+      >
+        {motion.wall.map((id) => (
+          <CameraTile
+            key={id}
+            camId={id}
+            title={nameOf(id)}
+            onExclude={() => setExcluded(id, true)}
+            autoDetect={options.wallDetect}
+            detectLite
+            footer={
+              <MotionInfo
+                info={motion.info.get(id)}
+                live={motion.active.has(id)}
+                now={motion.now}
+              />
+            }
+          />
+        ))}
+      </div>
+    </LiveWallProvider>
   );
 }

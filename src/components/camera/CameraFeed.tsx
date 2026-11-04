@@ -1,12 +1,13 @@
 "use client";
 
 import { FunnelX, Maximize2, Minimize2, ScanEye, X } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
+import { useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   DETECT_STATUS_LABEL,
   DetectView,
   type DetectStatus,
 } from "@/components/camera/DetectView";
+import { LiveWallContext } from "@/components/camera/LiveWall";
 import { cn } from "@/lib/cn";
 
 const REFRESH_MS = 400;
@@ -69,6 +70,12 @@ export function CameraFeed({
   // and after a failure, the plain live picture stays up.
   const detectLive = detect && detectStatus === "live";
   const [docVisible, setDocVisible] = useState(true);
+  // Inside the follow wall: live video instead of snapshots, drawn on a canvas.
+  const liveWall = useContext(LiveWallContext);
+  const liveOn = liveWall !== null && !detectLive && docVisible;
+  const liveHd = (liveWall?.hd ?? false) || isFullscreen;
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [liveReady, setLiveReady] = useState(false);
 
   // Pause snapshot polling while the tab is hidden — otherwise a wall of
   // cameras keeps hammering the hardware in the background.
@@ -81,8 +88,9 @@ export function CameraFeed({
 
   useEffect(() => {
     // While detection frames are showing we don't need snapshots, and while
-    // the tab is hidden we idle — either way, don't poll.
-    if (detectLive || !docVisible) return;
+    // the tab is hidden we idle — either way, don't poll. The follow wall
+    // never polls: it has live video.
+    if (detectLive || !docVisible || liveWall) return;
 
     let active = true;
     let timer: ReturnType<typeof setTimeout>;
@@ -110,7 +118,23 @@ export function CameraFeed({
       active = false;
       clearTimeout(timer);
     };
-  }, [camId, detectLive, docVisible, refreshMs]);
+  }, [camId, detectLive, docVisible, refreshMs, liveWall]);
+
+  useEffect(() => {
+    if (!liveOn || !liveWall) return;
+    return liveWall.subscribe(camId, liveHd, (frame) => {
+      const canvas = canvasRef.current;
+      if (canvas) {
+        if (canvas.width !== frame.width || canvas.height !== frame.height) {
+          canvas.width = frame.width;
+          canvas.height = frame.height;
+        }
+        canvas.getContext("2d")?.drawImage(frame, 0, 0);
+        setLiveReady(true);
+      }
+      frame.close();
+    });
+  }, [camId, liveOn, liveHd, liveWall]);
 
   useEffect(() => {
     onDetectChange?.(detect);
@@ -210,7 +234,23 @@ export function CameraFeed({
             {DETECT_STATUS_LABEL[detectStatus]}
           </span>
         )}
-        {detectLive ? null : src ? (
+        {detectLive ? null : liveWall ? (
+          <>
+            <canvas
+              ref={canvasRef}
+              aria-label={`מצלמת ${title}`}
+              className={cn(
+                "block h-full w-full",
+                isFullscreen || fill ? "object-fill" : "object-cover"
+              )}
+            />
+            {!liveReady && (
+              <div className="absolute inset-0 flex items-center justify-center text-sm text-zinc-500">
+                מתחבר למצלמה…
+              </div>
+            )}
+          </>
+        ) : src ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={src}

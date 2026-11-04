@@ -21,7 +21,6 @@ export function CameraTile({
   footer,
   autoDetect,
   detectLite,
-  refreshMs = WALL_REFRESH_MS,
 }: {
   camId: string;
   title: string;
@@ -32,8 +31,6 @@ export function CameraTile({
   autoDetect?: boolean;
   /** One of several tiles: lighter detection (see CameraFeed). */
   detectLite?: boolean;
-  /** Snapshot refresh override (the follow wall polls faster). */
-  refreshMs?: number;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const { isFullscreen, toggle: toggleFullscreen } = useFullscreen(ref);
@@ -71,7 +68,7 @@ export function CameraTile({
         onToggleFullscreen={toggleFullscreen}
         onExclude={onExclude}
         footer={footer}
-        refreshMs={refreshMs}
+        refreshMs={WALL_REFRESH_MS}
         fill
         autoDetect={autoDetect}
         detectLite={detectLite}

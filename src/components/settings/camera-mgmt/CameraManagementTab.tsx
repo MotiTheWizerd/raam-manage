@@ -1,17 +1,16 @@
 "use client";
 
-import { Layers, MessagesSquare, Pencil } from "lucide-react";
+import { Layers, Pencil } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/cn";
-import { CameraChat } from "./CameraChat";
 import { CameraEditor } from "./CameraEditor";
 import { CameraGroupsManager } from "./CameraGroupsManager";
 
-// ניהול מצלמות — a side menu of camera tools: the camera chat (ask the
-// recordings who was where), editing the camera registry, and the
-// building-area groups cameras sort into.
+// ניהול מצלמות — a side menu of camera tools: editing the camera registry,
+// and the building-area groups cameras sort into. The camera chat
+// (CameraChat.tsx, "שיחה עם המצלמות") is hidden until it's ready; to bring
+// it back, re-add its section here and render <CameraChat /> for it.
 const SECTIONS = [
-  { value: "chat", label: "שיחה עם המצלמות", icon: MessagesSquare },
   { value: "edit", label: "עריכת מצלמות", icon: Pencil },
   { value: "groups", label: "קבוצות", icon: Layers },
 ] as const;
@@ -19,7 +18,7 @@ const SECTIONS = [
 type Section = (typeof SECTIONS)[number]["value"];
 
 export function CameraManagementTab() {
-  const [section, setSection] = useState<Section>("chat");
+  const [section, setSection] = useState<Section>("edit");
 
   return (
     <div className="grid gap-6 md:grid-cols-[11rem_minmax(0,1fr)]">
@@ -43,7 +42,6 @@ export function CameraManagementTab() {
       </nav>
 
       <div>
-        {section === "chat" && <CameraChat />}
         {section === "edit" && <CameraEditor />}
         {section === "groups" && <CameraGroupsManager />}
       </div>

@@ -53,6 +53,13 @@ const EXAMPLES = [
 
 const hms = (t: string) => t.slice(11, 19);
 
+// crypto.randomUUID exists only on https/localhost; the lobby PC opens the app
+// over plain http on the LAN, where calling it crashed the page.
+const newSessionId = () =>
+  typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID()
+    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+
 // Gallery entry for a sighting: the full camera frame (person boxed) on the
 // stage, the small crop in the thumbnail strip.
 const galleryImage = (sightingId: number, title: string, detail: string): GalleryImage => ({
@@ -76,7 +83,7 @@ function useCardGallery(images: GalleryImage[]) {
 }
 
 export function CameraChat() {
-  const [sessionId, setSessionId] = useState(() => crypto.randomUUID());
+  const [sessionId, setSessionId] = useState(newSessionId);
   const [items, setItems] = useState<Item[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -175,7 +182,7 @@ export function CameraChat() {
           disabled={busy}
           onClick={() => {
             setItems([]);
-            setSessionId(crypto.randomUUID());
+            setSessionId(newSessionId());
           }}
         >
           <MessageSquarePlus className="size-4" /> שיחה חדשה

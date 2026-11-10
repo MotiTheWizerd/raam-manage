@@ -177,4 +177,7 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # vision/, for memguard
+    import memguard
+    memguard.start("raam-intercom-listener")
     main()

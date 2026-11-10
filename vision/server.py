@@ -11,7 +11,9 @@ the run command are unchanged:
 See detection/__init__.py for the module map and detection/cli.py for endpoints.
 """
 
+import memguard
 from detection.cli import main
 
 if __name__ == "__main__":
+    memguard.start("raam-vision")
     main()

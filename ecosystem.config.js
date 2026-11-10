@@ -55,7 +55,11 @@ module.exports = {
       exec_mode: "fork",
       instances: 1,
       autorestart: true,
-      max_memory_restart: "1500M",
+      // Not max_memory_restart: pm2 measures only the venv's pythonw launcher
+      // (~1 MB), never the real interpreter it starts. vision/memguard.py
+      // enforces this instead (exits, pm2 restarts it). Settled at ~3.6 GB
+      // with the wall's streams open (2026-11-10).
+      env: { MAX_MEMORY_MB: "6000" },
       out_file: path.join(__dirname, "logs", "pm2-vision-out.log"),
       error_file: path.join(__dirname, "logs", "pm2-vision-error.log"),
       merge_logs: true,
@@ -100,7 +104,7 @@ module.exports = {
       exec_mode: "fork",
       instances: 1,
       autorestart: true,
-      max_memory_restart: "1G",
+      env: { MAX_MEMORY_MB: "3000" }, // vision/memguard.py (see raam-vision)
       out_file: path.join(__dirname, "logs", "pm2-tracing-chat-out.log"),
       error_file: path.join(__dirname, "logs", "pm2-tracing-chat-error.log"),
       merge_logs: true,
@@ -119,7 +123,7 @@ module.exports = {
       exec_mode: "fork",
       instances: 1,
       autorestart: true,
-      max_memory_restart: "300M",
+      env: { MAX_MEMORY_MB: "500" }, // vision/memguard.py (see raam-vision)
       out_file: path.join(__dirname, "logs", "pm2-intercom-out.log"),
       error_file: path.join(__dirname, "logs", "pm2-intercom-error.log"),
       merge_logs: true,

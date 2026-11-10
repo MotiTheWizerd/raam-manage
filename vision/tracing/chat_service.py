@@ -624,4 +624,7 @@ app = Starlette(routes=[Route("/chat", chat, methods=["POST"]), Route("/frame", 
                 lifespan=lifespan)
 
 if __name__ == "__main__":
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # vision/, for memguard
+    import memguard
+    memguard.start("raam-tracing-chat")
     uvicorn.run(app, host="127.0.0.1", port=PORT, log_level="info")

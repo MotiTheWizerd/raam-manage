@@ -50,10 +50,9 @@ const MOTION_POLL_MS = 1000;
 const MOTION_LINGER_MS = 8000;
 // Most tiles the wall shows at once (the most recently moving win).
 const MOTION_MAX_TILES = 9;
-// Tiles show live video (LiveWall). Up to this many tiles each is big on the
-// screen, so they get the HD main stream; more, and the light sub stream
-// (640×360, about a tile's size) keeps a full wall cheap.
-const LIVE_HD_MAX_TILES = 2;
+// Tiles show live video (LiveWall) on the light sub stream (640×360), however
+// few there are; only a tile in fullscreen switches to the HD main stream
+// (CameraFeed). HD on a wall of one or two cost too much decoding (2026-11-10).
 
 // Polls /api/motion (the cameras' own motion detection) and keeps the wall of
 // cameras that moved recently. Tiles keep their place in order of arrival so
@@ -388,7 +387,7 @@ export function MotionWall({
     );
   }
   return (
-    <LiveWallProvider hd={motion.wall.length <= LIVE_HD_MAX_TILES}>
+    <LiveWallProvider hd={false}>
       <div
         className="grid h-full gap-2"
         style={{

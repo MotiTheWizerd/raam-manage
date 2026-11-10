@@ -10,11 +10,12 @@ const VISION_INTERNAL_URL =
   process.env.VISION_INTERNAL_URL ?? "http://127.0.0.1:8089";
 
 // Frame rate per tile, and JPEG quality: the sub stream (640×360) as it comes
-// at 80; the HD main stream shrunk to 1280 wide at 75 — a browser decodes a
-// full 1080p frame too slowly for 20 fps on two tiles, and 720p is still sharp
-// on a wall of one or two.
+// at 55 (measured 2026-11-10: ~35-40% less than 80, no visible loss at tile
+// size; a 9-tile wall went from ~5 MB/s); the HD main stream shrunk to 1280
+// wide at 75 — a browser decodes a full 1080p frame too slowly for 20 fps,
+// and 720p is still sharp fullscreen.
 const LIVE_FPS = 20;
-const SUB_QUALITY = 80;
+const SUB_QUALITY = 55;
 const HD_QUALITY = 75;
 const HD_WIDTH = 1280;
 const SUB_WIDTH = 640;

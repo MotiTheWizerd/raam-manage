@@ -15,6 +15,7 @@ import cv2
 import numpy as np
 from ultralytics import YOLO
 
+from . import gpu
 from .settings import settings
 
 # COCO class ids grouped into the kinds the cameras page filters on.
@@ -48,13 +49,18 @@ def _predict(frame: np.ndarray):
 def warm_up() -> None:
     """Load the model and run it once at startup: the first GPU inference takes
     seconds, and motion.ts gives a check only 5 s."""
-    _predict(np.zeros((480, 640, 3), np.uint8))
+    gpu.run(_predict, np.zeros((480, 640, 3), np.uint8))
 
 
 def check_objects(jpeg: bytes) -> dict:
     frame = cv2.imdecode(np.frombuffer(jpeg, np.uint8), cv2.IMREAD_COLOR)
     if frame is None:
         return {"ok": False, "error": "bad image"}
+    # On a GPU thread, not the request's own (see gpu.py), result reading included.
+    return gpu.run(_check, frame)
+
+
+def _check(frame: np.ndarray) -> dict:
     result = _predict(frame)
     counts = {kind: 0 for kind in KINDS}
     # Vehicle boxes as [x1, y1, x2, y2] fractions of the frame, so the caller

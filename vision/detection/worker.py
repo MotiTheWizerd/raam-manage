@@ -28,7 +28,7 @@ import cv2
 import numpy as np
 from ultralytics import YOLO
 
-from . import hiksdk
+from . import gpu, hiksdk
 from .capture import open_capture
 from .detections import extract
 from .settings import settings
@@ -162,15 +162,9 @@ class CameraWorker:
                     continue
 
                 t0 = time.time()
-                results = self.model.track(
-                    frame, conf=settings.conf, imgsz=settings.imgsz, persist=True,
-                    tracker="bytetrack.yaml", device=settings.device, verbose=False,
-                )
-                result = results[0]
-                if self.moving_only:
-                    result = self._moving(result)
-                annotated = result.plot()
-                dets = extract(result, self.model.names)
+                # On a GPU thread, not this one: this thread ends at every idle
+                # stop, and CUDA state made on it would leak (see gpu.py).
+                annotated, dets = gpu.run(self._detect, frame)
                 ok, buf = cv2.imencode(
                     ".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, settings.jpeg_quality]
                 )
@@ -199,6 +193,17 @@ class CameraWorker:
                 self.latest_jpeg = None
                 self.latest_detections = []
             print(f"[{self.label}] inference stopped (idle)")
+
+    def _detect(self, frame):
+        """YOLO + tracking on one frame -> (annotated image, detections)."""
+        results = self.model.track(
+            frame, conf=settings.conf, imgsz=settings.imgsz, persist=True,
+            tracker="bytetrack.yaml", device=settings.device, verbose=False,
+        )
+        result = results[0]
+        if self.moving_only:
+            result = self._moving(result)
+        return result.plot(), extract(result, self.model.names)
 
     def _moving(self, result):
         """Keep only the tracks that have moved since they first appeared.

@@ -33,12 +33,21 @@ type Item = {
   opensAssistant?: boolean;
 };
 
+// הקלטות page visibility. Hidden 2026-11-11 at Moti's request — the recordings
+// page is not ready for people to use yet.
+const SHOW_RECORDINGS = false;
+
 const items: Item[] = [
   { label: "כללי", href: "/", icon: Home },
   { label: "אירועים", href: "/events", icon: ClipboardList },
   { label: "הודעות לובי", href: "/lobby-messages", icon: Megaphone },
   { label: "מצלמות", href: "/cameras", icon: Cctv },
-  { label: "הקלטות", href: "/recordings", icon: Film, managerOnly: true },
+  // הקלטות is hidden for now (2026-11-11, by request) — nobody should use it
+  // yet. The page redirects home too (src/app/recordings/page.tsx); set this to
+  // true and drop that redirect to bring it back.
+  ...(SHOW_RECORDINGS
+    ? [{ label: "הקלטות", href: "/recordings", icon: Film, managerOnly: true }]
+    : []),
   { label: "אינטרקום", href: "/intercom", icon: DoorOpen },
   { label: "דירות", href: "/apartments", icon: Building2, managerOnly: true },
   { label: "דיירים", href: "/renters", icon: Users, managerOnly: true },
